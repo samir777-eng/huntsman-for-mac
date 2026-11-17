@@ -19,7 +19,7 @@ Works on Apple silicon Macs (M1, M2, M3, M4) without Razer Synapse or a Windows 
 | Rapid Trigger | No, kept until unplugged | Confirmed on hardware (2026-11-17) |
 | Snap Tap (one pair) | No, kept until unplugged | Confirmed on hardware (2026-11-17) |
 | Live key tester and actuation meter | – | While testing, the keyboard sends travel readings instead of typing |
-| Lighting Studio (layers, typing and sound effects, presets, smart lighting) | No, drawn by the app while it runs | **New in 0.2.0, not yet checked on hardware**. See [Lighting Studio](#lighting-studio) |
+| Lighting Studio (layers, typing and sound effects, presets, smart lighting) | No, drawn by the app while it runs | New in 0.2.0. Presets, layers and panels confirmed on hardware (2026-11-17); smart lighting over a long session and system sound not checked yet. See [Lighting Studio](#lighting-studio) |
 
 ## Lighting Studio
 
@@ -52,7 +52,7 @@ service quits, the keyboard's own lighting comes back.
 
 ### Permissions
 
-Studio's permissions belong to the lighting service, so macOS lists them as **Huntsman Lighting**:
+Studio's permissions belong to the lighting service, so macOS should list them as **Huntsman Lighting** (not yet confirmed on hardware):
 
 - **Input Monitoring**, for typing effects and the heatmap: **System Settings → Privacy & Security → Input Monitoring →
   Huntsman Lighting**. The service only listens while a preset with a typing effect is on or the heatmap is counting.
@@ -74,14 +74,16 @@ Checked on 2026-11-17 with a Huntsman V3 Pro (USB ID 1532:02A6), firmware 1.03, 
 
 | Checked on hardware | Not checked yet |
 |---|---|
-| Actuation and reset points: written, read back, still there after unplugging | Rapid Trigger turned on |
-| Static lighting and brightness | Snap Tap turned on |
-| Per-key colours | The key tester inside the installed app (Input Monitoring for the app's Python) |
-| Colour correction (the keyboard matches the picker) | Other Huntsman models |
-| Key tester readings, and switching the keyboard back to typing afterwards | Intel Macs |
-| Quitting the app with SIGTERM during a key test: the keyboard types again | macOS versions before 26 |
-| A keyboard left in test mode is put back to typing the next time the app or the command line connects | A hard kill (SIGKILL) during a key test; this relies on the recovery on the next connect, which is checked |
-| Checksums on the keyboard's replies; actuation is written to the saved copy before the live copy | Lighting effects other than static |
+| Actuation and reset points: written, read back, still there after unplugging | Other Huntsman models |
+| Rapid Trigger and Snap Tap turned on | Intel Macs |
+| Keyboard lighting effects, per-key colours and brightness | macOS versions before 26 |
+| Colour correction (the keyboard matches the picker) | A hard kill (SIGKILL) during a key test; this relies on the recovery on the next connect, which is checked |
+| Key tester readings, and switching the keyboard back to typing afterwards | The name macOS shows in the lighting service's permission prompts |
+| Quitting the app with SIGTERM during a key test: the keyboard types again | Keyboard lighting coming back at logout or shutdown |
+| A keyboard left in test mode is put back to typing the next time the app or the command line connects | The lighting service restarting itself after a crash |
+| Checksums on the keyboard's replies; actuation is written to the saved copy before the live copy | Smart lighting over a long session (real sleep and screen lock) |
+| Lighting Studio: built-in presets, layers, settings, saving presets, Sound, Typing and Smart panels, music through the microphone | System sound through a loopback device such as BlackHole |
+| Studio effects keep running after the app quits | install.sh putting the previous app back after a failed build |
 
 ## Supported hardware
 
@@ -105,7 +107,7 @@ cd huntsman-for-mac
 This installs:
 - **Huntsman for Mac.app** in `~/Applications`. It carries its own copy of the code and Python environment, and is signed ad hoc on your Mac (no Apple developer account involved).
 - **libusb**, through Homebrew, if it's missing.
-- **The lighting service**, `Huntsman Lighting.app`, inside the app (`Contents/Library/LoginItems`), and a LaunchAgent (`io.github.huntsman-for-mac.lighting`) that starts it now and at every login, and restarts it if it crashes (not after *Quit lighting service*). At start it sends per-key colours, Rapid Trigger and Snap Tap to the keyboard again, starts Studio if it was on, and shows the menu bar icon. It replaces the `apply-saved` login item of earlier versions, which the installer removes. Its own small app bundle means macOS shows **Huntsman Lighting** in the Input Monitoring and Microphone lists.
+- **The lighting service**, `Huntsman Lighting.app`, inside the app (`Contents/Library/LoginItems`), and a LaunchAgent (`io.github.huntsman-for-mac.lighting`) that starts it now and at every login, and restarts it if it crashes (not after *Quit lighting service*). At start it sends per-key colours, Rapid Trigger and Snap Tap to the keyboard again, starts Studio if it was on, and shows the menu bar icon. It replaces the `apply-saved` login item of earlier versions, which the installer removes. Its own small app bundle is meant to make macOS show **Huntsman Lighting** (not yet confirmed on hardware) in the Input Monitoring and Microphone lists.
 
 Open it from `~/Applications` or Spotlight. To preview the interface without a keyboard, open `ui/index.html?demo` in a browser.
 

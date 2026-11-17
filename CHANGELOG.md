@@ -4,7 +4,9 @@ All notable changes to this project are listed here. Versions follow [Semantic V
 
 ## 0.2.0 – 2026-11-17
 
-Not yet checked on hardware.
+Checked on hardware after release (2026-11-17): Studio presets, layers, settings and panels, music through the
+microphone, and effects continuing after the app quits. Not yet checked: smart lighting over a long session, system
+sound through BlackHole, lighting restore at logout, restart after a crash, the name in the permission prompts.
 
 ### Added
 - Lighting Studio: app-drawn per-key effects streamed to the keyboard while the app runs, with a layer editor (opacity,
@@ -34,7 +36,7 @@ First public version.
 ### Added
 - Per-key actuation point (0.1 to 4.0 mm) with an automatic or custom reset point, saved on the keyboard.
 - Lighting: built-in effects, brightness and per-key colours, with colour correction so the keyboard matches the picker.
-- Rapid Trigger and Snap Tap (experimental, not yet confirmed on hardware).
+- Rapid Trigger and Snap Tap (experimental at release; confirmed on hardware 2026-11-17).
 - Live key tester and actuation meter, with automatic return to typing on stop, timeout, window close, quit, SIGTERM and the next connect.
 - First-launch snapshot of every key's settings, and a factory depth restore.
 - Command-line tool (`huntsman.py`), including `--version`.

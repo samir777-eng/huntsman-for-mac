@@ -4,15 +4,17 @@
 
 [![Latest release](https://img.shields.io/github/v/release/samir777-eng/huntsman-for-mac?label=release)](https://github.com/samir777-eng/huntsman-for-mac/releases/latest)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
-[![macOS on Apple silicon](https://img.shields.io/badge/macOS-Apple%20silicon-111111?logo=apple)](#supported-hardware)
+[![Tested on Apple silicon](https://img.shields.io/badge/tested%20on-Apple%20silicon-111111?logo=apple)](#supported-hardware)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](#install)
 
-The Huntsman V3 Pro has analog optical switches you can set to a tenth of a millimetre. On a Mac, Razer Synapse sees
-the keyboard and then offers you nothing to set. **Huntsman for Mac** is a free, open-source app that does the job:
+The Huntsman V3 Pro has analog optical switches you can set to a tenth of a millimetre. Razer Synapse for Mac doesn't
+support its settings (at the time of writing). **Huntsman for Mac** is a free, open-source app that does the job:
 per-key actuation from 0.1 to 4.0 mm, Rapid Trigger, Snap Tap, per-key RGB, and a lighting studio that reacts to your
 typing and your music.
 
-![Huntsman for Mac, Actuation tab: four keys set to 1.2 mm while the key tester shows the D key pressed to 2.8 mm](docs/screenshot-actuation.png)
+![Huntsman for Mac in demo mode, Actuation tab: four keys set to 1.2 mm while the key tester shows the D key pressed to 2.8 mm](docs/screenshot-actuation.png)
+
+<sub>Screenshots are from the app's demo mode (`ui/index.html?demo`), which simulates a keyboard.</sub>
 
 ## Quick start
 
@@ -123,7 +125,7 @@ pressed (`heatmap.json`, on this Mac), never which keys in which order, and **Re
 
 ### More models, and a call for testers
 
-![Keyboard tab for a Huntsman V3 Pro Mini in demo mode: Experimental badge, Experimental support switched on, and the LED check running](docs/screenshot-keyboard.png)
+![Keyboard tab for a Huntsman V3 Pro Mini in demo mode: Experimental badge, Experimental support switched on, and the LED check panel](docs/screenshot-keyboard.png)
 
 Version 0.3.0 adds **experimental support** for six more Huntsman models. Nobody has tried them with this app yet.
 They get only commands already checked on the V3 Pro, nothing that changes them is sent until you turn on
@@ -304,7 +306,7 @@ The installed app includes a command-line tool:
 
 ```bash
 APP=~/Applications/"Huntsman for Mac.app"/Contents/Resources
-$APP/venv/bin/python $APP/code/huntsman.py status
+"$APP/venv/bin/python" "$APP/code/huntsman.py" status
 ```
 
 | Command | What it does |
@@ -388,7 +390,7 @@ such as BlackHole, not the microphone.
 ## FAQ
 
 **Does Razer Synapse work with the Huntsman V3 Pro on Mac?**
-Not at the time of writing. Synapse for macOS detects the keyboard but has no settings for it, so actuation, Rapid
+Not at the time of writing: Razer Synapse for Mac doesn't support the Huntsman V3 Pro's settings, so actuation, Rapid
 Trigger and per-key lighting can't be changed there. This app fills that gap.
 
 **How do I change the actuation point of a Razer Huntsman V3 Pro on macOS?**

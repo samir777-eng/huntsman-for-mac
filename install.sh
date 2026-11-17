@@ -5,7 +5,8 @@
 #   - "Huntsman for Mac.app" in ~/Applications, carrying its own copy of the code and Python environment
 #     (so it never reads from Downloads/Documents/Desktop, which macOS blocks for unsigned apps)
 #   - "Huntsman Lighting.app" inside it (Contents/Library/LoginItems), the background lighting service: menu bar
-#     icon, Lighting Studio, typing and sound reactions. macOS shows its permission prompts as "Huntsman Lighting".
+#     icon, Lighting Studio, typing and sound reactions. Its own bundle should make macOS show its permission prompts as
+#     "Huntsman Lighting" (not yet confirmed).
 #   - a LaunchAgent (io.github.huntsman-for-mac.lighting) that starts the service at login and now, and restarts
 #     it if it crashes (not after "Quit lighting service"). At start it re-sends per-key colours, Rapid Trigger
 #     and Snap Tap, and runs Lighting Studio if it was on. It replaces the old apply-saved login item.

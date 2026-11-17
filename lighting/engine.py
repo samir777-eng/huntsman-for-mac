@@ -198,7 +198,11 @@ class Engine:
             self._report(e)
             return False
         self._preview(now, frame)
-        rows = self._rows(frame)
+        try:
+            rows = self._rows(frame, ctx.keymap)
+        except (KeyError, IndexError) as e:   # the model changed under this frame: drop it, render the next one
+            self._report(e)
+            return False
         error = None
         with self._send_lock:
             stopping = self._stop_event.is_set() and threading.current_thread() is self._thread
@@ -242,12 +246,12 @@ class Engine:
 
     # ---------- helpers ----------
 
-    def _rows(self, frame):
+    def _rows(self, frame, keymap):
         lut = self._lut
         n_rows, n_cols = hc.frame_shape()
         rows = [[[0, 0, 0] for _ in range(n_cols)] for _ in range(n_rows)]
         for k, (r, g, b) in frame.items():
-            row, col = self.keymap.key(k).led
+            row, col = keymap.key(k).led
             rows[row][col] = [lut[r], lut[g], lut[b]]
         return rows
 

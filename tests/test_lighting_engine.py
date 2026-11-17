@@ -331,3 +331,19 @@ def test_first_tick_after_detection_uses_the_new_models_shape(tmp_path, monkeypa
         assert len(rows) == 5 and all(r[12] == 14 for r in rows)
     finally:
         hc.set_active_model(models.DEFAULT)
+
+
+def test_a_model_change_mid_frame_is_reported_not_fatal(tmp_path, monkeypatch):
+    """Reconnect in the app can switch the active model to a Mini while the engine still holds the 02A6 keymap.
+    Building rows then can't place every key; the frame is dropped and reported, and the engine keeps going."""
+    import models
+    monkeypatch.setattr(hc, "data_dir", lambda: str(tmp_path))
+    errors = []
+    eng = Engine(None, KM, on_error=errors.append)
+    try:
+        eng.set_preset(preset("rainbow", {"speed": 1.0}))
+        hc.set_active_model(models.MODELS[0x02B0])     # 5x15: 02A6 LEDs in row 5 or column 15+ don't fit
+        assert eng.step(1.0) is False
+        assert len(errors) == 1
+    finally:
+        hc.set_active_model(models.DEFAULT)

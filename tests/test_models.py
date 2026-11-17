@@ -435,7 +435,7 @@ def test_engine_rows_follow_the_active_model():
     e = eng.Engine.__new__(eng.Engine)
     e.keymap = fr.Keymap.load()
     e._lut = list(range(256))
-    rows = e._rows({e.keymap.ids[0]: (9, 9, 9)})
+    rows = e._rows({e.keymap.ids[0]: (9, 9, 9)}, e.keymap)
     assert len(rows) == 5 and all(len(r) == 15 for r in rows)
 
 

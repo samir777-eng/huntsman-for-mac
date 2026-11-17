@@ -41,8 +41,8 @@ have experimental support. Nobody has tested them with this app, and their LED p
 5. Try the features the README lists for your model, one at a time, and note what happened.
 6. Open a [new model issue](.github/ISSUE_TEMPLATE/new_model.md) with all of the above.
 
-To stop, turn the switch off (or `huntsman.py experimental off`). *Restore factory depth* puts the V3 Pro models'
-keys back to 1.2 mm.
+To stop, first use *Restore factory depth* if you changed actuation (it puts the V3 Pro models' keys back to 1.2 mm),
+then turn the switch off (or `huntsman.py experimental off`). With the switch off, the app can't write to the keyboard.
 
 If your model isn't in the list, open the same issue with the model name, USB IDs and firmware version. Please don't
 add a Product ID to `models.py` and write to it on your own; we'll work out a read-only check first.

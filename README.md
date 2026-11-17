@@ -13,12 +13,60 @@ Works on Apple silicon Macs (M1, M2, M3, M4) without Razer Synapse or a Windows 
 | Feature | Saved on the keyboard | Notes |
 |---|---|---|
 | Actuation point, per key, 0.1 to 4.0 mm | Yes | The reset point follows 0.1 mm above it, or set it yourself |
-| Lighting effects (static, breathing, spectrum, wave, reactive, ripple, starlight) | Yes | Colours are corrected so the keyboard matches the colour you pick. All of them were accepted by the keyboard on hardware; the Fire effect some Razer keyboards have is refused by this one's firmware, so it isn't offered |
+| Lighting effects (static, breathing, spectrum, wave, reactive, starlight) | Yes | Colours are corrected so the keyboard matches the colour you pick. All of them were accepted by the keyboard on hardware; the Fire effect some Razer keyboards have is refused by this one's firmware, so it isn't offered |
 | Brightness | Yes | |
 | Per-key colours | No, kept until unplugged | Sent again when the app opens and at login |
-| Rapid Trigger | No, kept until unplugged | **Experimental**: not yet confirmed on real hardware |
-| Snap Tap (one pair) | No, kept until unplugged | **Experimental**: not yet confirmed on real hardware |
+| Rapid Trigger | No, kept until unplugged | Confirmed on hardware (2026-11-17) |
+| Snap Tap (one pair) | No, kept until unplugged | Confirmed on hardware (2026-11-17) |
 | Live key tester and actuation meter | – | While testing, the keyboard sends travel readings instead of typing |
+| Lighting Studio (layers, typing and sound effects, presets, smart lighting) | No, drawn by the app while it runs | **New in 0.2.0, not yet checked on hardware**. See [Lighting Studio](#lighting-studio) |
+
+## Lighting Studio
+
+The keyboard's own effects (the **Lighting** tab) run on the keyboard and are saved on it. **Studio** goes further: the app
+draws every frame itself and streams it to the keys, so effects can be layered, react to typing and sound, and change with
+what you're doing. Studio runs in a small background **lighting service** (Huntsman Lighting), not in the window, so
+**effects keep running after you quit the app**, like Razer Synapse's service. When Studio is turned off or the lighting
+service quits, the keyboard's own lighting comes back.
+
+- **Layers.** Stack effects; the top layer is drawn last. Each layer has its own colours and settings, opacity, a blend mode
+  (normal, add, screen, multiply, brightest) and a key set (all keys, or the keys you select on the board).
+- **Effects.** Basic: solid colour, gradient (linear or radial, 2 to 5 colours), rainbow wave, colour cycle, breathing.
+  Ambient: aurora, matrix rain, plasma, fire, starfield. Sound: audio spectrum (bars across the keyboard), audio pulse.
+  Typing: ripple, afterglow, explosion, trail, and a typing heatmap.
+- **Presets.** Eight built-in presets to start from (Rainbow wave, Aurora, Gaming WASD, Typing glow, Music, Fire, Matrix,
+  Calm breathing). Save, save as, rename, duplicate, delete, and import or export a preset as a JSON file. Built-in presets
+  can't be changed; save a copy instead. Brightness and smoothness (15 to 60 frames a second) apply to all presets.
+- **Sound.** Choose the input in Studio → Sound. A microphone hears the room. **For the Mac's own sound, install a loopback
+  device such as [BlackHole](https://github.com/ExistentialAudio/BlackHole), send your output to it (for example with a
+  Multi-Output Device in Audio MIDI Setup), and choose it as the input.** Sensitivity adjusts how strongly the lights react.
+- **Smart lighting** (Studio → Smart). Dim the keys or turn them off after a number of minutes without input; turn them off
+  while the Mac sleeps or the screen is locked; show a chosen preset while a given app is in front (pick an open app or type
+  its bundle ID).
+- **Menu bar.** The keyboard icon in the menu bar belongs to the lighting service. It turns Studio on or off, switches
+  presets, opens Huntsman for Mac, and has **Quit lighting service**, which stops Studio and puts the keyboard's own
+  lighting back. The service starts at login (and when the installer finishes); after *Quit lighting service* it stays
+  off until the next login or until you use Studio in the app, which starts it again. Quitting the app window (red
+  button, Cmd-Q) just closes the window; the lighting keeps running. While the app changes the keyboard (actuation,
+  keyboard effects, per-key colours, brightness, the key tester), the service pauses its frames.
+
+### Permissions
+
+Studio's permissions belong to the lighting service, so macOS lists them as **Huntsman Lighting**:
+
+- **Input Monitoring**, for typing effects and the heatmap: **System Settings → Privacy & Security → Input Monitoring →
+  Huntsman Lighting**. The service only listens while a preset with a typing effect is on or the heatmap is counting.
+  (The key tester in the window needs the same permission for **Huntsman for Mac**; see
+  [Input Monitoring](#input-monitoring-for-the-key-tester).)
+- **Microphone**, for sound effects: **System Settings → Privacy & Security → Microphone → Huntsman Lighting**. The service
+  only listens while a preset with a sound effect is on. If access is refused, Studio shows where to turn it on.
+- After changing either, use **Quit lighting service** in the menu bar, then turn Studio on again in the app.
+
+### Privacy
+
+Key presses and sound are processed in memory, frame by frame, to draw the lights. Nothing is recorded, logged or sent
+anywhere. The typing heatmap is off by default; when you turn it on, it stores only how many times each key was pressed
+(`heatmap.json`, on this Mac), never which keys in which order, and **Reset heatmap** deletes it.
 
 ## What has been checked on real hardware
 
@@ -57,7 +105,7 @@ cd huntsman-for-mac
 This installs:
 - **Huntsman for Mac.app** in `~/Applications`. It carries its own copy of the code and Python environment, and is signed ad hoc on your Mac (no Apple developer account involved).
 - **libusb**, through Homebrew, if it's missing.
-- **A login item** (`io.github.huntsman-for-mac.apply-saved`) that sends per-key colours, Rapid Trigger and Snap Tap to the keyboard again after you log in.
+- **The lighting service**, `Huntsman Lighting.app`, inside the app (`Contents/Library/LoginItems`), and a LaunchAgent (`io.github.huntsman-for-mac.lighting`) that starts it now and at every login, and restarts it if it crashes (not after *Quit lighting service*). At start it sends per-key colours, Rapid Trigger and Snap Tap to the keyboard again, starts Studio if it was on, and shows the menu bar icon. It replaces the `apply-saved` login item of earlier versions, which the installer removes. Its own small app bundle means macOS shows **Huntsman Lighting** in the Input Monitoring and Microphone lists.
 
 Open it from `~/Applications` or Spotlight. To preview the interface without a keyboard, open `ui/index.html?demo` in a browser.
 
@@ -73,7 +121,7 @@ Re-installing replaces the app, so macOS may ask again, or the switch may need t
 
 ### Update
 
-1. Quit the app (Cmd-Q).
+1. Quit the app (Cmd-Q). The installer stops and restarts the lighting service itself.
 2. `git pull`
 3. `./install.sh`
 
@@ -84,11 +132,11 @@ Also run `./install.sh` again after Homebrew upgrades Python: the app's environm
 Quit the app first, then:
 
 ```bash
-./uninstall.sh          # removes the app and the login item; keeps your settings and the log
+./uninstall.sh          # stops the lighting service, removes the app and its login item; keeps your settings and the log
 ./uninstall.sh --all    # also deletes your settings, the first-launch snapshot and the log
 ```
 
-Nothing on the keyboard changes. Use *Restore factory depth* in the app first if you want the keyboard back to its defaults.
+Stopping the lighting service puts the keyboard's own lighting back; nothing else on the keyboard changes. Use *Restore factory depth* in the app first if you want the keyboard back to its defaults.
 
 ## Command line
 
@@ -107,7 +155,7 @@ $APP/venv/bin/python $APP/code/huntsman.py status
 | `color 255 255 255` | Solid colour, saved on the keyboard |
 | `spectrum`, `wave`, `off` | Built-in effects, saved on the keyboard |
 | `brightness 80` | Brightness, 0 to 100 |
-| `apply-saved` | Send per-key colours, Rapid Trigger and Snap Tap again (what the login item runs) |
+| `apply-saved` | Send per-key colours, Rapid Trigger and Snap Tap again (the lighting service does this when it starts) |
 | `factory` | Every key back to 1.2 mm; Rapid Trigger and Snap Tap off |
 | `restore-snapshot` | Put every key back exactly as it was on the app's first launch |
 | `--version` | Print the version |
@@ -139,14 +187,19 @@ The app writes to the keyboard's built-in memory using commands the community wo
 
 **The app opens but stops working after a Python upgrade** Run `./install.sh` again.
 
-**Settings aren't sent again after login**
-- Check the login item is loaded: `launchctl list | grep huntsman-for-mac`.
-- Check **System Settings → General → Login Items & Extensions**; it may be listed as Python. It must be allowed.
+**Settings aren't sent again after login, or Studio stops when the app quits**
+- Check the lighting service is loaded and running: `launchctl print gui/$(id -u)/io.github.huntsman-for-mac.lighting`. Start it by hand with `launchctl kickstart gui/$(id -u)/io.github.huntsman-for-mac.lighting` (the app does this when you use Studio).
+- Check **System Settings → General → Login Items & Extensions**; it may be listed as Huntsman Lighting or Python. It must be allowed.
 - Its output goes to the same log, `~/Library/Logs/Huntsman for Mac.log`.
 
 **The keyboard stopped typing** This means it was left in test mode. Unplug it and plug it back in; opening the app, or running any `huntsman.py` command, also puts it back to typing.
 
-**Installer says the app is running** Quit it (Cmd-Q), then run the installer again.
+**Installer says the app is running** Quit the window app (Cmd-Q), then run the installer again. The lighting service doesn't need quitting; the installer stops and restarts it.
+
+**Studio lights don't follow typing or sound** Studio → Typing or Sound shows the reason. Usually Input Monitoring or
+Microphone access is off for Huntsman Lighting (see [Permissions](#permissions)); use *Quit lighting service* in the menu
+bar after turning it on, then turn Studio on again.
+For the Mac's own sound, the input must be a loopback device such as BlackHole, not the microphone.
 
 ## How it works
 
@@ -154,11 +207,19 @@ The app talks to the keyboard's control interface with USB control transfers thr
 
 - `huntsman_core.py`: protocol and USB transport
 - `depth_stream.py`: live travel readings
-- `app.py` and `ui/`: the window
+- `app.py` and `ui/`: the window, the control panel (`ui/studio.js` is the Studio tab)
+- `service.py`: the lighting service (Huntsman Lighting): runs Studio and the menu bar icon in the background
+- `ipc.py`: the local socket between the app and the service (`service.sock`, JSON lines, owner-only): Studio commands,
+  live preview frames, and pause leases the app holds around every keyboard operation (they expire on their own, so a
+  crashed app never leaves the lighting paused)
+- `studio.py`: Studio controller (presets, settings, listeners, smart lighting) between the service and the engine
+- `lighting/`: effects, layers, presets and the engine that streams per-key frames
+- `inputs/`: key presses (IOKit), sound levels (sounddevice) and smart-lighting signals (idle, sleep, lock, front app)
+- `menubar.py`: the menu bar icon
 - `huntsman.py`: the command line
 
 Your settings and logs live in:
-- `~/Library/Application Support/Huntsman for Mac/`: `state.json` (settings the keyboard forgets when unplugged), `first-launch-snapshot.json`, and lock files.
+- `~/Library/Application Support/Huntsman for Mac/`: `state.json` (settings the keyboard forgets when unplugged, and Studio and smart lighting settings), `presets.json` (your Studio presets), `heatmap.json` (press counts, only if the heatmap is on), `first-launch-snapshot.json`, lock files, and the lighting service's socket (`service.sock`).
 - `~/Library/Logs/Huntsman for Mac.log`
 
 ## Development
@@ -185,7 +246,7 @@ Open Huntsman for Mac, select keys (or none for all keys), pick a depth between 
 Yes, from the Rapid Trigger and Snap Tap tabs. Both are experimental and not yet confirmed on real hardware; please report how they work for you.
 
 **Can I set per-key RGB lighting without Synapse?**
-Yes. Use Lighting → Per key to colour individual keys, or Effect for spectrum, wave, breathing, reactive, ripple and starlight.
+Yes. Use Lighting → Per key to colour individual keys, or Effect for spectrum, wave, breathing, reactive and starlight. Ripple and other typing effects are in Studio.
 
 **Do I need Windows, Boot Camp or a virtual machine?**
 No. It talks to the keyboard directly over USB from macOS.

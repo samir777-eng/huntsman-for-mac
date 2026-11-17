@@ -4,7 +4,11 @@
 # Installs Huntsman for Mac:
 #   - "Huntsman for Mac.app" in ~/Applications, carrying its own copy of the code and Python environment
 #     (so it never reads from Downloads/Documents/Desktop, which macOS blocks for unsigned apps)
-#   - a login item that re-sends per-key colours, Rapid Trigger and Snap Tap after login
+#   - "Huntsman Lighting.app" inside it (Contents/Library/LoginItems), the background lighting service: menu bar
+#     icon, Lighting Studio, typing and sound reactions. macOS shows its permission prompts as "Huntsman Lighting".
+#   - a LaunchAgent (io.github.huntsman-for-mac.lighting) that starts the service at login and now, and restarts
+#     it if it crashes (not after "Quit lighting service"). At start it re-sends per-key colours, Rapid Trigger
+#     and Snap Tap, and runs Lighting Studio if it was on. It replaces the old apply-saved login item.
 # Run it again after updating the code. Remove everything with ./uninstall.sh
 set -euo pipefail
 
@@ -14,7 +18,10 @@ RES="$APP/Contents/Resources"
 CODE="$RES/code"
 PYBIN="$RES/venv/bin/python"
 LOG="$HOME/Library/Logs/Huntsman for Mac.log"
-AGENT="$HOME/Library/LaunchAgents/io.github.huntsman-for-mac.apply-saved.plist"
+LIGHT="$APP/Contents/Library/LoginItems/Huntsman Lighting.app"
+LABEL="io.github.huntsman-for-mac.lighting"
+AGENT="$HOME/Library/LaunchAgents/$LABEL.plist"
+OLD_AGENT="$HOME/Library/LaunchAgents/io.github.huntsman-for-mac.apply-saved.plist"
 
 say() { printf '%s\n' "$*"; }
 fail() { printf 'Error: %s\n' "$*" >&2; exit 1; }
@@ -25,7 +32,7 @@ fail() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 xml() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g"; }
 
 if pgrep -u "$(id -u)" -f "Contents/Resources/code/app.py" >/dev/null 2>&1; then
-  fail "Huntsman for Mac is running. Quit it first (Cmd-Q), then run ./install.sh again."
+  fail "Huntsman for Mac is running. Quit it (Cmd-Q), then run ./install.sh again."
 fi
 
 # Newest tested Python first (3.13 down to 3.11), then whatever python3 is. 3.11 is the oldest the pinned
@@ -47,6 +54,17 @@ if [ ! -e /opt/homebrew/lib/libusb-1.0.dylib ] && [ ! -e /usr/local/lib/libusb-1
   brew install libusb
 fi
 
+# Stop the lighting service (it runs from the bundle about to be replaced; launchd restores the keyboard's lighting
+# through its SIGTERM handler) and remove the old apply-saved login item from earlier versions.
+STOPPED=0
+if launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1; then
+  say "Stopping the lighting service"
+  launchctl bootout "gui/$(id -u)" "$AGENT" 2>/dev/null || launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+  STOPPED=1
+fi
+launchctl bootout "gui/$(id -u)" "$OLD_AGENT" 2>/dev/null || true
+/bin/rm -f "$OLD_AGENT"
+
 say "Building $APP"
 # Build a fresh bundle (so renamed or deleted files never linger) at its final path, because the venv
 # records absolute paths. The previous app is moved aside first and put back if the build fails.
@@ -59,6 +77,9 @@ finish() {
     mv "$OLD/Huntsman for Mac.app" "$APP" && rmdir "$OLD"
     printf 'The install failed; the previous app was put back.\n' >&2
   fi
+  if [ "$BUILT" != 1 ] && [ "$STOPPED" = 1 ] && [ -f "$AGENT" ]; then
+    launchctl bootstrap "gui/$(id -u)" "$AGENT" 2>/dev/null || true   # the previous service again
+  fi
 }
 trap finish EXIT
 if [ -d "$APP" ]; then
@@ -67,8 +88,12 @@ if [ -d "$APP" ]; then
   OLD="$STASH"   # only now is there something to put back
 fi
 mkdir -p "$APP/Contents/MacOS" "$CODE/ui"
-cp "$DIR"/huntsman_core.py "$DIR"/depth_stream.py "$DIR"/app.py "$DIR"/huntsman.py "$DIR"/layout.json "$DIR"/keymap.json "$CODE/"
-cp "$DIR"/ui/index.html "$DIR"/ui/style.css "$DIR"/ui/app.js "$CODE/ui/"
+cp "$DIR"/huntsman_core.py "$DIR"/depth_stream.py "$DIR"/app.py "$DIR"/studio.py "$DIR"/menubar.py "$DIR"/huntsman.py \
+   "$DIR"/service.py "$DIR"/ipc.py \
+   "$DIR"/layout.json "$DIR"/keymap.json "$CODE/"
+# whole packages, without bytecode caches (they would break the signature)
+rsync -a --exclude '__pycache__' --exclude '*.pyc' "$DIR/lighting" "$DIR/inputs" "$CODE/"
+cp "$DIR"/ui/index.html "$DIR"/ui/style.css "$DIR"/ui/app.js "$DIR"/ui/studio.js "$CODE/ui/"
 cp "$DIR/packaging/Info.plist" "$APP/Contents/Info.plist"
 cp "$DIR/packaging/icon.icns" "$RES/icon.icns"
 
@@ -79,9 +104,17 @@ say "Setting up Python ($PY)"
 
 # printf %q quotes each path for the shell, whatever characters the home folder name has.
 # -B: no __pycache__ inside the signed bundle.
-{ printf '#!/bin/bash\nexec '; printf '%q ' "$PYBIN" -I -B "$CODE/app.py"; printf '>>%q 2>&1\n' "$LOG"; } > "$APP/Contents/MacOS/HuntsmanForMac"
+{ printf '#!/bin/bash\nexec '; printf '%q ' "$PYBIN" -I -B "$CODE/app.py"; printf '"$@" >>%q 2>&1\n' "$LOG"; } > "$APP/Contents/MacOS/HuntsmanForMac"
 chmod +x "$APP/Contents/MacOS/HuntsmanForMac"
-touch "$APP"
+
+# The lighting service's own small bundle (menu bar agent, its own name in permission prompts), running the
+# outer bundle's Python and code. launchd writes its output to the log (see the agent below).
+mkdir -p "$LIGHT/Contents/MacOS" "$LIGHT/Contents/Resources"
+cp "$DIR/packaging/Lighting-Info.plist" "$LIGHT/Contents/Info.plist"
+cp "$DIR/packaging/icon.icns" "$LIGHT/Contents/Resources/icon.icns"
+{ printf '#!/bin/bash\nexec '; printf '%q ' "$PYBIN" -I -B "$CODE/service.py"; printf '"$@"\n'; } > "$LIGHT/Contents/MacOS/HuntsmanLighting"
+chmod +x "$LIGHT/Contents/MacOS/HuntsmanLighting"
+touch "$LIGHT" "$APP"
 
 # Files copied from a downloaded zip can carry the quarantine flag; Gatekeeper would then refuse the app.
 xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
@@ -95,24 +128,36 @@ fi
 BUILT=1
 if [ -n "$OLD" ]; then /bin/rm -rf "$OLD"; OLD=""; fi
 
-say "Adding the login item"
+say "Starting the lighting service (and at every login)"
 mkdir -p "$HOME/Library/LaunchAgents"
 cat > "$AGENT" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>Label</key><string>io.github.huntsman-for-mac.apply-saved</string>
+  <key>Label</key><string>$LABEL</string>
   <key>ProgramArguments</key><array>
-    <string>$(xml "$PYBIN")</string><string>-I</string><string>-B</string><string>$(xml "$CODE/huntsman.py")</string><string>apply-saved</string>
+    <string>$(xml "$LIGHT/Contents/MacOS/HuntsmanLighting")</string>
   </array>
   <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>LimitLoadToSessionType</key><string>Aqua</string>
+  <key>ProcessType</key><string>Interactive</string>
   <key>StandardOutPath</key><string>$(xml "$LOG")</string>
   <key>StandardErrorPath</key><string>$(xml "$LOG")</string>
 </dict></plist>
 PLIST
 launchctl bootout "gui/$(id -u)" "$AGENT" 2>/dev/null || true
-launchctl bootstrap "gui/$(id -u)" "$AGENT" || say "Note: the login item starts working after you log out and back in."
+STARTED=0
+for _ in 1 2 3; do   # right after a bootout launchd may still be unloading the old job
+  if launchctl bootstrap "gui/$(id -u)" "$AGENT" 2>/dev/null; then STARTED=1; break; fi
+  sleep 1
+done
+[ "$STARTED" = 1 ] || say "Couldn't start the lighting service now; it starts at the next login."
 
 say ""
-say "Done. Open \"Huntsman for Mac\" from ~/Applications or Spotlight."
-say "The key tester needs Input Monitoring permission; macOS asks the first time you use it."
+say "Done. Opening \"Huntsman for Mac\" (later: ~/Applications or Spotlight). Lighting keeps running after you quit it;"
+say "quit the lighting service from its menu bar icon (Quit lighting service)."
+open "$APP" || say "Couldn't open it automatically; open \"Huntsman for Mac\" from ~/Applications."
+say "The key tester needs Input Monitoring for Huntsman for Mac; typing reactions need it for Huntsman Lighting,"
+say "and sound-reactive lighting needs Microphone for Huntsman Lighting."
+say "macOS asks the first time you use them."

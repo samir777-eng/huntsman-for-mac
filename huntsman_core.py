@@ -17,7 +17,7 @@ import os
 import threading
 import time
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 VID, PID = 0x1532, 0x02A6
 TID = 0x1F
@@ -32,6 +32,8 @@ STATUS_NEW, STATUS_BUSY, STATUS_OK = 0x00, 0x01, 0x02
 STATUS_NOT_SUPPORTED = 0x03
 FRAME_ROWS, FRAME_COLS = 6, 22   # verified: rows 6-7 and column 22 are refused (status 05)
 FRAME_SIZE = 0x47
+FAST_POLLS = 50                  # fast path: quick reply reads before pausing between reads (hardware: 294 fps)
+FAST_BUSY_BUDGET = 0.025         # fast path: wait at most this long for a busy reply before skipping the frame
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 EFFECTS = {
@@ -44,8 +46,8 @@ EFFECTS = {
     "wave": ("04 {dir} {speed} 00", (1, 255)),
     "reactive_key_one": ("05 00 02 01 {rgb1}", None),
     "reactive_key_random": ("05 00 02 00", None),
-    "reactive_ripple_one": ("06 00 02 01 {rgb1}", None),
-    "reactive_ripple_random": ("06 00 02 00", None),
+    # Effect 06 ("ripple" in easyrazer) is accepted but only lights each pressed key in a random colour on
+    # firmware 1.03 (checked on hardware); a real ripple is app-drawn (Studio: reactive_ripple), so it is not offered.
     "starlight_random": ("07 00 {speed} 00", (1, 3)),
     "starlight_one": ("07 00 {speed} 01 {rgb1}", (1, 3)),
     "starlight_two": ("07 00 {speed} 02 {rgb1} {rgb2}", (1, 3)),
@@ -58,6 +60,11 @@ LED_BACKLIGHT = 0x05
 
 class DeviceError(RuntimeError):
     pass
+
+
+class DeviceBusy(DeviceError):
+    """The keyboard stayed busy (status 01) past the time budget, e.g. while sending keystrokes. Not a fault:
+    the caller may simply skip this frame."""
 
 
 # ---------- pure encoding (unit-tested) ----------
@@ -251,6 +258,36 @@ class UsbTransport:
             except Exception:
                 pass
 
+    def exchange_fast(self, reports):
+        """Several requests under one lock acquisition, each reply polled at once (no 15 ms sleep).
+        Stops at the first reply that is not OK, so nothing more is written to a busy or refusing keyboard;
+        the caller checks every reply (check_reply) and treats a short list as a failure."""
+        import usb.util
+        with usb_lock():
+            try:
+                replies = []
+                for report in reports:
+                    self.dev.ctrl_transfer(0x21, 0x09, 0x300, CONTROL_INTERFACE, report)
+                    # Poll by time, not count: while the user types the keyboard is busy longer (hardware).
+                    deadline = time.monotonic() + FAST_BUSY_BUDGET
+                    polls = 0
+                    while True:
+                        resp = bytes(self.dev.ctrl_transfer(0xA1, 0x01, 0x300, CONTROL_INTERFACE, 90))
+                        polls += 1
+                        if resp[0] not in (STATUS_NEW, STATUS_BUSY) or time.monotonic() > deadline:
+                            break
+                        if polls > FAST_POLLS:
+                            time.sleep(0.0005)  # stop hammering after the quick reads
+                    replies.append(resp)
+                    if resp[0] != STATUS_OK:
+                        break
+                return replies
+            finally:
+                try:
+                    usb.util.release_interface(self.dev, CONTROL_INTERFACE)
+                except Exception:
+                    pass
+
     def close(self):
         with _USB_LOCK:
             try:
@@ -358,11 +395,13 @@ class Keyboard:
             self.cmd(0x02, 0x21, [p, 1 if pair else 0, a, b])
 
     # lighting
-    def set_effect(self, name, rgb1=None, rgb2=None, correct=True, **kw):
-        """Built-in effect, saved on the keyboard. Colours are gamma-corrected (verified to match on hardware)."""
+    def set_effect(self, name, rgb1=None, rgb2=None, correct=True, store=1, **kw):
+        """Built-in effect. store 1 saves it on the keyboard; store 0 shows it from RAM only (used to put back
+        what flash already holds, without another flash write). Colours are gamma-corrected (verified to match
+        on hardware)."""
         fix = gamma if correct else (lambda c: c)
         kw.update(rgb1=fix(rgb1) if rgb1 else None, rgb2=fix(rgb2) if rgb2 else None)
-        self.cmd(0x0F, 0x02, [1, LED_BACKLIGHT] + encode_effect(name, **kw))
+        self.cmd(0x0F, 0x02, [store, LED_BACKLIGHT] + encode_effect(name, **kw))
 
     def set_custom(self, colors, layout, base=(0, 0, 0), correct=True):
         """Per-key colours. The firmware keeps these in RAM only, so they are re-sent at app start/login."""
@@ -374,6 +413,30 @@ class Keyboard:
             self.cmd(0x0F, 0x03, [0, 0, i, 0, FRAME_COLS - 1] + [v for cell in row for v in cell], FRAME_SIZE)
         size, args = CUSTOM_EFFECT
         self.cmd(0x0F, 0x02, args, size)
+
+    def enter_custom_mode(self):
+        """Show the per-key frame buffer (the custom effect). Needed once before streaming frames."""
+        size, args = CUSTOM_EFFECT
+        self.cmd(0x0F, 0x02, args, size)
+
+    def send_frame_fast(self, rows):
+        """One per-key frame: FRAME_ROWS rows of FRAME_COLS [r,g,b] cells, already gamma-corrected.
+        Six 0F:03 packets in one locked batch (transport.exchange_fast) when the transport has one;
+        every reply is CRC- and status-checked. Does not switch to the custom effect (enter_custom_mode)."""
+        if len(rows) != FRAME_ROWS or any(len(row) != FRAME_COLS for row in rows):
+            raise ValueError(f"a frame is {FRAME_ROWS} rows of {FRAME_COLS} colours")
+        reqs = []
+        for i, row in enumerate(rows):
+            cells = [v for cell in row for v in check_rgb(cell)]
+            reqs.append(build_report(0x0F, 0x03, [0, 0, i, 0, FRAME_COLS - 1] + cells, FRAME_SIZE))
+        fast = getattr(self.t, "exchange_fast", None)
+        resps = fast(reqs) if fast else [self.t.exchange(r) for r in reqs]
+        for req, resp in zip(reqs, resps):
+            if resp[0] in (STATUS_NEW, STATUS_BUSY) and len(resp) >= 90 and resp[6:8] == req[6:8]:
+                raise DeviceBusy("keyboard busy; frame skipped")
+            check_reply(req, resp)
+        if len(resps) != len(reqs):
+            raise DeviceError(f"frame cut short: {len(resps)} of {len(reqs)} rows answered")
 
     def get_effect_raw(self):
         return bytes(self.cmd(0x0F, 0x82, [1, LED_BACKLIGHT], 12)[:12])

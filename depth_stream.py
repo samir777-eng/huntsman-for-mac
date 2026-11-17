@@ -5,8 +5,9 @@
 The keyboard only sends travel readings in "driver mode", where it stops typing by itself.
 `DepthSession` switches it into driver mode, reads the stream on a background thread, and
 always switches back to normal typing: on stop(), after a time limit, at interpreter exit and on
-SIGTERM/SIGHUP (install_signal_stop). A SIGKILL or crash can't be caught, so every (re)connect also
-calls recover_typing(), which switches a keyboard left in driver mode back.
+SIGTERM/SIGHUP (install_signal_stop, which then runs the app's add_shutdown_hook work). A SIGKILL or crash
+can't be caught, so every (re)connect also calls recover_typing(), which switches a keyboard left in driver
+mode back.
 Reading the stream needs macOS Input Monitoring permission for the app.
 """
 import atexit
@@ -26,6 +27,8 @@ UNITS_PER_MM = 16380.0
 MODE_HARDWARE, MODE_DRIVER = 0x00, 0x03
 NOT_PERMITTED = 0xE00002E2
 _ACTIVE = set()  # running sessions, stopped by the signal handler
+_SHUTDOWN = []   # app shutdown work (stop Studio, restore lighting, save heat counts) run before a signal exit
+SHUTDOWN_LIMIT = 2.0
 
 
 def recover_typing(kb):
@@ -41,9 +44,27 @@ def recover_typing(kb):
     return False
 
 
+def add_shutdown_hook(fn):
+    """fn() runs when SIGTERM/SIGHUP quits the app, after running key tests are switched back. All hooks
+    together get SHUTDOWN_LIMIT seconds; the app exits even if one hangs."""
+    _SHUTDOWN.append(fn)
+
+
+def _run_shutdown_hooks():
+    for fn in list(_SHUTDOWN):
+        try:
+            fn()
+        except Exception:
+            traceback.print_exc()
+
+
 def _on_signal(signum):
     for s in list(_ACTIVE):
         s.stop("Testing stopped because the app was closed.")
+    if _SHUTDOWN:
+        t = threading.Thread(target=_run_shutdown_hooks, name="huntsman-shutdown", daemon=True)
+        t.start()
+        t.join(SHUTDOWN_LIMIT)
     os._exit(128 + signum)  # then quit, as the signal asked
 
 

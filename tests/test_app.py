@@ -66,7 +66,12 @@ def test_bad_fields_fall_back_one_by_one(app):
 def test_good_state_survives(app):
     good = {"rapid": {"enabled": True, "press": 0.4, "release": 0.6, "keys": [31, 32], "continuous": False},
             "snap": [31, 33], "effect": {"name": "static", "rgb1": [1, 2, 3]},
-            "custom": None, "ui": {"accent": "#3ddc84", "accentMatch": False}}
+            "custom": None, "ui": {"accent": "#3ddc84", "accentMatch": False},
+            "studio": {"enabled": True, "active": "Aurora", "fps": 45, "brightness": 0.5,
+                       "audio": {"device": 2, "sensitivity": 1.5}, "heat": True},
+            "smart": {"idle": {"enabled": True, "minutes": 5, "action": "off", "dim_to": 0.3},
+                      "sleep_off": False, "lock_off": True,
+                      "app_rules": [{"bundle_id": "com.valve.steam", "preset": "Fire"}]}}
     write_state(app, good)
     assert app.load_state() == good
 
@@ -154,18 +159,17 @@ def test_info_reports_the_app_version(app, fake):
 # ---------- progress bar contract (window.onProgress) ----------
 
 class RecordingWindow:
+    """Records window.onProgress calls as they are handed to the pusher (it sends them on its own thread,
+    newest per function, so evaluate_js never runs under the device lock)."""
     def __init__(self):
         self.progress = []
-
-    def evaluate_js(self, js):
-        if "onProgress" in js:
-            self.progress.append(tuple(int(v) for v in js[js.rindex("(") + 1:-1].split(",")))
 
 
 def progress_api(app):
     api = app.Api()
     api.startup()
-    api._window = RecordingWindow()
+    api._window = win = RecordingWindow()
+    api._pusher.push = lambda fn, *args: win.progress.append(tuple(args)) if fn == "onProgress" else None
     return api
 
 

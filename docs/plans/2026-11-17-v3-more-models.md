@@ -46,8 +46,8 @@ Non-goals: V2 Analog actuation/analog features, wireless models, firmware update
 ## Decisions
 - No new command types: only commands already verified on 02A6 are sent to other models.
 - Unknown matrix size or layout → lighting stays off for that model rather than guessing frame sizes.
-- 8KHz varstore read (05:84): not used; we already use the active saved profile read verified on 02A6. Recorded as a
-  tester check.
+- Active profile read (05:84): sent to every model, as already done and verified on 02A6 (OpenRazer uses the same
+  read on the 8KHz). Whether the 8KHz reports its profile the same way is a tester check.
 
 ## Tests (written first)
 - Model table: every model has a layout whose LED cells fit its matrix; no duplicate LEDs; PIDs unique.
@@ -63,3 +63,10 @@ Non-goals: V2 Analog actuation/analog features, wireless models, firmware update
 2. App/service/CLI wiring + UI (tabs, badge, switch, LED check, demo).
 3. Docs.
 Then an independent Opus review, hardware regression on the owner's 02A6, merge, release v0.3.0.
+
+## Review 1 (independent Opus, 2026-11-17)
+No Critical findings: no write reaches an experimental model with the switch off; driver mode can't reach one.
+Fixed: snapshot tied to its model (PID, mismatch refused); window re-reads the model on reconnect; Studio turns off
+once on a locked model instead of retrying; key listener follows a model change; effects use the model's row count;
+CLI `experimental off` stops Studio first; more 02A6 golden scenarios (key tester, apply_saved, restores, Studio
+frames) recorded from master; switch read cached by mtime. Open: one snapshot file per user (a second model gets none).

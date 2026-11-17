@@ -479,3 +479,36 @@ def test_cli_restore_snapshot_refuses_another_model(app, plug):
     with pytest.raises(hc.DeviceError, match="02A7"):
         huntsman.main(["restore-snapshot"])
     assert writes(p.t) == []
+
+
+# ---------- Studio meets a locked model while running ----------
+
+def test_engine_refusal_turns_studio_off_with_one_log_line(app, plug, hooks, capsys):
+    plug(MINI)
+    hc.set_experimental(True)
+    s = make_service(hooks)
+    s.start()
+    try:
+        assert s.handle("studio_enable", {"on": True})["ok"] and s.studio.engine.running
+        hc.set_experimental(False)          # e.g. the CLI turned the switch off
+        capsys.readouterr()
+        s._engine_error(hc.ExperimentalLocked("Support for the Huntsman V3 Pro Mini is experimental. Turn on "
+                                              "Keyboard, Experimental support to change its settings."))
+        assert not s.studio.engine.running and s.studio.summary()["enabled"] is False
+        assert s._engine_broken is False    # not a lost connection: no reconnect
+        err = capsys.readouterr().err
+        assert err.count("\n") == 1 and "Traceback" not in err and "Studio off" in err
+    finally:
+        s.shutdown()
+
+
+def test_engine_device_errors_still_reconnect(app, plug, hooks):
+    plug(V3)
+    s = make_service(hooks)
+    s.start()
+    try:
+        s.handle("studio_enable", {"on": True})
+        s._engine_error(hc.DeviceError("unplugged"))
+        assert s._engine_broken is True and s.studio.engine.running
+    finally:
+        s.shutdown()

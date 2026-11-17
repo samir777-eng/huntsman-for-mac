@@ -266,3 +266,68 @@ def test_push_key_event_accepts_hid_usage_events_from_inputs():
     r, c = KM.key(W).led
     assert kb.frames[-1][r][c] != [0, 0, 0]
     assert eng.heat_counts() == {W: 1}
+
+
+# ---------- a keyboard that won't take frames (an experimental model, Experimental support off) ----------
+
+def test_a_locked_keyboard_is_reported_once_and_not_reconnected():
+    made, errors = [], []
+
+    class Locked(FakeKb):
+        def send_frame_fast(self, rows):
+            self.frames.append(rows)
+            raise hc.ExperimentalLocked("Support for the Huntsman V3 Pro Mini is experimental.")
+
+    kb = Locked()
+
+    def factory():
+        made.append(1)
+        return kb
+    eng = Engine(factory, KM, on_error=errors.append)
+    eng.set_preset(preset("rainbow", {"speed": 1.0}))
+    for now in (1.0, 1.5, 3.0, 20.0, 60.0):
+        assert eng.step(now) is False
+    assert len(made) == 1 and len(kb.frames) == 1
+    assert len(errors) == 1 and isinstance(errors[0], hc.ExperimentalLocked)
+
+
+def test_a_restart_tries_a_locked_keyboard_again():
+    errors = []
+    kb = FakeKb()
+    eng = Engine(lambda: kb, KM, on_error=errors.append)
+    eng.set_preset(preset())
+    real = kb.send_frame_fast
+    kb.send_frame_fast = lambda rows: (_ for _ in ()).throw(hc.FeatureUnavailable("no per-key lighting"))
+    assert eng.step(1.0) is False
+    kb.send_frame_fast = real
+    assert eng.step(2.0) is False      # still blocked: Studio is being turned off
+    eng.start()
+    eng.stop(restore=False)
+    assert eng.step(3.0) is True and kb.frames
+
+
+def test_first_tick_after_detection_uses_the_new_models_shape(tmp_path, monkeypatch):
+    """No keyboard at start: the engine renders with the 02A6 layout, then its first connect finds a Mini and the
+    service swaps the layout (service._follow_model). That tick is dropped, not sent in the old shape."""
+    import models
+    from test_core import FakeTransport
+    monkeypatch.setattr(hc, "data_dir", lambda: str(tmp_path))
+    hc.set_experimental(True)
+    mini = models.MODELS[0x02B0]
+    t, errors, made = FakeTransport(), [], []
+    eng = Engine(None, KM, on_error=errors.append)
+
+    def factory():
+        made.append(1)
+        hc.set_active_model(mini)                       # what detection does
+        eng.keymap = Keymap(hc.load_layout(mini))       # what the service does when it sees the new model
+        return hc.Keyboard(t, model=mini)
+    eng._factory = factory
+    try:
+        eng.set_preset(preset("rainbow", {"speed": 1.0}))
+        assert eng.step(1.0) is False and errors == [] and t.sent == []
+        assert eng.step(1.05) is True and errors == [] and made == [1]
+        rows = [r for r in t.sent if (r[6], r[7]) == (0x0F, 0x03)]
+        assert len(rows) == 5 and all(r[12] == 14 for r in rows)
+    finally:
+        hc.set_active_model(models.DEFAULT)

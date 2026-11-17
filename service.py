@@ -233,9 +233,22 @@ class LightingService:
         return self._keyboard()
 
     def _engine_error(self, e):
+        if isinstance(e, (hc.ExperimentalLocked, hc.FeatureUnavailable)):
+            # The keyboard refused frames (e.g. Experimental support was turned off from the command line): not a
+            # lost connection, so no reconnect loop. Studio goes off, from another thread (this is the engine's).
+            log(f"Studio off: {e}")
+            self._emit("onStudioStatus", {"engine": str(e)})
+            self.studio._spawn(self._studio_off_refused)
+            return
         if isinstance(e, (hc.DeviceError, OSError)):
             self._engine_broken = True
         self._emit("onStudioStatus", {"engine": str(e)})
+
+    def _studio_off_refused(self):
+        try:
+            self.studio.set_enabled(False)
+        except Exception:
+            traceback.print_exc()
 
     def _restore_lighting(self):
         """The engine's restore callback. While the app holds a lease (it is changing the keyboard) the restore

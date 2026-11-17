@@ -35,6 +35,7 @@ DEFAULT_STATE = {
     "ui": {},           # interface preferences, e.g. accent colour
     "studio": studio_mod.clean_studio(None),   # Lighting Studio: on/off, active preset, fps, brightness, audio, heatmap
     "smart": studio_mod.clean_smart(None),     # smart lighting: idle, sleep, lock, per-app presets
+    "experimental": False,  # Keyboard -> Experimental support: writes to untested models (huntsman_core.gate)
 }
 
 
@@ -135,6 +136,7 @@ def _clean_state(raw):
             st["ui"]["accentMatch"] = u["accentMatch"]
     st["studio"] = studio_mod.clean_studio(raw.get("studio"))
     st["smart"] = studio_mod.clean_smart(raw.get("smart"))
+    st["experimental"] = raw.get("experimental") is True
     return st
 
 

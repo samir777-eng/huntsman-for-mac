@@ -235,7 +235,8 @@ class Engine:
 
     def _rows(self, frame):
         lut = self._lut
-        rows = [[[0, 0, 0] for _ in range(hc.FRAME_COLS)] for _ in range(hc.FRAME_ROWS)]
+        n_rows, n_cols = hc.frame_shape()
+        rows = [[[0, 0, 0] for _ in range(n_cols)] for _ in range(n_rows)]
         for k, (r, g, b) in frame.items():
             row, col = self.keymap.key(k).led
             rows[row][col] = [lut[r], lut[g], lut[b]]

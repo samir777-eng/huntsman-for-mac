@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Huntsman for Mac contributors
-"""Razer Huntsman V3 Pro (1532:02A6) protocol, macOS, no Synapse.
+"""Razer Huntsman protocol on macOS, no Synapse. Verified on the Huntsman V3 Pro (1532:02A6); the other models in
+models.py get the same commands, behind the experimental-support switch (gate()).
 
 Sources: OpenRazer (packet, lighting), janeblower/easyrazer (analog, Rapid Trigger, Snap Tap,
 per-key frame) and ohy1/SensorFinder (actuation/release semantics).
@@ -17,9 +18,11 @@ import os
 import threading
 import time
 
+import models
+
 __version__ = "0.2.0"
 
-VID, PID = 0x1532, 0x02A6
+VID, PID = 0x1532, 0x02A6   # PID: the verified model; the connected one is active_model().pid
 TID = 0x1F
 CONTROL_INTERFACE = 3
 LIVE = 0
@@ -30,7 +33,7 @@ MIN_THR = RELEASE_GAP + 1     # 0.1 mm; 7 rather than 6 so the release point bel
 FACTORY_THR, FACTORY_REL = 76, 70   # Synapse's defaults: 1.2 mm press, 1.1 mm release
 STATUS_NEW, STATUS_BUSY, STATUS_OK = 0x00, 0x01, 0x02
 STATUS_NOT_SUPPORTED = 0x03
-FRAME_ROWS, FRAME_COLS = 6, 22   # verified: rows 6-7 and column 22 are refused (status 05)
+FRAME_ROWS, FRAME_COLS = 6, 22   # 02A6, verified: rows 6-7 and column 22 are refused (status 05). Others: models.py
 FRAME_SIZE = 0x47
 FAST_POLLS = 50                  # fast path: quick reply reads before pausing between reads (hardware: 294 fps)
 FAST_BUSY_BUDGET = 0.025         # fast path: wait at most this long for a busy reply before skipping the frame
@@ -65,6 +68,117 @@ class DeviceError(RuntimeError):
 class DeviceBusy(DeviceError):
     """The keyboard stayed busy (status 01) past the time budget, e.g. while sending keystrokes. Not a fault:
     the caller may simply skip this frame."""
+
+
+class FeatureUnavailable(DeviceError):
+    """The connected model doesn't have this feature, or the app never offers it there (key tester on an
+    experimental model). Raised before anything is sent."""
+
+
+class ExperimentalLocked(DeviceError):
+    """A write to an experimental model while Experimental support is off. Raised before anything is sent."""
+
+
+# ---------- models, detection and the experimental-support gate ----------
+
+_active = models.DEFAULT
+
+
+def active_model():
+    """The connected model (set by detection in UsbTransport); the V3 Pro until one is found."""
+    return _active
+
+
+def set_active_model(model):
+    """model: a models.Model or a product id."""
+    global _active
+    m = model if isinstance(model, models.Model) else models.by_pid(model)
+    if m is None:
+        raise DeviceError(f"product id {model!r} is not a supported Huntsman")
+    _active = m
+    return m
+
+
+def detect(find):
+    """find(vid, pid) -> device or None. Returns (model, device) for the first supported model found, in
+    models.MODELS order (the verified V3 Pro first)."""
+    for m in models.MODELS.values():
+        dev = find(VID, m.pid)
+        if dev is not None:
+            return m, dev
+    raise DeviceError("No supported Razer Huntsman found. Is it plugged in by USB?")
+
+
+def frame_shape(model=None):
+    """(rows, columns) of the per-key frame of model, default the active one."""
+    return (model or _active).matrix
+
+
+def _state_path():
+    return os.path.join(data_dir(), "state.json")
+
+
+def experimental_enabled():
+    """Keyboard -> Experimental support (state.json "experimental"). Anything but a stored true is off."""
+    try:
+        with open(_state_path()) as f:
+            raw = json.load(f)
+    except Exception:
+        return False
+    return isinstance(raw, dict) and raw.get("experimental") is True
+
+
+def set_experimental(on):
+    """Remember the switch in state.json, keeping everything else there (same lock as app.update_state)."""
+    path = _state_path()
+    with open(os.path.join(os.path.dirname(path), "state.lock"), "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            with open(path) as f:
+                raw = json.load(f)
+        except Exception:
+            raw = None
+        raw = raw if isinstance(raw, dict) else {}
+        raw["experimental"] = bool(on)
+        tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
+        try:
+            with open(tmp, "w") as f:
+                json.dump(raw, f, indent=1)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, path)
+        finally:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+
+
+FEATURE_NAMES = {"lighting": "Lighting", "per_key": "Per-key lighting", "studio": "Lighting Studio",
+                 "actuation": "Actuation", "rapid": "Rapid Trigger", "snap_tap": "Snap Tap",
+                 "key_tester": "The key tester"}
+
+# Every write command the app sends, by the feature it belongs to. Keyboard.cmd checks these against the model,
+# so nothing reaches an experimental keyboard without passing gate(), whoever sends it.
+WRITE_COMMANDS = {(0x0F, 0x02): "lighting", (0x0F, 0x04): "lighting", (0x0F, 0x03): "per_key",
+                  (0x02, 0x12): "actuation", (0x02, 0x1A): "rapid", (0x02, 0x20): "rapid",
+                  (0x02, 0x21): "snap_tap", (0x00, 0x04): "key_tester"}
+# Reads: always allowed, except ones that belong to a feature the model doesn't have.
+READ_COMMANDS = {(0x00, 0x81): None, (0x05, 0x84): None, (0x0F, 0x82): None, (0x0F, 0x84): None,
+                 (0x02, 0x92): "actuation", (0x00, 0x84): "key_tester"}
+
+
+def gate(model, feature):
+    """Raise unless a write for feature may go to model. The verified model is never restricted (and the switch
+    isn't even read for it). Experimental models: features they lack and the key tester always raise
+    FeatureUnavailable; everything else raises ExperimentalLocked until Experimental support is on."""
+    if model.verified and model.has(feature):
+        return
+    if not model.has(feature):
+        raise FeatureUnavailable(f"{FEATURE_NAMES[feature]} isn't available on the {model.name}.")
+    if feature == "key_tester":
+        raise FeatureUnavailable(f"The key tester isn't offered on the {model.name}: its support is experimental.")
+    if not experimental_enabled():
+        raise ExperimentalLocked(f"Support for the {model.name} is experimental. Turn on Keyboard, Experimental "
+                                 "support to change its settings.")
 
 
 # ---------- pure encoding (unit-tested) ----------
@@ -190,9 +304,11 @@ def encode_effect(name, rgb1=None, rgb2=None, speed=None, direction=None):
     return out
 
 
-def frame_rows(colors, layout, base=(0, 0, 0)):
-    """colors: {key_id: [r,g,b]} -> FRAME_ROWS (6) rows of FRAME_COLS (22) RGB cells (args for 0F:03 after the header)."""
-    rows = [[list(base) for _ in range(FRAME_COLS)] for _ in range(FRAME_ROWS)]
+def frame_rows(colors, layout, base=(0, 0, 0), shape=None):
+    """colors: {key_id: [r,g,b]} -> rows x columns RGB cells (args for 0F:03 after the header). shape: (rows, cols),
+    default the active model's matrix (6 x 22 on the V3 Pro)."""
+    n_rows, n_cols = shape or frame_shape()
+    rows = [[list(base) for _ in range(n_cols)] for _ in range(n_rows)]
     led = {k["id"]: k["led"] for k in layout}
     for kid, rgb in colors.items():
         if int(kid) in led:
@@ -233,9 +349,8 @@ class UsbTransport:
         if lib is None:
             raise DeviceError("libusb is missing: run  brew install libusb")
         be = usb.backend.libusb1.get_backend(find_library=lambda _: lib)
-        self.dev = usb.core.find(idVendor=VID, idProduct=PID, backend=be)
-        if self.dev is None:
-            raise DeviceError("Huntsman V3 Pro not found. Is it plugged in by USB?")
+        self.model, self.dev = detect(lambda vid, pid: usb.core.find(idVendor=vid, idProduct=pid, backend=be))
+        set_active_model(self.model)
 
     def exchange(self, report):
         """Send once, then re-read while the keyboard says busy (never re-send a write)."""
@@ -298,10 +413,33 @@ class UsbTransport:
 
 
 class Keyboard:
-    def __init__(self, transport=None):
+    def __init__(self, transport=None, model=None):
         self.t = transport or UsbTransport()
+        detected = getattr(self.t, "model", None)
+        self.model = model or (detected if isinstance(detected, models.Model) else None) or active_model()
+
+    def check_write(self, feature):
+        gate(self.model, feature)
+
+    def allowed(self, feature):
+        try:
+            gate(self.model, feature)
+            return True
+        except DeviceError:
+            return False
+
+    def _check_command(self, cls, cid):
+        if (cls, cid) in WRITE_COMMANDS:
+            gate(self.model, WRITE_COMMANDS[(cls, cid)])
+        elif (cls, cid) in READ_COMMANDS:
+            feature = READ_COMMANDS[(cls, cid)]
+            if feature and not self.model.has(feature):
+                raise FeatureUnavailable(f"{FEATURE_NAMES[feature]} isn't available on the {self.model.name}.")
+        elif not self.model.verified:
+            raise FeatureUnavailable(f"command {cls:02X}:{cid:02X} is not sent to the {self.model.name}.")
 
     def cmd(self, cls, cid, args=(), size=None):
+        self._check_command(cls, cid)
         req = build_report(cls, cid, args, size)
         resp = self.t.exchange(req)
         check_reply(req, resp)
@@ -328,6 +466,10 @@ class Keyboard:
         return (LIVE, self.saved)
 
     # actuation
+    def _need(self, feature):
+        if not self.model.has(feature):
+            raise FeatureUnavailable(f"{FEATURE_NAMES[feature]} isn't available on the {self.model.name}.")
+
     def read_key(self, profile, key):
         return parse_key_assignment(self.cmd(0x02, 0x92, [profile, key, 0], 80), profile, key)
 
@@ -338,6 +480,7 @@ class Keyboard:
     def _write_points(self, keys, thr, rel):
         """Per key: saved (flash) first, then live (RAM), so a failure never leaves flash behind RAM.
         A key whose saved write doesn't read back is reported and its live copy is left alone."""
+        self.check_write("actuation")
         saved = self.saved
         failed = []
         for k in keys:
@@ -356,6 +499,7 @@ class Keyboard:
 
     def restore_snapshot(self, snap):
         """Write back a snapshot() taken earlier. Refuses if the keyboard's saved profile changed since."""
+        self.check_write("actuation")
         saved = self.saved
         if snap["saved_profile"] != saved:
             raise DeviceError(f"the snapshot is from profile {snap['saved_profile']}, but profile {saved} is active")
@@ -377,6 +521,7 @@ class Keyboard:
     # Rapid Trigger / Snap Tap: ON goes to the live profile only (as easyrazer does; unverified in flash),
     # OFF goes to both so nothing stale is left in flash.
     def set_rapid(self, keys):
+        self.check_write("rapid")
         on = any(rt for _, rt in keys)
         both = self.both()  # read the saved profile even for ON: refuse to write if it looks wrong
         for p in ((LIVE,) if on else both):
@@ -384,11 +529,13 @@ class Keyboard:
                 self.cmd(0x02, 0x1A, args)
 
     def set_continuous(self, on):
+        self.check_write("rapid")
         both = self.both()
         for p in ((LIVE,) if on else both):
             self.cmd(0x02, 0x20, [p, 1 if on else 0])
 
     def set_snap_tap(self, pair):
+        self.check_write("snap_tap")
         a, b = pair if pair else (0, 0)
         both = self.both()
         for p in ((LIVE,) if pair else both):
@@ -399,23 +546,46 @@ class Keyboard:
         """Built-in effect. store 1 saves it on the keyboard; store 0 shows it from RAM only (used to put back
         what flash already holds, without another flash write). Colours are gamma-corrected (verified to match
         on hardware)."""
+        self.check_write("lighting")
+        if name not in self.model.effects:
+            raise FeatureUnavailable(f"The {name} effect isn't available on the {self.model.name}.")
         fix = gamma if correct else (lambda c: c)
         kw.update(rgb1=fix(rgb1) if rgb1 else None, rgb2=fix(rgb2) if rgb2 else None)
         self.cmd(0x0F, 0x02, [store, LED_BACKLIGHT] + encode_effect(name, **kw))
 
     def set_custom(self, colors, layout, base=(0, 0, 0), correct=True):
         """Per-key colours. The firmware keeps these in RAM only, so they are re-sent at app start/login."""
+        self.check_write("per_key")
         for v in list(colors.values()) + [base]:  # all colours valid before the first frame goes out
             check_rgb(v)
         fix = gamma if correct else (lambda c: c)
         colors = {k: fix(v) for k, v in colors.items()}
-        for i, row in enumerate(frame_rows(colors, layout, fix(base))):
-            self.cmd(0x0F, 0x03, [0, 0, i, 0, FRAME_COLS - 1] + [v for cell in row for v in cell], FRAME_SIZE)
+        self._show_rows(frame_rows(colors, layout, fix(base), self.model.matrix))
+
+    def _show_rows(self, rows):
+        cols = self.model.cols
+        for i, row in enumerate(rows):
+            self.cmd(0x0F, 0x03, [0, 0, i, 0, cols - 1] + [v for cell in row for v in cell], self.model.frame_size)
         size, args = CUSTOM_EFFECT
         self.cmd(0x0F, 0x02, args, size)
 
+    def light_cell(self, row, col, rgb=(255, 255, 255), base=(0, 0, 0)):
+        """LED check: light one matrix cell (row, col) and nothing else, through the per-key frame path, so a
+        tester can say which key it is. Same gate as per-key colours."""
+        rows, cols = self.model.matrix
+        for v, n, what in ((row, rows, "row"), (col, cols, "column")):
+            if not isinstance(v, int) or isinstance(v, bool) or not 0 <= v < n:
+                raise ValueError(f"{what} {v!r} is outside the {rows}x{cols} matrix of the {self.model.name}")
+        self.check_write("per_key")
+        on, off = gamma(rgb), gamma(base)
+        frame = [[list(off) for _ in range(cols)] for _ in range(rows)]
+        frame[row][col] = list(on)
+        self._show_rows(frame)
+        return [row, col]
+
     def enter_custom_mode(self):
         """Show the per-key frame buffer (the custom effect). Needed once before streaming frames."""
+        self.check_write("per_key")
         size, args = CUSTOM_EFFECT
         self.cmd(0x0F, 0x02, args, size)
 
@@ -423,12 +593,14 @@ class Keyboard:
         """One per-key frame: FRAME_ROWS rows of FRAME_COLS [r,g,b] cells, already gamma-corrected.
         Six 0F:03 packets in one locked batch (transport.exchange_fast) when the transport has one;
         every reply is CRC- and status-checked. Does not switch to the custom effect (enter_custom_mode)."""
-        if len(rows) != FRAME_ROWS or any(len(row) != FRAME_COLS for row in rows):
-            raise ValueError(f"a frame is {FRAME_ROWS} rows of {FRAME_COLS} colours")
+        n_rows, n_cols = self.model.matrix
+        if len(rows) != n_rows or any(len(row) != n_cols for row in rows):
+            raise ValueError(f"a frame is {n_rows} rows of {n_cols} colours")
+        self.check_write("per_key")
         reqs = []
         for i, row in enumerate(rows):
             cells = [v for cell in row for v in check_rgb(cell)]
-            reqs.append(build_report(0x0F, 0x03, [0, 0, i, 0, FRAME_COLS - 1] + cells, FRAME_SIZE))
+            reqs.append(build_report(0x0F, 0x03, [0, 0, i, 0, n_cols - 1] + cells, self.model.frame_size))
         fast = getattr(self.t, "exchange_fast", None)
         resps = fast(reqs) if fast else [self.t.exchange(r) for r in reqs]
         for req, resp in zip(reqs, resps):
@@ -443,6 +615,7 @@ class Keyboard:
 
     def set_brightness(self, percent, stores=(0, 1)):
         """stores: 0 = live only (while a slider drags), 1 = saved on the keyboard."""
+        self.check_write("lighting")
         v = round(max(0, min(100, int(percent))) * 255 / 100)
         for store in stores:
             self.cmd(0x0F, 0x04, [store, LED_BACKLIGHT, v])
@@ -458,6 +631,7 @@ class Keyboard:
     def snapshot(self, keys):
         """Every key's raw assignment in the live and saved profiles, for manual recovery.
         Keys the firmware refuses to read are listed under "skipped" instead of failing the whole copy."""
+        self._need("actuation")
         saved = self.saved
         profiles, skipped = {}, []
         for p in (LIVE, saved):
@@ -477,18 +651,19 @@ def data_dir():
     return d
 
 
-def load_layout():
-    with open(os.path.join(HERE, "layout.json")) as f:
+def load_layout(model=None):
+    """Keys of model (default the active one): layout.json for the V3 Pro, layouts/<PID>.json for the others."""
+    with open(os.path.join(HERE, (model or _active).layout)) as f:
         return json.load(f)
 
 
-def all_key_ids():
+def all_key_ids(model=None):
     """Keys whose actuation the app manages (everything on the layout except Fn)."""
-    return sorted({k["id"] for k in load_layout() if k["name"] != "RIGHT_GUI"})
+    return sorted({k["id"] for k in load_layout(model) if k["name"] != "RIGHT_GUI"})
 
 
-def every_key_id():
+def every_key_id(model=None):
     """Every key id in the firmware's key map (from easyrazer), incl. keys not on this layout,
     used to clear per-key Rapid Trigger entries everywhere."""
     with open(os.path.join(HERE, "keymap.json")) as f:
-        return sorted(set(json.load(f).values()) | set(all_key_ids()))
+        return sorted(set(json.load(f).values()) | set(all_key_ids(model)))

@@ -88,3 +88,9 @@ def test_uninstall_removes_the_service_agent_and_the_old_one():
     sh = _uninstall_sh()
     assert LABEL in sh and "io.github.huntsman-for-mac.apply-saved" in sh
     assert sh.count("launchctl bootout") >= 2
+
+
+def test_install_copies_the_model_table_and_layouts():
+    sh = _install_sh()
+    assert '"$DIR"/models.py' in sh
+    assert '"$DIR/layouts"' in sh

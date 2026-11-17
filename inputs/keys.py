@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Huntsman for Mac contributors
 """Key presses and releases from the Huntsman while typing normally, via IOKit input-value callbacks.
 
-Only the Huntsman (VID 0x1532, PID 0x02A6) is matched; other keyboards are never read. The device is opened
+Only the connected Huntsman (VID 0x1532, the product id of huntsman_core.active_model()) is matched; other keyboards are never read. The device is opened
 without seizing it, so typing keeps working. Each press arrives once per HID interface that reports it, so
 events are de-duplicated (same usage and state within 5 ms). The IOHIDManager keeps matching while running,
 so a replugged keyboard is picked up again.
@@ -14,15 +14,21 @@ import threading
 import time
 import traceback
 
+import huntsman_core as hc
 from inputs.types import InputError, InputPermissionError, KeyEvent
 
-VID, PID = 0x1532, 0x02A6
+VID = 0x1532
 KEYBOARD_PAGE = 0x07
 FIRST_KEY, LAST_KEY = 0x04, 0xE7  # 0x00-0x03 are "no event" and roll-over error codes; 0xE0-0xE7 modifiers
 NOT_PERMITTED = 0xE00002E2  # kIOReturnNotPermitted
 DEDUPE_WINDOW = 0.005
 PERMISSION_MESSAGE = ("macOS blocked reading key presses. Allow Input Monitoring for Huntsman for Mac in "
                       "System Settings, Privacy & Security, Input Monitoring, then try again.")
+
+
+def product_id():
+    """USB product id of the connected model (detected by huntsman_core)."""
+    return hc.active_model().pid
 
 
 def key_value(page, usage, value):
@@ -133,7 +139,7 @@ class _HID:
         mgr = self.io.IOHIDManagerCreate(None, 0)
         match = self.cf.CFDictionaryCreateMutable(None, 0, None, None)
         self.cf.CFDictionarySetValue(match, self.s("VendorID"), self.num(VID))
-        self.cf.CFDictionarySetValue(match, self.s("ProductID"), self.num(PID))
+        self.cf.CFDictionarySetValue(match, self.s("ProductID"), self.num(product_id()))
         self.io.IOHIDManagerSetDeviceMatching(mgr, match)
         return mgr
 

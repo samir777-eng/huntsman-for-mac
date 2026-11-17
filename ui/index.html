@@ -30,47 +30,50 @@
   <aside class="panel" aria-label="Settings">
 
     <div class="pane" data-pane="actuation">
-      <h2>Actuation point</h2>
+      <div class="pane-head"><h2>Actuation point</h2><span class="unsaved" id="actDirty" hidden>Not applied yet</span></div>
       <p class="scope" id="actScope">All keys</p>
       <div class="act-top">
         <div>
           <div class="readout"><span class="num" id="depthNum">2.0</span><span class="unit">mm</span></div>
           <p class="readout-sub">Pressed this far, a key types.</p>
-          <div class="live" id="mLive" hidden>
+          <div class="live" id="mLive" data-idle="true">
             <span class="live-key" id="mKey">Press a key</span>
             <span class="live-num"><span id="mNum">0.00</span> mm</span>
             <span class="live-hit" id="mHit">Not typed yet</span>
           </div>
         </div>
         <div class="meter" aria-hidden="true" title="Key travel: the bright line is where keys will type, the faint line where they reset">
-          <div class="meter-ticks"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span></div>
-          <div class="meter-col"><div class="meter-fill" id="mFill"></div><div class="meter-rel" id="mRel"></div><div class="meter-act" id="mAct"></div></div>
+          <div class="meter-ticks"><span>0</span><span>1</span><span>2</span><span>3</span><span>4 mm</span></div>
+          <div class="meter-col">
+            <div class="meter-act" id="mAct"></div><div class="meter-rel" id="mRel"></div>
+            <div class="meter-key" id="mCap"><div class="meter-keycap"></div><div class="meter-stem"></div></div>
+          </div>
         </div>
       </div>
       <input class="travel" type="range" id="depth" min="0.1" max="4" step="0.1" value="2" aria-label="Actuation depth">
       <div class="scale"><span>0.1 mm, lightest</span><span>4.0 mm, deepest</span></div>
-      <button id="actTest" class="test-btn">Test with a key press</button>
+      <button id="actTest" class="secondary test-btn">Test with a key press</button>
       <div class="presets" id="presets"></div>
       <div class="group">
         <label class="row"><span>Reset point</span><select id="relMode"><option value="auto">Just above</option><option value="custom">Custom</option></select></label>
-        <div class="row" id="relRow" hidden><span>Resets at</span><span class="row-ctl"><input type="range" id="rel" min="0" max="3.9" step="0.1" value="1.5" aria-label="Reset point"><output id="relOut"></output></span></div>
+        <div class="row" id="relRow" hidden><label for="rel">Resets at</label><span class="row-ctl"><input type="range" id="rel" min="0" max="3.9" step="0.1" value="1.5" aria-label="Reset point"><output id="relOut" aria-hidden="true"></output></span></div>
       </div>
       <p class="hint">A key types once pressed past the actuation point, and is ready again after rising above the reset point.</p>
       <button class="primary" id="applyDepth">Apply to all keys</button>
     </div>
 
     <div class="pane" data-pane="rapid" hidden>
-      <h2>Rapid Trigger</h2>
+      <div class="pane-head"><h2>Rapid Trigger</h2><span class="unsaved" id="rtDirty" hidden>Not applied yet</span></div>
       <p class="scope" id="rtScope">All keys</p>
       <div class="group">
         <label class="row"><span>Rapid Trigger</span><input type="checkbox" class="switch" id="rtOn"></label>
-        <div class="row"><span>Press</span><span class="row-ctl"><input type="range" id="rtPress" min="0.1" max="1" step="0.05"><output id="rtPressOut"></output></span></div>
-        <div class="row"><span>Release</span><span class="row-ctl"><input type="range" id="rtRelease" min="0.1" max="1" step="0.05"><output id="rtReleaseOut"></output></span></div>
+        <div class="row"><label for="rtPress">Press</label><span class="row-ctl"><input type="range" id="rtPress" min="0.1" max="1" step="0.05" aria-label="Rapid Trigger press distance"><output id="rtPressOut" aria-hidden="true"></output></span></div>
+        <div class="row"><label for="rtRelease">Release</label><span class="row-ctl"><input type="range" id="rtRelease" min="0.1" max="1" step="0.05" aria-label="Rapid Trigger release distance"><output id="rtReleaseOut" aria-hidden="true"></output></span></div>
         <label class="row"><span>Stay on for the whole press</span><input type="checkbox" class="switch" id="rtCont"></label>
       </div>
       <p class="hint">The key fires again as soon as it moves down by the press distance after rising by the release distance, anywhere in its travel.</p>
       <p class="hint warn">Experimental on this keyboard. Sent again when the app opens and at login, because the keyboard forgets it when unplugged.</p>
-      <button class="primary" id="applyRt">Apply</button>
+      <button class="primary" id="applyRt">Apply to all keys</button>
     </div>
 
     <div class="pane" data-pane="snap" hidden>
@@ -82,38 +85,38 @@
       </div>
       <p class="hint">While both keys are held, only the one pressed last counts. Usually A and D.</p>
       <p class="hint warn">Experimental on this keyboard.</p>
-      <p class="status" id="snapState"></p>
-      <div class="buttons"><button class="primary" id="applySnap">Turn on</button><button id="offSnap">Turn off</button></div>
+      <p class="status" id="snapState" role="status"></p>
+      <div class="buttons"><button class="primary" id="applySnap">Turn on</button><button id="offSnap">Turn off Snap Tap</button></div>
     </div>
 
     <div class="pane" data-pane="lighting" hidden>
       <h2>Lighting</h2>
-      <div class="seg" id="lightMode" role="tablist">
-        <button data-mode="keys" aria-selected="true">Per key</button>
-        <button data-mode="effect">Effect</button>
+      <div class="seg" id="lightMode" role="tablist" aria-label="Lighting mode">
+        <button role="tab" id="tabKeys" data-mode="keys" aria-selected="true" aria-controls="keysPane">Per key</button>
+        <button role="tab" id="tabEffect" data-mode="effect" aria-selected="false" aria-controls="effectPane" tabindex="-1">Effect</button>
       </div>
-      <div id="keysPane" class="subpane">
+      <div id="keysPane" class="subpane" role="tabpanel" aria-labelledby="tabKeys">
         <p class="scope" id="paintScope">Select keys to paint</p>
         <p class="hint">Only the selected keys change. The others keep their current colour; animated effects stop, since per-key colours replace them.</p>
         <div class="group"><label class="row"><span>Colour</span><input type="color" id="paint" value="#ff3b30"></label></div>
-        <div class="wells" data-for="paint"></div>
-        <div class="buttons"><button class="primary" id="paintSel">Paint selected</button><button id="eraseSel">Clear selected</button></div>
-        <div class="group"><label class="row"><span>Other keys</span><input type="color" id="bg" value="#ffffff"></label></div>
-        <div class="wells" data-for="bg"></div>
-        <button id="applyBg">Apply to other keys</button>
+        <div class="wells" data-for="paint" role="group" aria-label="Paint colour"></div>
+        <div class="buttons"><button class="primary" id="paintSel">Paint selected keys</button><button id="eraseSel">Clear selected keys</button></div>
+        <div class="group"><label class="row"><span>Unpainted keys</span><input type="color" id="bg" value="#ffffff"></label></div>
+        <div class="wells" data-for="bg" role="group" aria-label="Unpainted keys colour"></div>
+        <button id="applyBg">Apply to unpainted keys</button>
       </div>
-      <div id="effectPane" class="subpane" hidden>
+      <div id="effectPane" class="subpane" role="tabpanel" aria-labelledby="tabEffect" hidden>
         <div class="group">
           <label class="row"><span>Effect</span><select id="effect"></select></label>
           <label class="row" id="c1Row"><span>Colour</span><input type="color" id="c1" value="#ffffff"></label>
           <label class="row" id="c2Row"><span>Second colour</span><input type="color" id="c2" value="#00b4ff"></label>
-          <div class="row" id="spRow"><span>Speed</span><span class="row-ctl"><input type="range" id="speed"><output id="speedOut"></output></span></div>
+          <div class="row" id="spRow"><label for="speed">Speed</label><span class="row-ctl"><input type="range" id="speed" aria-label="Effect speed"><output id="speedOut" aria-hidden="true"></output></span></div>
           <label class="row" id="dirRow"><span>Direction</span><select id="dir"><option value="right">Left to right</option><option value="left">Right to left</option></select></label>
         </div>
         <p class="hint" id="fxNote">Effects run on the keyboard and are saved on it.</p>
-        <button class="primary" id="applyFx">Apply effect</button>
+        <button class="primary" id="applyFx">Apply to whole keyboard</button>
       </div>
-      <div class="group"><div class="row"><span>Brightness</span><span class="row-ctl"><input type="range" id="bright" min="0" max="100"><output id="brightOut"></output></span></div></div>
+      <div class="group"><div class="row"><label for="bright">Brightness</label><span class="row-ctl"><input type="range" id="bright" min="0" max="100" aria-label="Brightness"><output id="brightOut" aria-hidden="true"></output></span></div></div>
     </div>
 
     <div class="pane" data-pane="tester" hidden>
@@ -122,9 +125,9 @@
       <div class="readout"><span class="num" id="liveNum">0.00</span><span class="unit">mm</span></div>
       <p class="readout-sub" id="liveSub">Travel of the last key you pressed.</p>
       <div class="group">
-        <div class="row"><span>Types at</span><output id="tAct">–</output></div>
-        <div class="row"><span>Resets at</span><output id="tRel">–</output></div>
-        <div class="row"><span>Deepest press</span><output id="tPeak">–</output></div>
+        <div class="row"><span>Types at</span><span class="val" id="tAct">–</span></div>
+        <div class="row"><span>Resets at</span><span class="val" id="tRel">–</span></div>
+        <div class="row"><span>Deepest press</span><span class="val" id="tPeak">–</span></div>
       </div>
       <p class="hint warn">While testing, the Huntsman sends travel readings instead of typing. Use your Mac's built-in keyboard meanwhile. Testing stops by itself after 60 seconds.</p>
       <button class="primary" id="testToggle">Start testing</button>
@@ -135,38 +138,51 @@
       <div class="group" id="devInfo"></div>
       <div class="group">
         <div class="row"><span>App accent colour</span></div>
-        <div class="row accent-row"><div class="wells" id="accentWells"></div></div>
+        <div class="row accent-row"><div class="wells" id="accentWells" role="group" aria-label="App accent colour"></div></div>
         <label class="row"><span>Match the keyboard's lighting</span><input type="checkbox" class="switch" id="accentMatch"></label>
       </div>
       <p class="hint">Depth, effects and brightness are stored on the keyboard. Per-key colours, Rapid Trigger and Snap Tap stay in its memory until it's unplugged; this app sends them again when it opens and at login.</p>
-      <button id="reload">Reconnect</button>
-      <button id="restore" class="destructive">Restore factory depth</button>
+      <button id="reload" class="secondary">Reconnect</button>
+      <button id="restore" class="secondary destructive">Restore factory depth…</button>
       <p class="hint">Sets every key back to 1.2 mm and turns off Rapid Trigger and Snap Tap. Lighting is left alone.</p>
     </div>
   </aside>
 
-  <main class="stage">
+  <main class="stage" id="stage">
+    <div class="test-banner" id="testBanner" role="status" hidden>
+      <span class="rec" aria-hidden="true"></span>
+      <span>Testing – the Huntsman won't type until you stop</span>
+      <button id="bannerStop">Stop testing</button>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <div class="kb-wrap" id="kbWrap">
       <div class="kb" id="kb">
         <div class="kb-extras" aria-hidden="true">
           <span class="media"></span><span class="media"></span><span class="media"></span><span class="dial"></span>
         </div>
-        <div class="board" id="board" aria-label="Keyboard"></div>
+        <div class="board" id="board" role="grid" aria-label="Keyboard" aria-multiselectable="true"></div>
       </div>
     </div>
-    <div class="select-bar">
+    <div class="trace-wrap" id="traceWrap" hidden><canvas id="trace" height="200" role="img" aria-label="Travel trace. No key pressed yet."></canvas></div>
+    <div class="dock" id="dock">
+      <p class="stage-note" id="stageNote"></p>
       <div class="select-tools" id="selectTools" role="group" aria-label="Select keys">
-        <span class="select-label">Select</span>
+        <span class="select-label" aria-hidden="true">Select</span>
         <button data-sel="all">All</button><button data-sel="wasd">WASD</button><button data-sel="letters">Letters</button>
         <button data-sel="numbers">Numbers</button><button data-sel="arrows">Arrows</button><button data-sel="none">None</button>
       </div>
-      <p class="stage-note" id="stageNote"></p>
     </div>
-    <div class="trace-wrap" id="traceWrap" hidden><canvas id="trace" height="200"></canvas></div>
   </main>
 
 </div>
-<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<dialog class="confirm" id="confirmRestore" aria-labelledby="crTitle" aria-describedby="crBody">
+  <h2 id="crTitle">Restore factory depth?</h2>
+  <p id="crBody">Every key goes back to 1.2 mm, and Rapid Trigger and Snap Tap turn off. Lighting stays as it is.</p>
+  <form method="dialog" class="buttons">
+    <button value="cancel" class="secondary" autofocus>Cancel</button>
+    <button value="restore" class="danger">Restore</button>
+  </form>
+</dialog>
 <script src="app.js"></script>
 </body>
 </html>

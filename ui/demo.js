@@ -35,7 +35,9 @@
         return ok({ failed: [], done, count: Object.keys(done).length });
       },
       set_rapid: () => ok(true), set_snap: () => ok(true), set_effect: () => ok(true),
-      set_custom: () => ok(true), set_brightness: () => ok(null), set_prefs: () => ok(true),
+      set_custom: () => ok(true), set_prefs: () => ok(true),
+      set_brightness: () => ok(null),   // live only
+      save_brightness: () => ok(null),  // written to the keyboard's memory
       restore_original: () => ok(state),
       start_test: () => {
         const seq = ["W", "A", "S", "D"].map(id);

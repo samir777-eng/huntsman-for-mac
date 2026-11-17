@@ -498,7 +498,13 @@ class Keyboard:
         return self._write_points(keys, thr, release_for(thr, release_mm))
 
     def restore_snapshot(self, snap):
-        """Write back a snapshot() taken earlier. Refuses if the keyboard's saved profile changed since."""
+        """Write back a snapshot() taken earlier. Refuses a snapshot of another model (one without a PID was taken
+        before v0.3.0, on the V3 Pro), and one taken while another saved profile was active."""
+        pid = snap.get("pid", f"{PID:04X}")
+        if pid != f"{self.model.pid:04X}":
+            known = models.by_pid(int(pid, 16)) if isinstance(pid, str) and len(pid) == 4 else None
+            raise DeviceError(f"the snapshot is from the {known.name if known else 'keyboard'} ({pid}), but the "
+                              f"{self.model.name} ({self.model.pid:04X}) is connected; nothing was written")
         self.check_write("actuation")
         saved = self.saved
         if snap["saved_profile"] != saved:
@@ -641,7 +647,7 @@ class Keyboard:
                     profiles[str(p)][str(k)] = self.read_key(p, k).hex()
                 except DeviceError:
                     skipped.append([p, k])
-        return {"saved_profile": saved, "profiles": profiles, "skipped": skipped}
+        return {"pid": f"{self.model.pid:04X}", "saved_profile": saved, "profiles": profiles, "skipped": skipped}
 
 
 def data_dir():

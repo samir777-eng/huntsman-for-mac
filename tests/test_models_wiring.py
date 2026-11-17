@@ -424,3 +424,58 @@ def test_switching_off_ends_an_led_check_first(app, plug):
     assert api.set_experimental(False)["ok"]
     assert [(r[6], r[7]) for r in writes(p.t)] == [(0x0F, 0x02)]   # lighting put back while still allowed
     assert hc.experimental_enabled() is False
+
+
+# ---------- the first-launch snapshot belongs to one model ----------
+
+def _snapshot(app):
+    import json
+    with open(app.SNAPSHOT_FILE) as f:
+        return json.load(f)
+
+
+def test_snapshot_records_the_model(app, plug):
+    plug(V3)
+    assert api_for(app).startup()["ok"] is True
+    assert _snapshot(app)["pid"] == "02A6"
+
+
+def test_locked_experimental_model_gets_its_snapshot_without_a_write(app, plug):
+    """Chosen: the snapshot is taken even while Experimental support is off. It only reads, and it is the copy
+    a tester wants before turning writes on."""
+    p = plug(MINI)
+    assert api_for(app).startup()["ok"] is True
+    assert _snapshot(app)["pid"] == "02B0" and writes(p.t) == []
+
+
+def test_restore_snapshot_refuses_another_models_snapshot(app, plug):
+    plug(TKL)
+    snap = hc.Keyboard().snapshot([31, 32])
+    assert snap["pid"] == "02A7"
+    p = plug(V3)
+    with pytest.raises(hc.DeviceError, match=r"Huntsman V3 Pro TKL \(02A7\).*Huntsman V3 Pro \(02A6\)"):
+        hc.Keyboard().restore_snapshot(snap)
+    assert writes(p.t) == []
+
+
+def test_snapshot_without_a_pid_is_an_02a6_snapshot(app, plug):
+    """Snapshots written before v0.3.0 carry no PID; they came from the V3 Pro and stay valid there."""
+    plug(V3)
+    old = hc.Keyboard().snapshot([31, 32])
+    del old["pid"]
+    assert hc.Keyboard().restore_snapshot(old) == []
+    hc.set_experimental(True)
+    p = plug(TKL)
+    with pytest.raises(hc.DeviceError, match=r"Huntsman V3 Pro \(02A6\)"):
+        hc.Keyboard().restore_snapshot(old)
+    assert writes(p.t) == []
+
+
+def test_cli_restore_snapshot_refuses_another_model(app, plug):
+    import huntsman
+    plug(TKL)
+    assert api_for(app).startup()["ok"] is True
+    p = plug(V3)
+    with pytest.raises(hc.DeviceError, match="02A7"):
+        huntsman.main(["restore-snapshot"])
+    assert writes(p.t) == []

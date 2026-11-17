@@ -240,7 +240,8 @@ ANALOG_WRITES = {
     "set_actuation": lambda kb: kb.set_actuation([31], 2.0),
     "restore_factory": lambda kb: kb.restore_factory([31]),
     "restore_snapshot": lambda kb: kb.restore_snapshot(
-        {"saved_profile": 1, "profiles": {"0": {"31": "001f00804c02020004"}}, "skipped": []}),
+        {"pid": f"{kb.model.pid:04X}", "saved_profile": 1, "profiles": {"0": {"31": "001f00804c02020004"}},
+         "skipped": []}),
     "set_rapid": lambda kb: kb.set_rapid([(31, (0.3, 0.3))]),
     "set_rapid_off": lambda kb: kb.set_rapid([(31, None)]),
     "set_continuous": lambda kb: kb.set_continuous(True),

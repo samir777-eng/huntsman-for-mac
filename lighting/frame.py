@@ -18,6 +18,9 @@ BLACK: RGB = (0, 0, 0)
 WHITE: RGB = (255, 255, 255)
 
 
+# inputs.types has its own KeyEvent(usage, down, t) and AudioState: the listeners report what the hardware gives
+# (HID usages), while lighting works in key ids. Engine.push_key_event maps either kind; studio.Studio converts
+# audio to this AudioState. Kept separate so lighting/ never imports the macOS input code.
 @dataclass(frozen=True)
 class KeyEvent:
     """A key press (down=True) or release; t on the time.monotonic() clock, like the engine's frames."""

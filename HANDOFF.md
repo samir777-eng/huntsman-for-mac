@@ -1,6 +1,24 @@
 # HANDOFF
 
-Current state of Huntsman for Mac (updated 2026-11-17). Version 0.1.0, not yet published.
+Current state of Huntsman for Mac (updated 2026-11-17). Version 0.1.0 published; v2 (0.2.0, Lighting Studio) in progress on branch `v2`, not committed.
+
+## v2 Lighting Studio (branch v2, plan docs/plans/2026-11-17-v2-lighting-studio.md)
+- Parts A (lighting/ engine, effects, layers, presets, core fast path), B (inputs/ keys, audio, smart; menubar.py) and
+  C (integration) are implemented. C added: `studio.py` (controller), Studio API in `app.py`, background launch + menu
+  bar in `app.main`, `ui/studio.js` + Studio tab, demo simulation (`ui/demo.js`, generated `ui/demo-studio.js` via
+  `tools/make_demo_studio.py`), installer/plist/requirements changes, README/CHANGELOG.
+- Tests: `~/Documents/huntsman-control/venv/bin/python -m pytest -q tests` → 472 passed (fakes + headless Chromium).
+- Verified on hardware: only the spike numbers (per-key frame 294 fps with immediate reply polling; IOKit page-7
+  key events during normal typing).
+- NOT verified on hardware / real macOS (all of v2): engine streaming at 30 fps through the app, pausing for other
+  device calls, restore on Studio off/quit (incl. the raw re-send of the stored effect when state.json has no effect),
+  typing reactions and Input Monitoring prompt for the bundle, Microphone prompt (NSMicrophoneUsageDescription) and
+  sound input incl. BlackHole, smart lighting (idle/sleep/lock/front app), menu bar icon, hidden-window close
+  (pywebview 6.2.1 `closing` runs on the main thread and False cancels: read from its source, not exercised),
+  accessory/regular activation policy switching, login item via `open -g -a ... --args --background`, install.sh
+  copying lighting/, inputs/, studio.py, menubar.py, ui/studio.js.
+- Known behaviour: while Studio is on, Cmd-Q also hides to the menu bar (pywebview routes quit through `closing`);
+  quit from the menu bar. Heat counts are saved on Studio off/quit only (a crash loses the session's counts).
 
 ## Done
 - First version: clean open-source repo, installer, GPL-3.0, Synapse-style interface, live key tester.

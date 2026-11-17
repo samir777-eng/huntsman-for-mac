@@ -11,5 +11,6 @@
   <key>CFBundleVersion</key><string>1</string>
   <key>LSMinimumSystemVersion</key><string>12.0</string>
   <key>NSHighResolutionCapable</key><true/>
-  <key>NSInputMonitoringUsageDescription</key><string>The key tester reads how far each key is pressed.</string>
+  <key>NSInputMonitoringUsageDescription</key><string>The key tester reads how far each key is pressed, and typing reactions light up the keys you press. Key presses stay in memory.</string>
+  <key>NSMicrophoneUsageDescription</key><string>Sound-reactive lighting listens to audio levels; nothing is recorded.</string>
 </dict></plist>

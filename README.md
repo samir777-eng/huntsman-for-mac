@@ -19,6 +19,47 @@ Works on Apple silicon Macs (M1, M2, M3, M4) without Razer Synapse or a Windows 
 | Rapid Trigger | No, kept until unplugged | **Experimental**: not yet confirmed on real hardware |
 | Snap Tap (one pair) | No, kept until unplugged | **Experimental**: not yet confirmed on real hardware |
 | Live key tester and actuation meter | – | While testing, the keyboard sends travel readings instead of typing |
+| Lighting Studio (layers, typing and sound effects, presets, smart lighting) | No, drawn by the app while it runs | **New in 0.2.0, not yet checked on hardware**. See [Lighting Studio](#lighting-studio) |
+
+## Lighting Studio
+
+The keyboard's own effects (the **Lighting** tab) run on the keyboard and are saved on it. **Studio** goes further: the app
+draws every frame itself and streams it to the keys, so effects can be layered, react to typing and sound, and change with
+what you're doing. It works while the app runs (in the window or from the menu bar icon); when Studio is turned off or the
+app quits, the keyboard's own lighting comes back.
+
+- **Layers.** Stack effects; the top layer is drawn last. Each layer has its own colours and settings, opacity, a blend mode
+  (normal, add, screen, multiply, brightest) and a key set (all keys, or the keys you select on the board).
+- **Effects.** Basic: solid colour, gradient (linear or radial, 2 to 5 colours), rainbow wave, colour cycle, breathing.
+  Ambient: aurora, matrix rain, plasma, fire, starfield. Sound: audio spectrum (bars across the keyboard), audio pulse.
+  Typing: ripple, afterglow, explosion, trail, and a typing heatmap.
+- **Presets.** Eight built-in presets to start from (Rainbow wave, Aurora, Gaming WASD, Typing glow, Music, Fire, Matrix,
+  Calm breathing). Save, save as, rename, duplicate, delete, and import or export a preset as a JSON file. Built-in presets
+  can't be changed; save a copy instead. Brightness and smoothness (15 to 60 frames a second) apply to all presets.
+- **Sound.** Choose the input in Studio → Sound. A microphone hears the room. **For the Mac's own sound, install a loopback
+  device such as [BlackHole](https://github.com/ExistentialAudio/BlackHole), send your output to it (for example with a
+  Multi-Output Device in Audio MIDI Setup), and choose it as the input.** Sensitivity adjusts how strongly the lights react.
+- **Smart lighting** (Studio → Smart). Dim the keys or turn them off after a number of minutes without input; turn them off
+  while the Mac sleeps or the screen is locked; show a chosen preset while a given app is in front (pick an open app or type
+  its bundle ID).
+- **Menu bar.** A keyboard icon in the menu bar turns Studio on or off, switches presets, opens the window and quits. While
+  Studio is on, closing the window (or Cmd-Q) keeps the lighting running from the menu bar; quit from the menu bar icon.
+  When Studio is off, closing the window quits the app as before. At login the app starts in the background with only the
+  menu bar icon.
+
+### Permissions
+
+- **Input Monitoring**, for typing effects and the heatmap (and the key tester). See
+  [Input Monitoring](#input-monitoring-for-the-key-tester); the app only listens while a preset with a typing effect is on
+  or the heatmap is counting.
+- **Microphone**, for sound effects: **System Settings → Privacy & Security → Microphone → Huntsman for Mac**. The app only
+  listens while a preset with a sound effect is on. If access is refused, Studio shows where to turn it on.
+
+### Privacy
+
+Key presses and sound are processed in memory, frame by frame, to draw the lights. Nothing is recorded, logged or sent
+anywhere. The typing heatmap is off by default; when you turn it on, it stores only how many times each key was pressed
+(`heatmap.json`, on this Mac), never which keys in which order, and **Reset heatmap** deletes it.
 
 ## What has been checked on real hardware
 
@@ -57,7 +98,7 @@ cd huntsman-for-mac
 This installs:
 - **Huntsman for Mac.app** in `~/Applications`. It carries its own copy of the code and Python environment, and is signed ad hoc on your Mac (no Apple developer account involved).
 - **libusb**, through Homebrew, if it's missing.
-- **A login item** (`io.github.huntsman-for-mac.apply-saved`) that sends per-key colours, Rapid Trigger and Snap Tap to the keyboard again after you log in.
+- **A login item** (`io.github.huntsman-for-mac.apply-saved`) that opens the app in the background after you log in (`open -g -a "Huntsman for Mac" --args --background`). It sends per-key colours, Rapid Trigger and Snap Tap to the keyboard again, starts Studio if it was on, and shows the menu bar icon. Opening the app itself (rather than its Python) means macOS shows the app's name in the Input Monitoring and Microphone lists.
 
 Open it from `~/Applications` or Spotlight. To preview the interface without a keyboard, open `ui/index.html?demo` in a browser.
 
@@ -107,7 +148,7 @@ $APP/venv/bin/python $APP/code/huntsman.py status
 | `color 255 255 255` | Solid colour, saved on the keyboard |
 | `spectrum`, `wave`, `off` | Built-in effects, saved on the keyboard |
 | `brightness 80` | Brightness, 0 to 100 |
-| `apply-saved` | Send per-key colours, Rapid Trigger and Snap Tap again (what the login item runs) |
+| `apply-saved` | Send per-key colours, Rapid Trigger and Snap Tap again (the login item now opens the app instead) |
 | `factory` | Every key back to 1.2 mm; Rapid Trigger and Snap Tap off |
 | `restore-snapshot` | Put every key back exactly as it was on the app's first launch |
 | `--version` | Print the version |
@@ -146,7 +187,11 @@ The app writes to the keyboard's built-in memory using commands the community wo
 
 **The keyboard stopped typing** This means it was left in test mode. Unplug it and plug it back in; opening the app, or running any `huntsman.py` command, also puts it back to typing.
 
-**Installer says the app is running** Quit it (Cmd-Q), then run the installer again.
+**Installer says the app is running** Quit it from the menu bar icon (or Cmd-Q while Studio is off), then run the installer again.
+
+**Studio lights don't follow typing or sound** Studio → Typing or Sound shows the reason. Usually Input Monitoring or
+Microphone access is off for Huntsman for Mac (see [Permissions](#permissions)); quit and reopen the app after turning it on.
+For the Mac's own sound, the input must be a loopback device such as BlackHole, not the microphone.
 
 ## How it works
 
@@ -154,11 +199,15 @@ The app talks to the keyboard's control interface with USB control transfers thr
 
 - `huntsman_core.py`: protocol and USB transport
 - `depth_stream.py`: live travel readings
-- `app.py` and `ui/`: the window
+- `app.py` and `ui/`: the window (`ui/studio.js` is the Studio tab)
+- `studio.py`: Studio controller (presets, settings, listeners, smart lighting) between the window and the engine
+- `lighting/`: effects, layers, presets and the engine that streams per-key frames
+- `inputs/`: key presses (IOKit), sound levels (sounddevice) and smart-lighting signals (idle, sleep, lock, front app)
+- `menubar.py`: the menu bar icon
 - `huntsman.py`: the command line
 
 Your settings and logs live in:
-- `~/Library/Application Support/Huntsman for Mac/`: `state.json` (settings the keyboard forgets when unplugged), `first-launch-snapshot.json`, and lock files.
+- `~/Library/Application Support/Huntsman for Mac/`: `state.json` (settings the keyboard forgets when unplugged, and Studio and smart lighting settings), `presets.json` (your Studio presets), `heatmap.json` (press counts, only if the heatmap is on), `first-launch-snapshot.json`, and lock files.
 - `~/Library/Logs/Huntsman for Mac.log`
 
 ## Development

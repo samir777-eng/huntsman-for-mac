@@ -3,12 +3,13 @@
 "use strict";
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 
-const TITLES = { actuation: "Actuation", rapid: "Rapid Trigger", snap: "Snap Tap", lighting: "Lighting", tester: "Key tester", device: "Keyboard" };
+const TITLES = { actuation: "Actuation", rapid: "Rapid Trigger", snap: "Snap Tap", lighting: "Lighting", studio: "Studio", tester: "Key tester", device: "Keyboard" };
 const NOTES = {
   actuation: "Click a key to select it, or drag across several. The number on each key is the depth it types at, in mm.",
   rapid: "Select keys to limit Rapid Trigger to them, or leave nothing selected for all keys.",
   snap: "The two outlined keys are the pair. Choose them in the panel on the left.",
   lighting: "Each key shows the colour its LED is set to.",
+  studio: "",
   tester: "Keys sink as you press them. The trace shows the last key's travel.",
   device: "",
 };
@@ -127,7 +128,9 @@ function fxColour(id) {
   if (n === "starlight_two" || n === "breathing_two") return n === "starlight_two" && rand(id, 4) > 0.5 ? f.c2 : f.c1;
   return f.c1 || "#e9e9ee";
 }
+const studioOn = () => typeof studioLive === "function" && studioLive();
 function ledColour(id) {
+  if (studioOn()) return studioColour(id);   // Studio streams frames: show what the keys really show
   if (custom) return rgb2hex(custom.keys[id] || custom.base);
   return fxColour(id);
 }
@@ -145,14 +148,14 @@ function capName(id) {
   }
   return name;
 }
-const selecting = () => ["actuation", "rapid", "lighting"].includes(view);
+const selecting = () => ["actuation", "rapid", "lighting", "studio"].includes(view);
 function rtCovers(id) { const r = state.rapid; return !!(r && r.enabled && (r.keys === "all" || (r.keys || []).map(Number).includes(id))); }
 const snapPair = () => [+$("#snapA").value, +$("#snapB").value];
 
 function paint() {
   const showSel = selecting(), [sa, sb] = snapPair(), kb = $("#kb");
   kb.dataset.view = view;
-  kb.dataset.fx = !custom && fxShown ? fxShown.name : "";
+  kb.dataset.fx = !custom && fxShown && !studioOn() ? fxShown.name : "";
   for (const c of $$(".cap")) {
     const id = +c.dataset.id, p = points[id], front = c.querySelector(".front");
     const led = ledColour(id), dark = unlit(led);
@@ -181,7 +184,7 @@ function paint() {
   }
   refreshButtons();
 }
-const fxAnimated = () => !custom && fxShown && /spectrum|wave|random|fire/.test(fxShown.name);
+const fxAnimated = () => !custom && !studioOn() && fxShown && /spectrum|wave|random|fire/.test(fxShown.name);
 function fxDuration(f) {
   if (f.name === "wave") return (1.5 + (f.speed ?? 40) / 255 * 9).toFixed(2);   // lower value = faster
   if (f.name.startsWith("starlight")) return [0, 1.4, 2.4, 3.6][f.speed ?? 2];
@@ -285,6 +288,7 @@ async function show(v) {
   $$(".cap").forEach(c => c.classList.remove("pressed", "typed"));
   fit(); paint(); fillAll(); snapUi();
   if (v === "tester") drawTrace();
+  if (window.studioShown) studioShown(v);
 }
 $$("button[data-view]").forEach(b => b.onclick = () => show(b.dataset.view));
 
@@ -404,6 +408,7 @@ async function sendCustom(btn, next, msg) {
   await busy(btn, async () => {
     await call("set_custom", next.base, next.keys);
     custom = next; fxShown = null; paint(); applyAccent(); toast(msg);
+    if (window.studioRefresh) studioRefresh();   // Python turned Studio off for the keyboard's own colours
   });
 }
 $("#paintSel").onclick = e => { const n = draftCustom(), c = hex2rgb($("#paint").value); selected.forEach(id => n.keys[id] = [...c]); sendCustom(e.target, n, `Painted ${plural(selected.size, "key")}`); };
@@ -444,6 +449,7 @@ $("#applyFx").onclick = e => {
   busy(e.target, async () => {
     await call("set_effect", name, o);
     custom = null; fxShown = fxFromForm(name); paint(); applyAccent(); toast(`${EFFECT_NAMES[name]} applied`);
+    if (window.studioRefresh) studioRefresh();
   });
 };
 function fxFromForm(name) {
@@ -679,6 +685,7 @@ async function start() {
   fillSnap(); drawBoard(); effectUi(); depthUi(); rtUi(); testerUi(); wellsUi(); show(view);
   try { const done = await call("startup"); if (done.length) toast("Sent again: " + done.join(", ")); } catch (e) {}
   await load();
+  if (window.studioStart) await studioStart();
   let fitTimer;
   addEventListener("resize", () => { clearTimeout(fitTimer); fitTimer = setTimeout(() => { fit(); drawTrace(); }, 100); });
 }

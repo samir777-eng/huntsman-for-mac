@@ -22,6 +22,7 @@
       <button data-view="rapid">Rapid Trigger</button>
       <button data-view="snap">Snap Tap</button>
       <button data-view="lighting">Lighting</button>
+      <button data-view="studio">Studio</button>
       <button data-view="tester">Key tester</button>
     </nav>
     <button class="gear" data-view="device" aria-label="Keyboard info" title="Keyboard info">
@@ -92,7 +93,9 @@
     </div>
 
     <div class="pane" data-pane="lighting" hidden>
-      <h2>Lighting</h2>
+      <h2>Keyboard lighting</h2>
+      <p class="hint">Saved on the keyboard and runs without this app. For layered, typing and sound effects, use <button class="link" data-view="studio">Studio</button>.</p>
+      <p class="hint warn" id="studioOnNote" hidden>Studio is lighting the keyboard now. Applying anything here turns Studio off.</p>
       <div class="seg" id="lightMode" role="tablist" aria-label="Lighting mode">
         <button role="tab" id="tabKeys" data-mode="keys" aria-selected="true" aria-controls="keysPane">Per key</button>
         <button role="tab" id="tabEffect" data-mode="effect" aria-selected="false" aria-controls="effectPane" tabindex="-1">Effect</button>
@@ -119,6 +122,119 @@
         <button class="primary" id="applyFx">Apply to whole keyboard</button>
       </div>
       <div class="group"><div class="row"><label for="bright">Brightness</label><span class="row-ctl"><input type="range" id="bright" min="0" max="100" aria-label="Brightness"><output id="brightOut" aria-hidden="true"></output></span></div></div>
+    </div>
+
+    <div class="pane studio-pane" data-pane="studio" hidden>
+      <div class="pane-head">
+        <h2>Studio</h2>
+        <span class="unsaved" id="stDirty" hidden>Unsaved changes</span>
+        <label class="master"><span id="stOnLabel">Off</span><input type="checkbox" class="switch" id="stOn" aria-describedby="stOnHint" aria-label="Studio lighting"></label>
+      </div>
+      <p class="hint" id="stOnHint">Effects drawn by this app and streamed to the keys while it runs.</p>
+      <div class="notice" id="stNotice" role="alert" hidden></div>
+
+      <div class="preset-bar">
+        <label class="sr-only" for="stPreset">Preset</label>
+        <select id="stPreset" class="preset-select"></select>
+        <div class="preset-tools" role="toolbar" aria-label="Preset">
+          <button id="stSave">Save</button>
+          <button id="stSaveAs">Save as…</button>
+          <button id="stMore" aria-haspopup="menu" aria-expanded="false" aria-controls="stMenu" aria-label="More preset actions" title="More preset actions"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="3" cy="8" r="1.5" fill="currentColor"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/><circle cx="13" cy="8" r="1.5" fill="currentColor"/></svg></button>
+          <div class="menu" id="stMenu" role="menu" aria-label="Preset actions" hidden>
+            <button role="menuitem" data-act="rename">Rename…</button>
+            <button role="menuitem" data-act="duplicate">Duplicate</button>
+            <button role="menuitem" data-act="export">Export…</button>
+            <button role="menuitem" data-act="import">Import…</button>
+            <button role="menuitem" data-act="delete" class="destructive">Delete…</button>
+          </div>
+        </div>
+        <input type="file" id="stImportFile" accept=".json,application/json" hidden>
+      </div>
+
+      <div class="group">
+        <div class="row"><label for="stBright">Brightness</label><span class="row-ctl"><input type="range" id="stBright" min="0" max="100" step="1"><output id="stBrightOut" aria-hidden="true"></output></span></div>
+        <div class="row"><label for="stFps">Smoothness</label><span class="row-ctl"><input type="range" id="stFps" min="15" max="60" step="5"><output id="stFpsOut" aria-hidden="true"></output></span></div>
+      </div>
+
+      <div class="seg" id="stTabs" role="tablist" aria-label="Studio settings">
+        <button role="tab" id="stTabLayers" data-tab="layers" aria-selected="true" aria-controls="stLayers">Layers</button>
+        <button role="tab" id="stTabSound" data-tab="sound" aria-selected="false" aria-controls="stSound" tabindex="-1">Sound</button>
+        <button role="tab" id="stTabTyping" data-tab="typing" aria-selected="false" aria-controls="stTyping" tabindex="-1">Typing</button>
+        <button role="tab" id="stTabSmart" data-tab="smart" aria-selected="false" aria-controls="stSmart" tabindex="-1">Smart</button>
+      </div>
+
+      <div id="stLayers" class="subpane" role="tabpanel" aria-labelledby="stTabLayers">
+        <div class="stack-head"><h3 id="stStackTitle">Layers</h3><button id="stAdd" class="add-layer">Add layer</button></div>
+        <p class="hint">The top layer is drawn last, over the ones below it.</p>
+        <ol class="stack" id="stStack" aria-labelledby="stStackTitle"></ol>
+        <section class="editor" id="stEditor" aria-labelledby="stEdTitle" hidden>
+          <div class="editor-head"><h3 id="stEdTitle"></h3><p class="hint" id="stEdDesc"></p></div>
+          <div class="group" id="stParams"></div>
+          <h4>Mix</h4>
+          <div class="group">
+            <div class="row"><label for="stOpacity">Opacity</label><span class="row-ctl"><input type="range" id="stOpacity" min="0" max="100" step="1"><output id="stOpacityOut" aria-hidden="true"></output></span></div>
+            <label class="row"><span>Blend</span><select id="stBlend">
+              <option value="normal">Normal (covers below)</option><option value="add">Add (brightens)</option>
+              <option value="screen">Screen (soft brighten)</option><option value="multiply">Multiply (tints)</option>
+              <option value="max">Brightest wins</option></select></label>
+          </div>
+          <h4>Keys</h4>
+          <div class="seg" id="stKeys" role="radiogroup" aria-label="Keys this layer lights">
+            <button role="radio" data-keys="all" aria-checked="true">All keys</button>
+            <button role="radio" data-keys="sel" aria-checked="false">Selected keys</button>
+          </div>
+          <p class="hint" id="stKeysHint"></p>
+          <div class="buttons"><button id="stKeysUse">Use selected keys</button><button id="stKeysShow">Select this layer's keys</button><button id="stKeysClear">Clear selection</button></div>
+        </section>
+      </div>
+
+      <div id="stSound" class="subpane" role="tabpanel" aria-labelledby="stTabSound" hidden>
+        <div class="group">
+          <label class="row"><span>Input</span><select id="stDevice"></select></label>
+          <div class="row"><label for="stSens">Sensitivity</label><span class="row-ctl"><input type="range" id="stSens" min="0.1" max="4" step="0.1"><output id="stSensOut" aria-hidden="true"></output></span></div>
+          <div class="row"><span id="stLevelLabel">Level</span><span class="level" role="meter" id="stLevel" aria-labelledby="stLevelLabel" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span class="level-bar"></span></span></div>
+        </div>
+        <p class="hint" id="stLevelHint">The level moves while a preset with a sound effect is on.</p>
+        <p class="hint">For system audio install a loopback device such as BlackHole and choose it here. A microphone hears the room instead.</p>
+        <div class="notice" id="stAudioErr" role="alert" hidden></div>
+        <p class="hint">Sound is analysed in memory as it arrives. Nothing is recorded or saved.</p>
+      </div>
+
+      <div id="stTyping" class="subpane" role="tabpanel" aria-labelledby="stTabTyping" hidden>
+        <p class="hint">Typing effects (Ripple, Afterglow, Explosion, Trail) react to the keys you press on the Huntsman. macOS asks for Input Monitoring the first time.</p>
+        <div class="notice" id="stKeysErr" role="alert" hidden></div>
+        <div class="group">
+          <label class="row"><span>Count key presses for the heatmap</span><input type="checkbox" class="switch" id="stHeat"></label>
+          <div class="row"><span>Keys counted so far</span><span class="val" id="stHeatCount">0</span></div>
+        </div>
+        <p class="hint">Off by default. Only how many times each key was pressed is stored, on this Mac, never which keys in which order. Add the Typing heatmap layer to see it.</p>
+        <button id="stHeatReset" class="secondary">Reset heatmap</button>
+      </div>
+
+      <div id="stSmart" class="subpane" role="tabpanel" aria-labelledby="stTabSmart" hidden>
+        <p class="status" id="stSmartNow" role="status"></p>
+        <div class="group">
+          <label class="row"><span>When I'm away</span><input type="checkbox" class="switch" id="smIdle"></label>
+          <div class="row" data-idle><label for="smMinutes">After</label><span class="row-ctl"><input type="number" id="smMinutes" min="1" max="240" step="1" class="num-input"><span class="unit-label">minutes</span></span></div>
+          <label class="row" data-idle><span>Then</span><select id="smAction"><option value="dim">Dim the keys</option><option value="off">Turn the keys off</option></select></label>
+          <div class="row" data-idle data-dim><label for="smDim">Dim to</label><span class="row-ctl"><input type="range" id="smDim" min="0" max="100" step="5"><output id="smDimOut" aria-hidden="true"></output></span></div>
+        </div>
+        <div class="group">
+          <label class="row"><span>Off while the Mac sleeps</span><input type="checkbox" class="switch" id="smSleep"></label>
+          <label class="row"><span>Off while the screen is locked</span><input type="checkbox" class="switch" id="smLock"></label>
+        </div>
+        <h3>Presets for apps</h3>
+        <p class="hint">When one of these apps is in front, its preset shows instead of yours.</p>
+        <ul class="rules" id="smRules"></ul>
+        <div class="rule-add">
+          <label class="sr-only" for="smPick">Open app</label>
+          <select id="smPick"><option value="">Pick an open app…</option></select>
+          <label class="sr-only" for="smBundle">App bundle ID</label>
+          <input type="text" id="smBundle" placeholder="or bundle ID, e.g. com.valvesoftware.steam" spellcheck="false" autocomplete="off">
+          <button id="smAdd" class="secondary">Add rule</button>
+        </div>
+      </div>
+      <p class="hint" id="stCloseHint">While Studio is on, closing the window keeps the lighting running from the menu bar icon. Quit from there.</p>
     </div>
 
     <div class="pane" data-pane="tester" hidden>
@@ -186,6 +302,27 @@
     <button value="restore" class="danger">Restore</button>
   </form>
 </dialog>
+<dialog class="confirm gallery" id="gallery" aria-labelledby="galTitle">
+  <div class="gallery-head"><h2 id="galTitle">Add a layer</h2><form method="dialog"><button value="cancel" class="secondary">Cancel</button></form></div>
+  <div id="galBody"></div>
+</dialog>
+<dialog class="confirm" id="nameDialog" aria-labelledby="ndTitle">
+  <form method="dialog" id="ndForm">
+    <h2 id="ndTitle">Save preset as</h2>
+    <label class="field"><span>Name</span><input type="text" id="ndName" maxlength="60" required autocomplete="off" spellcheck="false"></label>
+    <p class="field-err" id="ndErr" role="alert"></p>
+    <div class="buttons"><button value="cancel" class="secondary" formnovalidate>Cancel</button><button value="ok" class="primary" id="ndOk">Save</button></div>
+  </form>
+</dialog>
+<dialog class="confirm" id="confirmDelete" aria-labelledby="cdTitle" aria-describedby="cdBody">
+  <h2 id="cdTitle">Delete preset?</h2>
+  <p id="cdBody"></p>
+  <form method="dialog" class="buttons">
+    <button value="cancel" class="secondary" autofocus>Cancel</button>
+    <button value="delete" class="danger">Delete</button>
+  </form>
+</dialog>
 <script src="app.js"></script>
+<script src="studio.js"></script>
 </body>
 </html>

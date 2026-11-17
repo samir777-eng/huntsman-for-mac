@@ -23,3 +23,11 @@ def test_every_source_file_has_a_licence_header():
     missing = [str(p.relative_to(ROOT)) for p in sources
                if "SPDX-License-Identifier: GPL-3.0-or-later" not in p.read_text()[:400]]
     assert missing == []
+
+
+def test_demo_studio_matches_the_effect_library():
+    spec = importlib.util.spec_from_file_location("make_demo_studio", ROOT / "tools" / "make_demo_studio.py")
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    with open(ROOT / "ui" / "demo-studio.js") as f:
+        assert f.read() == tool.render(tool.read_studio()), "ui/demo-studio.js is stale: run python tools/make_demo_studio.py"

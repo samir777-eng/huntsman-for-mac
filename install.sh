@@ -4,7 +4,9 @@
 # Installs Huntsman for Mac:
 #   - "Huntsman for Mac.app" in ~/Applications, carrying its own copy of the code and Python environment
 #     (so it never reads from Downloads/Documents/Desktop, which macOS blocks for unsigned apps)
-#   - a login item that re-sends per-key colours, Rapid Trigger and Snap Tap after login
+#   - a login item that opens the app in the background after login (`open -g -a ... --args --background`,
+#     so macOS attributes Input Monitoring and Microphone to the app): it re-sends per-key colours, Rapid
+#     Trigger and Snap Tap, runs Lighting Studio if it was on, and shows a menu bar icon
 # Run it again after updating the code. Remove everything with ./uninstall.sh
 set -euo pipefail
 
@@ -25,7 +27,7 @@ fail() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 xml() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g"; }
 
 if pgrep -u "$(id -u)" -f "Contents/Resources/code/app.py" >/dev/null 2>&1; then
-  fail "Huntsman for Mac is running. Quit it first (Cmd-Q), then run ./install.sh again."
+  fail "Huntsman for Mac is running. Quit it first (menu bar icon > Quit, or Cmd-Q when Studio is off), then run ./install.sh again."
 fi
 
 # Newest tested Python first (3.13 down to 3.11), then whatever python3 is. 3.11 is the oldest the pinned
@@ -67,8 +69,11 @@ if [ -d "$APP" ]; then
   OLD="$STASH"   # only now is there something to put back
 fi
 mkdir -p "$APP/Contents/MacOS" "$CODE/ui"
-cp "$DIR"/huntsman_core.py "$DIR"/depth_stream.py "$DIR"/app.py "$DIR"/huntsman.py "$DIR"/layout.json "$DIR"/keymap.json "$CODE/"
-cp "$DIR"/ui/index.html "$DIR"/ui/style.css "$DIR"/ui/app.js "$CODE/ui/"
+cp "$DIR"/huntsman_core.py "$DIR"/depth_stream.py "$DIR"/app.py "$DIR"/studio.py "$DIR"/menubar.py "$DIR"/huntsman.py \
+   "$DIR"/layout.json "$DIR"/keymap.json "$CODE/"
+# whole packages, without bytecode caches (they would break the signature)
+rsync -a --exclude '__pycache__' --exclude '*.pyc' "$DIR/lighting" "$DIR/inputs" "$CODE/"
+cp "$DIR"/ui/index.html "$DIR"/ui/style.css "$DIR"/ui/app.js "$DIR"/ui/studio.js "$CODE/ui/"
 cp "$DIR/packaging/Info.plist" "$APP/Contents/Info.plist"
 cp "$DIR/packaging/icon.icns" "$RES/icon.icns"
 
@@ -78,8 +83,8 @@ say "Setting up Python ($PY)"
 "$RES/venv/bin/pip" install --quiet -r "$DIR/requirements.txt"
 
 # printf %q quotes each path for the shell, whatever characters the home folder name has.
-# -B: no __pycache__ inside the signed bundle.
-{ printf '#!/bin/bash\nexec '; printf '%q ' "$PYBIN" -I -B "$CODE/app.py"; printf '>>%q 2>&1\n' "$LOG"; } > "$APP/Contents/MacOS/HuntsmanForMac"
+# -B: no __pycache__ inside the signed bundle. "$@" passes --background from the login item through.
+{ printf '#!/bin/bash\nexec '; printf '%q ' "$PYBIN" -I -B "$CODE/app.py"; printf '"$@" >>%q 2>&1\n' "$LOG"; } > "$APP/Contents/MacOS/HuntsmanForMac"
 chmod +x "$APP/Contents/MacOS/HuntsmanForMac"
 touch "$APP"
 
@@ -103,7 +108,7 @@ cat > "$AGENT" <<PLIST
 <plist version="1.0"><dict>
   <key>Label</key><string>io.github.huntsman-for-mac.apply-saved</string>
   <key>ProgramArguments</key><array>
-    <string>$(xml "$PYBIN")</string><string>-I</string><string>-B</string><string>$(xml "$CODE/app.py")</string><string>--background</string>
+    <string>/usr/bin/open</string><string>-g</string><string>-a</string><string>$(xml "$APP")</string><string>--args</string><string>--background</string>
   </array>
   <key>RunAtLoad</key><true/>
   <key>StandardOutPath</key><string>$(xml "$LOG")</string>
@@ -115,4 +120,5 @@ launchctl bootstrap "gui/$(id -u)" "$AGENT" || say "Note: the login item starts 
 
 say ""
 say "Done. Open \"Huntsman for Mac\" from ~/Applications or Spotlight."
-say "The key tester needs Input Monitoring permission; macOS asks the first time you use it."
+say "The key tester and typing reactions need Input Monitoring; sound-reactive lighting needs Microphone."
+say "macOS asks the first time you use them."

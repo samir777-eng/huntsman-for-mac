@@ -110,13 +110,21 @@ class LightingService:
         self._quitting = self._shut = False
         self._subs, self._subs_lock = {}, threading.Lock()
         self.reapplied, self.restored = [], []
+        self._keymap_pid = None                  # model whose layout Studio and the engine use
 
     # ---------- start and stop ----------
 
     def start(self):
         from lighting.engine import Engine
         from lighting.frame import Keymap
+        try:
+            with self._dev:
+                self._keyboard()   # detects the model (layout, frame size, key listener PID); re-sends RAM settings
+        except Exception:
+            log("keyboard not reachable at start; will connect when needed")
+            traceback.print_exc()
         km = Keymap.load()
+        self._keymap_pid = hc.active_model().pid
         st = appmod.load_state()
         engine = (self._engine_cls or Engine)(self._engine_keyboard, km, fps=st["studio"]["fps"],
                                               restore=self._restore_lighting, on_error=self._engine_error,
@@ -126,14 +134,13 @@ class LightingService:
                               push=self._emit, **self._inputs)
         s.on_change(lambda summary: self._emit("onStudioChanged", summary))
         self.studio = s
-        try:
-            with self._dev:
-                self._keyboard()   # re-send what the keyboard keeps only in RAM
-        except Exception:
-            log("keyboard not reachable at start; will connect when needed")
-            traceback.print_exc()
         if s.settings["enabled"]:
-            s.set_enabled(True)
+            reason = self.studio_blocked()
+            if reason:
+                s.settings["enabled"] = False   # shown off; state.json keeps the choice until it's changed
+                log(f"Studio stays off: {reason}")
+            else:
+                s.set_enabled(True)
 
     def gui_ready(self):
         self.studio.gui_ready()
@@ -169,7 +176,45 @@ class LightingService:
             depth_stream.recover_typing(kb)
             self.reapplied = appmod.apply_saved(kb)
             self._kb = kb
+            self._follow_model(kb.model)
         return self._kb
+
+    def _follow_model(self, model):
+        """A keyboard first reached after start (or a different model plugged in): Studio and the engine switch to
+        its layout. The engine thread holds its send lock here or is paused, so no frame is being built."""
+        if self.studio is None or model.pid == self._keymap_pid:
+            return
+        from lighting.frame import Keymap
+        km = Keymap(hc.load_layout(model))
+        self._keymap_pid = model.pid
+        self.studio.engine.keymap = self.studio.keymap = km
+        log(f"{model.name} connected; using its layout")
+
+    def studio_blocked(self):
+        """Why Studio can't stream to the connected keyboard (an experimental model with Experimental support off),
+        else None. No keyboard yet: None, and the engine connects when it can. While the engine streams, the
+        keyboard is the engine's (and already took the frames): None."""
+        if self.studio is not None and self.studio.engine.running:
+            return None
+        try:
+            with self._dev:
+                kb = self._keyboard()
+        except Exception:
+            return None
+        for feature in ("per_key", "studio"):
+            try:
+                kb.check_write(feature)
+            except (hc.ExperimentalLocked, hc.FeatureUnavailable) as e:
+                return str(e)
+        return None
+
+    def set_studio_enabled(self, on, restore=True):
+        """Studio on or off, for the window and the menu. Refused with the plain reason while blocked."""
+        if on:
+            reason = self.studio_blocked()
+            if reason:
+                raise ValueError(reason)
+        self.studio.set_enabled(on, restore=restore)
 
     def _drop(self):
         if self._kb is not None and hasattr(self._kb.t, "close"):
@@ -292,7 +337,7 @@ class LightingService:
             "ping": lambda: True,
             "summary": s.summary,
             "studio_state": s.state,
-            "studio_enable": lambda on, restore=True: s.set_enabled(on, restore=restore),
+            "studio_enable": self.set_studio_enabled,
             "set_active_preset": s.set_active,
             "save_preset": lambda preset: s.save_preset(preset),
             "delete_preset": s.delete_preset,
@@ -355,14 +400,20 @@ def make_menu(svc, menu_cls, on_open, on_quit, run=_in_background, **menu_kw):
     to `run` (a background thread)."""
     s = svc.studio
 
+    def enable(on):
+        try:
+            svc.set_studio_enabled(on)
+        except ValueError as e:   # an experimental model with Experimental support off
+            log(f"Studio stays off: {e}")
+
     def pick(name):
         def work():
             s.set_active(name)
             if not s.settings["enabled"]:
-                s.set_enabled(True)
+                enable(True)
         run(work)
     summary = s.summary()
-    menu = menu_cls(lambda on: run(lambda: s.set_enabled(on)), pick, on_open, on_quit,
+    menu = menu_cls(lambda on: run(lambda: enable(on)), pick, on_open, on_quit,
                     presets=summary["presets"], enabled=summary["enabled"], active=summary["active"], **menu_kw)
     s.on_change(lambda m: menu.set_state(enabled=m["enabled"], presets=m["presets"], active=m["active"]))
     return menu

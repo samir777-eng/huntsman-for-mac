@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Huntsman for Mac contributors
-"""Command-line control for the Razer Huntsman V3 Pro (1532:02A6) on macOS, without Synapse.
+"""Command-line control for the Razer Huntsman V3 Pro (1532:02A6) and, experimentally, other Huntsman models on
+macOS, without Synapse.
 
-  huntsman.py status
+  huntsman.py status                 model, firmware, profile, brightness
+  huntsman.py experimental on|off    allow changes to a model whose support is experimental (untested)
   huntsman.py depth 2.0              all keys (0.1-4.0 mm); the reset point follows 0.1 mm above
   huntsman.py depth 0.5 W A S D      only those keys
   huntsman.py color 255 255 255      solid colour, saved on the keyboard
@@ -33,15 +35,26 @@ def main(argv):
     if argv[0] == "--version":
         print(f"Huntsman for Mac {hc.__version__}")
         return
-    layout = hc.load_layout()
+    if argv[0] == "experimental":   # a setting only: no keyboard needed
+        if argv[1:] not in (["on"], ["off"]):
+            raise ValueError("use: huntsman.py experimental on|off")
+        hc.set_experimental(argv[1] == "on")
+        print(f"Experimental support: {argv[1]}")
+        return
+    kb, cmd = hc.Keyboard(), argv[0]
+    layout = hc.load_layout(kb.model)
     names = {k["name"].upper(): k["id"] for k in layout}
     names.update({k["label"].upper(): k["id"] for k in layout if k["label"]})
-    kb, cmd = hc.Keyboard(), argv[0]
     depth_stream.recover_typing(kb)  # a crashed key test leaves the keyboard not typing; put it back
     if cmd == "status":
-        act, rel = kb.read_points(names["A"])
+        m = kb.model
+        print(f"{m.name} ({hc.VID:04X}:{m.pid:04X}), {m.status}")
+        if m.experimental:
+            print(f"Experimental support: {'on' if hc.experimental_enabled() else 'off'}")
         print(f"firmware {kb.firmware()}, saved profile {kb.saved}, brightness {kb.brightness()}%")
-        print(f"A key: types at {act} mm, resets at {rel} mm")
+        if m.has("actuation"):
+            act, rel = kb.read_points(names["A"])
+            print(f"A key: types at {act} mm, resets at {rel} mm")
     elif cmd == "depth":
         keys = app.check_key_ids([names[n.upper()] for n in argv[2:]])  # refuses Fn
         failed = kb.set_actuation(keys, float(argv[1]))

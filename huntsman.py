@@ -19,6 +19,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 import app  # noqa: E402
+import depth_stream  # noqa: E402
 import huntsman_core as hc  # noqa: E402
 
 
@@ -30,12 +31,13 @@ def main(argv):
     names = {k["name"].upper(): k["id"] for k in layout}
     names.update({k["label"].upper(): k["id"] for k in layout if k["label"]})
     kb, cmd = hc.Keyboard(), argv[0]
+    depth_stream.recover_typing(kb)  # a crashed key test leaves the keyboard not typing; put it back
     if cmd == "status":
         act, rel = kb.read_points(names["A"])
         print(f"firmware {kb.firmware()}, saved profile {kb.saved}, brightness {kb.brightness()}%")
         print(f"A key: types at {act} mm, resets at {rel} mm")
     elif cmd == "depth":
-        keys = [names[n.upper()] for n in argv[2:]] or hc.all_key_ids()
+        keys = app.check_key_ids([names[n.upper()] for n in argv[2:]])  # refuses Fn
         failed = kb.set_actuation(keys, float(argv[1]))
         print(f"{len(keys) - len(failed)} keys now type at {round(float(argv[1]), 1)} mm"
               + (f"; not confirmed: {failed}" if failed else ""))

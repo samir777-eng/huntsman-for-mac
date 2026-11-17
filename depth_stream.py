@@ -2,14 +2,20 @@
 
 The keyboard only sends travel readings in "driver mode", where it stops typing by itself.
 `DepthSession` switches it into driver mode, reads the stream on a background thread, and
-always switches back to normal typing: on stop(), after a time limit, and at interpreter exit.
+always switches back to normal typing: on stop(), after a time limit, at interpreter exit and on
+SIGTERM/SIGHUP (install_signal_stop). A SIGKILL or crash can't be caught, so every (re)connect also
+calls recover_typing(), which switches a keyboard left in driver mode back.
 Reading the stream needs macOS Input Monitoring permission for the app.
 """
 import atexit
 import ctypes
 import ctypes.util
+import os
+import signal
+import sys
 import threading
 import time
+import traceback
 
 import huntsman_core as hc
 
@@ -17,6 +23,47 @@ REPORT_ID = 0x0B
 UNITS_PER_MM = 16380.0
 MODE_HARDWARE, MODE_DRIVER = 0x00, 0x03
 NOT_PERMITTED = 0xE00002E2
+_ACTIVE = set()  # running sessions, stopped by the signal handler
+
+
+def recover_typing(kb):
+    """If a crash or force-quit left the keyboard in driver mode (not typing), switch it back.
+    Returns True if it had to. Never raises: a failed check must not block connecting."""
+    try:
+        if kb.cmd(0x00, 0x84, size=2)[0] == MODE_DRIVER:
+            print("huntsman: keyboard was left in driver mode; switching back to normal typing", file=sys.stderr)
+            kb.cmd(0x00, 0x04, [MODE_HARDWARE, 0], 2)
+            return True
+    except Exception:
+        traceback.print_exc()
+    return False
+
+
+def _on_signal(signum):
+    for s in list(_ACTIVE):
+        s.stop("Testing stopped because the app was closed.")
+    os._exit(128 + signum)  # then quit, as the signal asked
+
+
+def _watch_signals(fd):
+    while True:
+        data = os.read(fd, 16)
+        for signum in data:
+            if signum in (signal.SIGTERM, signal.SIGHUP):
+                _on_signal(signum)
+
+
+def install_signal_stop():
+    """SIGTERM/SIGHUP (force quit, logout, closed terminal) switch any running test back, then quit.
+    Must be called on the main thread. The work runs on a watcher thread woken by set_wakeup_fd:
+    under the Cocoa run loop the main thread may not run Python signal handlers for a long time,
+    and a handler that never runs would leave SIGTERM swallowed and the app hanging."""
+    r, w = os.pipe()
+    os.set_blocking(w, False)
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, lambda *_: None)  # the C-level handler still writes the signal number to w
+    signal.set_wakeup_fd(w)
+    threading.Thread(target=_watch_signals, args=(r,), daemon=True).start()
 
 
 def parse_depth_report(data):
@@ -114,9 +161,11 @@ class DepthSession:
         self._latest = []
         self._lock = threading.Lock()
         self._state_lock = threading.Lock()
+        self._cancelled = False  # set by stop(), even before start() got as far as running
         self.running = False
 
     def start(self):
+        """Returns True once streaming, False if stop() cancelled it first. Raises on failure."""
         io = _IOKit()
         if not io.iokit.IOHIDRequestAccess(1):  # kIOHIDRequestTypeListenEvent: Input Monitoring
             raise hc.DeviceError("Allow Input Monitoring for this app in System Settings, Privacy & Security, "
@@ -129,13 +178,25 @@ class DepthSession:
             self._stop.set()
             raise hc.DeviceError(failure[0] if failure else "The keyboard's travel stream didn't start.")
         # Mark running before switching, so any failure below (even a lost reply) still switches back.
-        self.running = True
+        with self._state_lock:
+            if self._cancelled:  # stop() came while we waited for the stream: never switch
+                self._stop.set()
+                return False
+            self.running = True
+        _ACTIVE.add(self)
         atexit.register(self.stop)
         try:
             self.kb.cmd(0x00, 0x04, [MODE_DRIVER, 0], 2)
         except Exception:
             self.stop()
             raise
+        with self._state_lock:
+            cancelled = self._cancelled
+        if cancelled:  # stop() ran while the switch was in flight and may have finished first: switch back again
+            if not self._to_hardware():
+                raise hc.DeviceError(UNPLUG)
+            return False
+        return True
 
     def _run(self, io, ready, failure):
         bufs, opened = [], []
@@ -182,7 +243,7 @@ class DepthSession:
                         pass  # the window may be gone; the time limit and stop below still apply
                     last_sent = batch
                 if time.monotonic() - started > self.limit:
-                    reason = "Testing stopped after 60 seconds."
+                    reason = f"Testing stopped after {self.limit:g} seconds."
                     break
         finally:
             for dev in opened:
@@ -194,26 +255,35 @@ class DepthSession:
     def stop(self, reason=None):
         """Back to normal typing. Safe to call more than once, from any thread. Returns True on success."""
         with self._state_lock:
+            self._cancelled = True
             if not self.running:
                 return True
             self.running = False
         self._stop.set()
-        ok = False
-        for _ in range(3):
-            try:
-                self.kb.cmd(0x00, 0x04, [MODE_HARDWARE, 0], 2)
-                if self.kb.cmd(0x00, 0x84, size=2)[0] == MODE_HARDWARE:
-                    ok = True
-                    break
-            except Exception:
-                time.sleep(0.15)
+        _ACTIVE.discard(self)
+        atexit.unregister(self.stop)
+        ok = self._to_hardware()
         if self._thread and self._thread is not threading.current_thread():
             self._thread.join(1)
         if not ok:
-            reason = ("The keyboard may still be in test mode and not typing. "
-                      "Unplug it and plug it back in to restore normal typing.")
+            reason = UNPLUG
         try:
             self.on_end(reason, ok)
         except Exception:
             pass
         return ok
+
+    def _to_hardware(self):
+        """Switch back to normal typing and confirm it with a mode read; three tries."""
+        for _ in range(3):
+            try:
+                self.kb.cmd(0x00, 0x04, [MODE_HARDWARE, 0], 2)
+                if self.kb.cmd(0x00, 0x84, size=2)[0] == MODE_HARDWARE:
+                    return True
+            except Exception:
+                time.sleep(0.15)
+        return False
+
+
+UNPLUG = ("The keyboard may still be in test mode and not typing. "
+          "Unplug it and plug it back in to restore normal typing.")

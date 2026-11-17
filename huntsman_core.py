@@ -8,8 +8,11 @@ profile (flash). Actuation and lighting go to both, so they apply now and surviv
 Each key has an actuation point (thr_l, byte 3) and a release point (thr_h, byte 4); the release
 must sit below the actuation, and by default it follows it RELEASE_GAP units below, like Synapse.
 """
+import contextlib
+import fcntl
 import json
 import os
+import threading
 import time
 
 VID, PID = 0x1532, 0x02A6
@@ -19,8 +22,9 @@ LIVE = 0
 FULL_MM = 255 * 256 / 16380   # 3.985 mm at threshold 255
 RT_UNITS_PER_MM = 16380.0
 RELEASE_GAP = 6               # Synapse default: 1.2 mm press (76) / 1.1 mm release (70)
-MIN_THR = 6                   # 0.1 mm
-STATUS_OK, STATUS_BUSY = 0x02, 0x01
+MIN_THR = RELEASE_GAP + 1     # 0.1 mm; 7 rather than 6 so the release point below it is at least 1, never 0
+FACTORY_THR, FACTORY_REL = 76, 70   # Synapse's defaults: 1.2 mm press, 1.1 mm release
+STATUS_NEW, STATUS_BUSY, STATUS_OK = 0x00, 0x01, 0x02
 FRAME_ROWS, FRAME_COLS = 6, 22   # verified: rows 6-7 and column 22 are refused (status 05)
 FRAME_SIZE = 0x47
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -79,6 +83,8 @@ def check_reply(req, resp):
         raise DeviceError("short reply from keyboard")
     if resp[1] != req[1] or resp[6] != req[6] or resp[7] != req[7]:
         raise DeviceError(f"reply does not match request {req[6]:02X}:{req[7]:02X}")
+    if resp[88] != crc(resp):
+        raise DeviceError(f"reply to {req[6]:02X}:{req[7]:02X} failed its checksum")
     if resp[0] != STATUS_OK:
         raise DeviceError(f"keyboard refused {req[6]:02X}:{req[7]:02X} (status {resp[0]:02X})")
 
@@ -87,6 +93,8 @@ def mm_to_threshold(mm):
     mm = round(float(mm), 1)
     if not 0.1 <= mm <= 4.0:
         raise ValueError(f"{mm} mm is outside 0.1-4.0")
+    if mm == 1.2:  # the scale gives 77, but Synapse's factory default is 76: keep the preset and "factory" identical
+        return FACTORY_THR
     return max(MIN_THR, min(255, round(mm / FULL_MM * 255)))
 
 
@@ -95,12 +103,14 @@ def threshold_to_mm(t):
 
 
 def release_for(thr, release_mm=None):
-    """Release threshold for an actuation threshold: explicit, or RELEASE_GAP below."""
+    """Release threshold for an actuation threshold: explicit, or RELEASE_GAP below. Never 0."""
+    if thr < MIN_THR:
+        raise ValueError(f"actuation threshold {thr} is below the minimum {MIN_THR}")
     if release_mm is None:
-        return max(0, thr - RELEASE_GAP)
-    rel = max(0, min(255, round(float(release_mm) / FULL_MM * 255)))
+        return thr - RELEASE_GAP
+    rel = max(1, min(255, round(float(release_mm) / FULL_MM * 255)))
     if thr - RELEASE_GAP < rel < thr:  # within one 0.1 mm step of the limit (e.g. 3.9 at 4.0): clamp
-        rel = max(0, thr - RELEASE_GAP)
+        rel = thr - RELEASE_GAP
     if rel > thr - RELEASE_GAP:
         raise ValueError("release point must sit at least 0.1 mm above the actuation point")
     return rel
@@ -127,8 +137,17 @@ def rapid_packets(profile, keys):
     return [bytes([0, profile]) + b"".join(entries[i:i + per]) for i in range(0, len(entries), per)]
 
 
+def check_rgb(rgb):
+    """Exactly three whole numbers 0-255, else ValueError (checked before anything is sent)."""
+    if (not isinstance(rgb, (list, tuple)) or len(rgb) != 3
+            or not all(isinstance(c, int) and not isinstance(c, bool) and 0 <= c <= 255 for c in rgb)):
+        raise ValueError(f"colour {rgb!r} must be three whole numbers 0-255")
+    return list(rgb)
+
+
 def gamma(rgb, g=2.2):
     """sRGB picker colour -> LED drive level. LEDs are linear, so mid values look too bright without it."""
+    check_rgb(rgb)
     return [round(255 * (int(c) / 255) ** g) for c in rgb]
 
 
@@ -158,7 +177,7 @@ def encode_effect(name, rgb1=None, rgb2=None, speed=None, direction=None):
 
 
 def frame_rows(colors, layout, base=(0, 0, 0)):
-    """colors: {key_id: [r,g,b]} -> 8 rows of 23 RGB cells (args for 0F:03 after the header)."""
+    """colors: {key_id: [r,g,b]} -> FRAME_ROWS (6) rows of FRAME_COLS (22) RGB cells (args for 0F:03 after the header)."""
     rows = [[list(base) for _ in range(FRAME_COLS)] for _ in range(FRAME_ROWS)]
     led = {k["id"]: k["led"] for k in layout}
     for kid, rgb in colors.items():
@@ -177,6 +196,20 @@ def parse_key_assignment(data, profile, key):
 
 # ---------- transport ----------
 
+# One USB request/reply at a time for the whole process, kept for its lifetime: every UsbTransport
+# (including ones made after a reconnect) shares it, and close() takes it so a handle is never
+# disposed in the middle of an exchange.
+_USB_LOCK = threading.RLock()
+
+
+@contextlib.contextmanager
+def usb_lock():
+    """The process lock, plus a file lock so the app, the login agent and the CLI never interleave."""
+    with _USB_LOCK:
+        with open(os.path.join(data_dir(), "usb.lock"), "a") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            yield  # closing the file releases the flock
+
 class UsbTransport:
     def __init__(self):
         import usb.core
@@ -189,12 +222,11 @@ class UsbTransport:
         self.dev = usb.core.find(idVendor=VID, idProduct=PID, backend=be)
         if self.dev is None:
             raise DeviceError("Huntsman V3 Pro not found. Is it plugged in by USB?")
-        self.lock = __import__("threading").RLock()  # one request/reply at a time, from any thread
 
     def exchange(self, report):
         """Send once, then re-read while the keyboard says busy (never re-send a write)."""
         import usb.util
-        with self.lock:
+        with usb_lock():
             return self._exchange(report, usb.util)
 
     def _exchange(self, report, usb_util):
@@ -203,7 +235,7 @@ class UsbTransport:
             for _ in range(15):
                 time.sleep(0.015)
                 resp = bytes(self.dev.ctrl_transfer(0xA1, 0x01, 0x300, CONTROL_INTERFACE, 90))
-                if resp[0] != STATUS_BUSY:
+                if resp[0] not in (STATUS_NEW, STATUS_BUSY):  # 00 = not started yet, 01 = working
                     return resp
             return resp
         finally:
@@ -213,17 +245,17 @@ class UsbTransport:
                 pass
 
     def close(self):
-        try:
-            import usb.util
-            usb.util.dispose_resources(self.dev)
-        except Exception:
-            pass
+        with _USB_LOCK:
+            try:
+                import usb.util
+                usb.util.dispose_resources(self.dev)
+            except Exception:
+                pass
 
 
 class Keyboard:
     def __init__(self, transport=None):
         self.t = transport or UsbTransport()
-        self._saved = None
 
     def cmd(self, cls, cid, args=(), size=None):
         req = build_report(cls, cid, args, size)
@@ -241,13 +273,12 @@ class Keyboard:
 
     @property
     def saved(self):
-        """The flash slot the keyboard loads on replug."""
-        if self._saved is None:
-            p = self.active_profile()
-            if not 1 <= p <= 5:
-                raise DeviceError(f"unexpected active profile {p}")
-            self._saved = p
-        return self._saved
+        """The flash slot the keyboard loads on replug. Read fresh every time (never cached), since the
+        owner can switch profiles on the keyboard while the app runs; every write op reads it first."""
+        p = self.active_profile()
+        if not 1 <= p <= 5:
+            raise DeviceError(f"unexpected active profile {p}")
+        return p
 
     def both(self):
         return (LIVE, self.saved)
@@ -260,24 +291,30 @@ class Keyboard:
         a = self.read_key(profile, key)
         return threshold_to_mm(a[3]), threshold_to_mm(a[4])
 
-    def set_actuation(self, keys, mm, release_mm=None):
-        thr = mm_to_threshold(mm)
-        rel = release_for(thr, release_mm)
+    def _write_points(self, keys, thr, rel):
+        """Per key: saved (flash) first, then live (RAM), so a failure never leaves flash behind RAM.
+        A key whose saved write doesn't read back is reported and its live copy is left alone."""
+        saved = self.saved
         failed = []
-        for p in self.both():
-            for k in keys:
+        for k in keys:
+            for p in (saved, LIVE):
                 a = self.read_key(p, k)
                 a[3], a[4] = thr, rel
                 self.cmd(0x02, 0x12, a, 80)
-                b = self.read_key(p, k)
-                if (b[3], b[4]) != (thr, rel):
+                if tuple(self.read_key(p, k)[3:5]) != (thr, rel):
                     failed.append(k)
+                    break
         return sorted(set(failed))
+
+    def set_actuation(self, keys, mm, release_mm=None):
+        thr = mm_to_threshold(mm)
+        return self._write_points(keys, thr, release_for(thr, release_mm))
 
     def restore_snapshot(self, snap):
         """Write back a snapshot() taken earlier. Refuses if the keyboard's saved profile changed since."""
-        if snap["saved_profile"] != self.saved:
-            raise DeviceError(f"the snapshot is from profile {snap['saved_profile']}, but profile {self.saved} is active")
+        saved = self.saved
+        if snap["saved_profile"] != saved:
+            raise DeviceError(f"the snapshot is from profile {snap['saved_profile']}, but profile {saved} is active")
         entries = []
         for p, keys in snap["profiles"].items():
             for k, hexdata in keys.items():
@@ -297,17 +334,20 @@ class Keyboard:
     # OFF goes to both so nothing stale is left in flash.
     def set_rapid(self, keys):
         on = any(rt for _, rt in keys)
-        for p in ((LIVE,) if on else self.both()):
+        both = self.both()  # read the saved profile even for ON: refuse to write if it looks wrong
+        for p in ((LIVE,) if on else both):
             for args in rapid_packets(p, keys):
                 self.cmd(0x02, 0x1A, args)
 
     def set_continuous(self, on):
-        for p in ((LIVE,) if on else self.both()):
+        both = self.both()
+        for p in ((LIVE,) if on else both):
             self.cmd(0x02, 0x20, [p, 1 if on else 0])
 
     def set_snap_tap(self, pair):
         a, b = pair if pair else (0, 0)
-        for p in ((LIVE,) if pair else self.both()):
+        both = self.both()
+        for p in ((LIVE,) if pair else both):
             self.cmd(0x02, 0x21, [p, 1 if pair else 0, a, b])
 
     # lighting
@@ -319,6 +359,8 @@ class Keyboard:
 
     def set_custom(self, colors, layout, base=(0, 0, 0), correct=True):
         """Per-key colours. The firmware keeps these in RAM only, so they are re-sent at app start/login."""
+        for v in list(colors.values()) + [base]:  # all colours valid before the first frame goes out
+            check_rgb(v)
         fix = gamma if correct else (lambda c: c)
         colors = {k: fix(v) for k, v in colors.items()}
         for i, row in enumerate(frame_rows(colors, layout, fix(base))):
@@ -329,9 +371,10 @@ class Keyboard:
     def get_effect_raw(self):
         return bytes(self.cmd(0x0F, 0x82, [1, LED_BACKLIGHT], 12)[:12])
 
-    def set_brightness(self, percent):
+    def set_brightness(self, percent, stores=(0, 1)):
+        """stores: 0 = live only (while a slider drags), 1 = saved on the keyboard."""
         v = round(max(0, min(100, int(percent))) * 255 / 100)
-        for store in (0, 1):
+        for store in stores:
             self.cmd(0x0F, 0x04, [store, LED_BACKLIGHT, v])
 
     def brightness(self):
@@ -340,23 +383,21 @@ class Keyboard:
 
     def restore_factory(self, keys):
         """Synapse's defaults: actuation 1.2 mm (76), release 1.1 mm (70)."""
-        failed = []
-        for p in self.both():
-            for k in keys:
-                a = self.read_key(p, k)
-                a[3], a[4] = FACTORY_THR, FACTORY_REL
-                self.cmd(0x02, 0x12, a, 80)
-                if tuple(self.read_key(p, k)[3:5]) != (FACTORY_THR, FACTORY_REL):
-                    failed.append(k)
-        return sorted(set(failed))
+        return self._write_points(keys, FACTORY_THR, FACTORY_REL)
 
     def snapshot(self, keys):
-        """Every key's raw assignment in the live and saved profiles, for manual recovery."""
-        return {"saved_profile": self.saved,
-                "profiles": {str(p): {str(k): self.read_key(p, k).hex() for k in keys} for p in self.both()}}
-
-
-FACTORY_THR, FACTORY_REL = 76, 70
+        """Every key's raw assignment in the live and saved profiles, for manual recovery.
+        Keys the firmware refuses to read are listed under "skipped" instead of failing the whole copy."""
+        saved = self.saved
+        profiles, skipped = {}, []
+        for p in (LIVE, saved):
+            profiles[str(p)] = {}
+            for k in keys:
+                try:
+                    profiles[str(p)][str(k)] = self.read_key(p, k).hex()
+                except DeviceError:
+                    skipped.append([p, k])
+        return {"saved_profile": saved, "profiles": profiles, "skipped": skipped}
 
 
 def data_dir():

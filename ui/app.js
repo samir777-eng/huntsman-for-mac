@@ -244,6 +244,7 @@ function applyModel() {
   $("#expBadge").hidden = !experimentalModel();
   Object.keys(FEATURE_TABS).forEach(v => { $(`#sources button[data-view="${v}"]`).hidden = !viewShown(v); });
   $("#actTest").hidden = $("#actReadings").hidden = !hasFeature("key_tester");
+  if (testing && !hasFeature("key_tester")) stopTest();
   $("#restore").hidden = $("#restoreHint").hidden = !hasFeature("actuation");
   $("#expBox").hidden = !experimentalModel();
   $("#expOn").checked = !!model?.experimental_on;
@@ -669,6 +670,7 @@ async function stopTest() { if (!testing) return; testing = false; testerUi(); t
 async function toggleTest() {
   if (testing) return stopTest();
   await call("start_test"); testing = true; trace.key = null; trace.samples = []; testerUi();
+  if (view !== "actuation") return stopTest();   // the tab changed while the test was starting
 }
 $("#actTest").onclick = e => busy(e.target, toggleTest);
 $("#bannerStop").onclick = e => busy(e.target, stopTest);

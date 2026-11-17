@@ -197,6 +197,15 @@ def test_switching_tab_stops_the_test(page):
     assert len(calls(page, "start_test")) == 1
 
 
+def test_tab_change_while_the_test_starts_stops_it(page):
+    """start_test is slow; the user opens Lighting before it answers. The test must not keep running there."""
+    page.evaluate("window.__override.start_test = () => new Promise(r => setTimeout(() => r({ok: true, data: true}), 300))")
+    page.click("#actTest")
+    page.click('button[data-view="lighting"]')
+    wait_for_call(page, "stop_test")
+    sync_api.expect(page.locator("#testBanner")).to_be_hidden()
+
+
 def test_failed_paint_keeps_previous_colours(page):
     page.evaluate('window.__override.set_custom = () => Promise.resolve({ok: false, error: "No reply"})')
     page.click('button[data-view="lighting"]')

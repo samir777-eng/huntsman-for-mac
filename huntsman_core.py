@@ -32,6 +32,7 @@ STATUS_NEW, STATUS_BUSY, STATUS_OK = 0x00, 0x01, 0x02
 STATUS_NOT_SUPPORTED = 0x03
 FRAME_ROWS, FRAME_COLS = 6, 22   # verified: rows 6-7 and column 22 are refused (status 05)
 FRAME_SIZE = 0x47
+FAST_POLLS = 50                  # fast path: reply reads per packet before giving up (hardware: 294 fps, 0 failures)
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 EFFECTS = {
@@ -251,6 +252,30 @@ class UsbTransport:
             except Exception:
                 pass
 
+    def exchange_fast(self, reports):
+        """Several requests under one lock acquisition, each reply polled at once (no 15 ms sleep).
+        Stops at the first reply that is not OK, so nothing more is written to a busy or refusing keyboard;
+        the caller checks every reply (check_reply) and treats a short list as a failure."""
+        import usb.util
+        with usb_lock():
+            try:
+                replies = []
+                for report in reports:
+                    self.dev.ctrl_transfer(0x21, 0x09, 0x300, CONTROL_INTERFACE, report)
+                    for _ in range(FAST_POLLS):
+                        resp = bytes(self.dev.ctrl_transfer(0xA1, 0x01, 0x300, CONTROL_INTERFACE, 90))
+                        if resp[0] not in (STATUS_NEW, STATUS_BUSY):
+                            break
+                    replies.append(resp)
+                    if resp[0] != STATUS_OK:
+                        break
+                return replies
+            finally:
+                try:
+                    usb.util.release_interface(self.dev, CONTROL_INTERFACE)
+                except Exception:
+                    pass
+
     def close(self):
         with _USB_LOCK:
             try:
@@ -374,6 +399,28 @@ class Keyboard:
             self.cmd(0x0F, 0x03, [0, 0, i, 0, FRAME_COLS - 1] + [v for cell in row for v in cell], FRAME_SIZE)
         size, args = CUSTOM_EFFECT
         self.cmd(0x0F, 0x02, args, size)
+
+    def enter_custom_mode(self):
+        """Show the per-key frame buffer (the custom effect). Needed once before streaming frames."""
+        size, args = CUSTOM_EFFECT
+        self.cmd(0x0F, 0x02, args, size)
+
+    def send_frame_fast(self, rows):
+        """One per-key frame: FRAME_ROWS rows of FRAME_COLS [r,g,b] cells, already gamma-corrected.
+        Six 0F:03 packets in one locked batch (transport.exchange_fast) when the transport has one;
+        every reply is CRC- and status-checked. Does not switch to the custom effect (enter_custom_mode)."""
+        if len(rows) != FRAME_ROWS or any(len(row) != FRAME_COLS for row in rows):
+            raise ValueError(f"a frame is {FRAME_ROWS} rows of {FRAME_COLS} colours")
+        reqs = []
+        for i, row in enumerate(rows):
+            cells = [v for cell in row for v in check_rgb(cell)]
+            reqs.append(build_report(0x0F, 0x03, [0, 0, i, 0, FRAME_COLS - 1] + cells, FRAME_SIZE))
+        fast = getattr(self.t, "exchange_fast", None)
+        resps = fast(reqs) if fast else [self.t.exchange(r) for r in reqs]
+        for req, resp in zip(reqs, resps):
+            check_reply(req, resp)
+        if len(resps) != len(reqs):
+            raise DeviceError(f"frame cut short: {len(resps)} of {len(reqs)} rows answered")
 
     def get_effect_raw(self):
         return bytes(self.cmd(0x0F, 0x82, [1, LED_BACKLIGHT], 12)[:12])

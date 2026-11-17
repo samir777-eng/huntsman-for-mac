@@ -103,7 +103,7 @@ cat > "$AGENT" <<PLIST
 <plist version="1.0"><dict>
   <key>Label</key><string>io.github.huntsman-for-mac.apply-saved</string>
   <key>ProgramArguments</key><array>
-    <string>$(xml "$PYBIN")</string><string>-I</string><string>-B</string><string>$(xml "$CODE/huntsman.py")</string><string>apply-saved</string>
+    <string>$(xml "$PYBIN")</string><string>-I</string><string>-B</string><string>$(xml "$CODE/app.py")</string><string>--background</string>
   </array>
   <key>RunAtLoad</key><true/>
   <key>StandardOutPath</key><string>$(xml "$LOG")</string>

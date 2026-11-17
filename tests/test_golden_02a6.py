@@ -2,8 +2,9 @@
 # Copyright (C) 2026 Huntsman for Mac contributors
 """Golden bytes for the Huntsman V3 Pro (1532:02A6), the only model checked on hardware.
 
-Every packet each operation sends is compared with tests/golden_02a6.json, recorded from v0.2.0 before multi-model
-support was added. Supporting other models must not change a single byte sent to the 02A6. Regenerate the file
+Every packet each operation sends is compared with tests/golden_02a6.json, recorded from v0.2.0 (master) before multi-model
+support was added, including the key tester start/stop and the app's apply_saved / restore_lighting / restore_factory
+order. Supporting other models must not change a single byte sent to the 02A6. Regenerate the file
 (python tests/test_golden_02a6.py) only for a deliberate, hardware-checked protocol change."""
 import json
 import os
@@ -28,6 +29,55 @@ class FastFake(FakeTransport):
 
 def _frame():
     return [[[(r * 40 + c) % 256, c * 11 % 256, r * 7] for c in range(22)] for r in range(6)]
+
+
+class _NoIOKit:
+    """DepthSession's IOKit with nothing behind it: Input Monitoring granted, no stream (its thread is replaced)."""
+
+    class iokit:
+        IOHIDRequestAccess = staticmethod(lambda _: True)
+
+
+def _key_tester(kb):
+    """DepthSession start then stop: 00:04 driver mode, then 00:04 hardware mode and the 00:84 read-back."""
+    run_stream, make_io = depth_stream.DepthSession._run, depth_stream._IOKit
+    depth_stream.DepthSession._run = lambda self, io, ready, failure: ready.set()
+    depth_stream._IOKit = _NoIOKit
+    try:
+        s = depth_stream.DepthSession(kb, lambda batch: None, lambda reason, ok: None)
+        assert s.start() is True
+        assert s.stop() is True
+    finally:
+        depth_stream.DepthSession._run, depth_stream._IOKit = run_stream, make_io
+
+
+SAVED = {"custom": {"base": [1, 2, 3], "keys": {"31": [10, 20, 30], "110": [255, 0, 0]}},
+         "rapid": {"enabled": True, "press": 0.3, "release": 0.5, "keys": "all", "continuous": True},
+         "snap": [31, 33], "effect": None}
+
+
+def _app(fn):
+    """Run fn(app, kb) with state.json in a temporary folder (restore_factory writes it)."""
+    import tempfile
+
+    import app
+
+    def scenario(kb):
+        old = app.STATE_FILE
+        with tempfile.TemporaryDirectory() as d:
+            app.STATE_FILE = os.path.join(d, "state.json")
+            try:
+                fn(app, kb)
+            finally:
+                app.STATE_FILE = old
+    return scenario
+
+
+def _app_restore_factory(app, kb):
+    try:
+        app.restore_factory(kb)
+    except hc.DeviceError:
+        pass   # FakeTransport doesn't store every key's factory depth; the packets are what matters
 
 
 def _snapshot_roundtrip(kb):
@@ -71,6 +121,16 @@ SCENARIOS = {
     "snapshot": lambda kb: kb.snapshot(SOME_KEYS),
     "snapshot_restore": _snapshot_roundtrip,
     "recover_typing": lambda kb: depth_stream.recover_typing(kb),
+    "key_tester_start_stop": _key_tester,
+    "app_apply_saved": _app(lambda app, kb: app.apply_saved(kb, SAVED)),
+    "app_apply_saved_rapid_some": _app(lambda app, kb: app.apply_saved(kb, {
+        "custom": None, "snap": None,
+        "rapid": {"enabled": True, "press": 1.0, "release": 0.2, "keys": [31, 32], "continuous": False}})),
+    "app_restore_lighting_custom": _app(lambda app, kb: app.restore_lighting(kb, SAVED)),
+    "app_restore_lighting_effect": _app(lambda app, kb: app.restore_lighting(kb, {
+        "custom": None, "effect": {"name": "wave", "speed": 40, "direction": "left"}})),
+    "app_restore_lighting_firmware": _app(lambda app, kb: app.restore_lighting(kb, {"custom": None, "effect": None})),
+    "app_restore_factory": _app(_app_restore_factory),
 }
 
 

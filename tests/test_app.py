@@ -159,18 +159,17 @@ def test_info_reports_the_app_version(app, fake):
 # ---------- progress bar contract (window.onProgress) ----------
 
 class RecordingWindow:
+    """Records window.onProgress calls as they are handed to the pusher (it sends them on its own thread,
+    newest per function, so evaluate_js never runs under the device lock)."""
     def __init__(self):
         self.progress = []
-
-    def evaluate_js(self, js):
-        if "onProgress" in js:
-            self.progress.append(tuple(int(v) for v in js[js.rindex("(") + 1:-1].split(",")))
 
 
 def progress_api(app):
     api = app.Api()
     api.startup()
-    api._window = RecordingWindow()
+    api._window = win = RecordingWindow()
+    api._pusher.push = lambda fn, *args: win.progress.append(tuple(args)) if fn == "onProgress" else None
     return api
 
 

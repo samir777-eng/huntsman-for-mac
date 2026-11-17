@@ -677,3 +677,31 @@ def test_not_supported_status_gets_a_plain_message():
     resp = bytearray(req); resp[0] = 0x03; resp[88] = hc.crc(resp)
     with pytest.raises(hc.DeviceError, match="doesn't support"):
         hc.check_reply(req, bytes(resp))
+
+
+def test_signal_runs_shutdown_hooks_before_exit(monkeypatch):
+    # SIGTERM / SIGHUP (logout, kill): the app's shutdown (stop Studio, restore lighting, save heat counts)
+    # runs before os._exit, which would skip it.
+    import depth_stream as ds
+    order = []
+    monkeypatch.setattr(ds, "_SHUTDOWN", [])
+    monkeypatch.setattr(ds.os, "_exit", lambda code: order.append(("exit", code)))
+    ds.add_shutdown_hook(lambda: order.append("hook"))
+    ds._on_signal(15)
+    assert order == ["hook", ("exit", 128 + 15)]
+
+
+def test_signal_exits_even_if_a_shutdown_hook_hangs(monkeypatch):
+    import threading
+    import time
+
+    import depth_stream as ds
+    exited, block = [], threading.Event()
+    monkeypatch.setattr(ds, "_SHUTDOWN", [])
+    monkeypatch.setattr(ds, "SHUTDOWN_LIMIT", 0.2)
+    monkeypatch.setattr(ds.os, "_exit", exited.append)
+    ds.add_shutdown_hook(block.wait)
+    t0 = time.monotonic()
+    ds._on_signal(15)
+    assert exited == [128 + 15] and time.monotonic() - t0 < 1.5
+    block.set()

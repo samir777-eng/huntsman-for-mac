@@ -190,16 +190,17 @@ def apply_saved(kb, state=None):
 
 def restore_lighting(kb, state=None):
     """Put the keyboard's own lighting back after Studio streamed frames: the saved per-key colours, else the
-    saved effect, else the effect stored on the keyboard (re-sent so it shows again instead of the frame buffer)."""
+    saved effect, else the effect stored on the keyboard (re-sent so it shows again instead of the frame buffer).
+    Effects go to RAM (store 0): flash already holds them, and this runs on every Studio stop and quit."""
     st = state or load_state()
     c, e = st.get("custom"), st.get("effect")
     if c:
         kb.set_custom({int(k): v for k, v in c["keys"].items()}, hc.load_layout(), c["base"])
     elif e:
-        kb.set_effect(e["name"], **{k: v for k, v in e.items() if k != "name"})
+        kb.set_effect(e["name"], store=0, **{k: v for k, v in e.items() if k != "name"})
     else:
-        raw = kb.get_effect_raw()
-        kb.cmd(0x0F, 0x02, list(raw))
+        raw = kb.get_effect_raw()   # [store, led, effect...] as read from flash
+        kb.cmd(0x0F, 0x02, [0] + list(raw[1:]))
 
 
 def set_effect(kb, name, opts):
@@ -260,8 +261,9 @@ def rapid_apply(kb, cfg):
 
 
 class JsPusher:
-    """Sends values to the window from one thread, newest value per function, at most `fps` rounds a second.
-    window.evaluate_js waits for the main thread, so the engine and audio threads must never call it."""
+    """Sends values to the window from one thread, newest call per function, at most `fps` rounds a second.
+    window.evaluate_js waits for the main thread, so no other thread may call it: not the engine or audio
+    threads, and nothing holding Api._lock (the main thread may be waiting for that lock)."""
 
     def __init__(self, window_getter, fps=15):
         self._get, self._interval = window_getter, 1.0 / fps
@@ -269,11 +271,12 @@ class JsPusher:
         self._thread = None
         self.visible = True
 
-    def push(self, fn, payload):
+    def push(self, fn, *args):
+        """Call window.fn(*args) soon; a newer push to the same fn replaces one not sent yet."""
         if self._get() is None:
             return
         with self._lock:
-            self._slots[fn] = payload
+            self._slots[fn] = args
             if self._thread is None:
                 self._thread = threading.Thread(target=self._run, name="huntsman-ui-push", daemon=True)
                 self._thread.start()
@@ -286,11 +289,11 @@ class JsPusher:
             with self._lock:
                 slots, self._slots = self._slots, {}
             win = self._get()
-            for fn, payload in slots.items():
+            for fn, args in slots.items():
                 if win is None or (fn in ("onStudioFrame", "onStudioLevel") and not self.visible):
                     continue
                 try:
-                    win.evaluate_js("window.%s && window.%s(%s)" % (fn, fn, json.dumps(payload)))
+                    win.evaluate_js("window.%s && window.%s(%s)" % (fn, fn, ",".join(json.dumps(a) for a in args)))
                 except Exception:
                     traceback.print_exc()
             threading.Event().wait(self._interval)
@@ -311,6 +314,7 @@ class Api:
         self._studio_lock = threading.Lock()
         self._engine_broken = False
         self._pusher = JsPusher(lambda: self._window)
+        self._stuck_hold = None   # engine pause kept after a key test failed to switch back to typing
 
     # ----- Lighting Studio plumbing -----
     def _get_studio(self):
@@ -351,7 +355,8 @@ class Api:
         self._pusher.push("onStudioStatus", {"engine": str(e)})
 
     def _restore_lighting(self):
-        with self._lock:
+        """The engine's restore callback. Studio calls it without holding its own lock (see studio.py)."""
+        with self._lock, self._paused():
             restore_lighting(self._keyboard())
 
     def _paused(self):
@@ -400,7 +405,14 @@ class Api:
                 log("couldn't save the first-launch snapshot")
             self.reapplied = apply_saved(kb)
             self._kb = kb
+            self._release_stuck_hold()
         return self._kb
+
+    def _release_stuck_hold(self):
+        """A fresh connection ran recover_typing: Studio may send frames again after a failed key test."""
+        h, self._stuck_hold = self._stuck_hold, None
+        if h is not None:
+            h.resume()
 
     def _drop(self):
         """Forget the handle so the next call reconnects. A running key test is stopped first: it needs
@@ -429,9 +441,9 @@ class Api:
                     self._progress(1, 1)
 
     def _progress(self, done, total):
+        """Through the pusher: callers hold self._lock, and evaluate_js would wait for the main thread."""
         self._progress_open = done < total
-        if self._window:
-            self._window.evaluate_js(f"window.onProgress && window.onProgress({done},{total})")
+        self._pusher.push("onProgress", done, total)
 
     # ----- reads -----
     def layout(self):
@@ -498,39 +510,57 @@ class Api:
                 return True
 
             def batch(items):
-                if self._window:
-                    self._window.evaluate_js("window.onDepth && window.onDepth(%s)" % json.dumps(items))
+                self._pusher.push("onDepth", items)
 
             # driver mode: the engine must not send frames until the keyboard types again
-            hold = self.studio.engine if self.studio is not None else None
-            if hold is not None:
-                hold.pause()
+            hold_lock = threading.Lock()
+            hold = [self.studio.engine if self.studio is not None else None]
+            if hold[0] is not None:
+                hold[0].pause()
+
+            def release(stuck=False):
+                """Exactly once. stuck: the keyboard may still be in driver mode, so keep the engine paused
+                until a fresh connection switches it back (_keyboard -> recover_typing)."""
+                with hold_lock:
+                    h, hold[0] = hold[0], None
+                if h is None:
+                    return
+                if stuck:
+                    self._stuck_hold = h
+                else:
+                    h.resume()
 
             def ended(reason, ok):
                 # Runs on whatever thread stopped the test (possibly the main thread while the window
                 # closes), so the follow-up work goes to a background thread and never blocks.
-                nonlocal hold
-                if hold is not None:  # resume exactly once, however often the session reports its end
-                    hold.resume()
-                    hold = None
+                if not ok:
+                    release(stuck=True)
 
                 def follow_up():
-                    if ok:  # a mode switch reloads the live profile from flash: re-send RAM-only settings
-                        try:
-                            with self._lock:
-                                apply_saved(kb)
-                        except Exception:
-                            traceback.print_exc()
-                    if self._window and reason:
-                        try:
-                            self._window.evaluate_js("window.onTestEnded && window.onTestEnded(%s, %s)"
-                                                     % (json.dumps(reason), json.dumps(ok)))
-                        except Exception:
-                            pass
-                threading.Thread(target=follow_up, daemon=True).start()
+                    try:
+                        if ok:  # a mode switch reloads the live profile from flash: re-send RAM-only settings
+                            with self._lock, self._paused():
+                                st = load_state()
+                                if self.studio is not None and self.studio.settings["enabled"]:
+                                    st["custom"] = None   # Studio's frames stay; restore_lighting has them
+                                apply_saved(kb, st)
+                    except Exception:
+                        traceback.print_exc()
+                    finally:
+                        release(stuck=not ok)
+                    if reason:
+                        self._pusher.push("onTestEnded", reason, ok)
+                in_background(follow_up)
 
             self._test = depth_stream.DepthSession(kb, batch, ended)
-            return self._test.start()
+            try:
+                started = self._test.start()
+            except BaseException:
+                release()   # never started, or stopped again (a failed switch-back already kept the hold)
+                raise
+            if not started:
+                release()
+            return started
         return self._run(f)
 
     def stop_test(self):
@@ -698,10 +728,63 @@ def in_background(fn):
     threading.Thread(target=fn, daemon=True).start()
 
 
+_APP_HOOKS = {}   # keeps the delegate class and the power-off observer alive
+
+
+def install_app_hooks(on_terminate, on_reopen):
+    """Tell a system quit apart from closing the window, and show the window when the app is opened again.
+
+    pywebview 6.2.1 (platforms/cocoa.py) asks `closing` both from windowShouldClose: (the red close button)
+    and from its AppDelegate's applicationShouldTerminate: (Cmd-Q, the Quit menu, logout, restart, shut down),
+    and cancels either on False. So applicationShouldTerminate: first calls on_terminate (the app then lets
+    `closing` through and shuts down), and NSWorkspaceWillPowerOffNotification does the same before logout.
+    pywebview has no reopen hook: applicationShouldHandleReopen:hasVisibleWindows: (Dock icon, Finder,
+    Spotlight, `open` while the window is hidden) calls on_reopen. Done by subclassing pywebview's delegate
+    class before webview.start() creates it (BrowserView.AppDelegate.alloc() is looked up at window creation).
+    Must be called before webview.start(); any failure leaves pywebview's own behaviour."""
+    try:
+        import objc
+        from AppKit import NSWorkspace
+        from Foundation import NSOperationQueue
+        from webview.platforms.cocoa import BrowserView
+
+        base = BrowserView.AppDelegate
+        if "cls" not in _APP_HOOKS:
+            class HuntsmanAppDelegate(base):
+                def applicationShouldTerminate_(self, app):
+                    try:
+                        _APP_HOOKS["terminate"]()
+                    except Exception:
+                        traceback.print_exc()
+                    return objc.super(HuntsmanAppDelegate, self).applicationShouldTerminate_(app)
+
+                def applicationShouldHandleReopen_hasVisibleWindows_(self, app, visible):
+                    try:
+                        _APP_HOOKS["reopen"]()
+                    except Exception:
+                        traceback.print_exc()
+                    return True
+            _APP_HOOKS["cls"] = HuntsmanAppDelegate
+        _APP_HOOKS["terminate"], _APP_HOOKS["reopen"] = on_terminate, on_reopen
+        BrowserView.AppDelegate = _APP_HOOKS["cls"]
+
+        def power_off(_note):
+            try:
+                _APP_HOOKS["terminate"]()
+            except Exception:
+                traceback.print_exc()
+        center = NSWorkspace.sharedWorkspace().notificationCenter()
+        _APP_HOOKS["power_off"] = center.addObserverForName_object_queue_usingBlock_(
+            "NSWorkspaceWillPowerOffNotification", None, NSOperationQueue.mainQueue(), power_off)
+    except Exception:
+        traceback.print_exc()
+
+
 def main(argv=None):
     """--background (the login item): start with the window hidden and only the menu bar icon showing.
-    Closing the window keeps the app in the menu bar while Studio lighting is on (it needs this process);
-    otherwise it quits as before. Quit from the menu bar stops Studio and restores the keyboard's lighting."""
+    The red close button keeps the app in the menu bar while Studio lighting is on (it needs this process);
+    otherwise it quits as before. Quitting (menu bar Quit, Cmd-Q, the app menu, logout, restart, shut down, or
+    SIGTERM/SIGHUP) stops Studio and restores the keyboard's lighting. Opening the app again shows the window."""
     import webview
 
     from menubar import StatusMenu
@@ -722,6 +805,7 @@ def main(argv=None):
     def closing():
         api.stop_test()  # never waits on the app lock (see stop_test)
         if quitting.is_set():
+            api.shutdown()   # a system quit hasn't run it yet; after the menu's Quit it finds nothing to stop
             return None
         if api.studio is not None and api.studio.settings["enabled"]:
             hide()
@@ -754,7 +838,9 @@ def main(argv=None):
         in_background(work)
 
     win.events.closing += closing
-    depth_stream.install_signal_stop()  # force quit / logout: switch a running key test back first
+    install_app_hooks(quitting.set, open_window)   # both called on the main thread
+    depth_stream.add_shutdown_hook(api.shutdown)
+    depth_stream.install_signal_stop()  # SIGTERM / SIGHUP: switch a running key test back, shut down, exit
 
     def started():
         s = api._get_studio()

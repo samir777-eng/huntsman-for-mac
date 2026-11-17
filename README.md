@@ -43,9 +43,10 @@ app quits, the keyboard's own lighting comes back.
   while the Mac sleeps or the screen is locked; show a chosen preset while a given app is in front (pick an open app or type
   its bundle ID).
 - **Menu bar.** A keyboard icon in the menu bar turns Studio on or off, switches presets, opens the window and quits. While
-  Studio is on, closing the window (or Cmd-Q) keeps the lighting running from the menu bar; quit from the menu bar icon.
-  When Studio is off, closing the window quits the app as before. At login the app starts in the background with only the
-  menu bar icon.
+  Studio is on, the window's close button keeps the lighting running from the menu bar; opening the app again (Dock,
+  Finder, Spotlight) shows the window. When Studio is off, closing the window quits the app as before. Quitting (menu bar
+  Quit, Cmd-Q, logout, restart, shut down) stops Studio and puts the keyboard's own lighting back. At login the app
+  starts in the background with only the menu bar icon.
 
 ### Permissions
 
@@ -98,7 +99,7 @@ cd huntsman-for-mac
 This installs:
 - **Huntsman for Mac.app** in `~/Applications`. It carries its own copy of the code and Python environment, and is signed ad hoc on your Mac (no Apple developer account involved).
 - **libusb**, through Homebrew, if it's missing.
-- **A login item** (`io.github.huntsman-for-mac.apply-saved`) that opens the app in the background after you log in (`open -g -a "Huntsman for Mac" --args --background`). It sends per-key colours, Rapid Trigger and Snap Tap to the keyboard again, starts Studio if it was on, and shows the menu bar icon. Opening the app itself (rather than its Python) means macOS shows the app's name in the Input Monitoring and Microphone lists.
+- **A login item** (`io.github.huntsman-for-mac.apply-saved`, loaded from the next login; the installer opens the app normally when it finishes) that opens the app in the background after you log in (`open -g -a "Huntsman for Mac" --args --background`). It sends per-key colours, Rapid Trigger and Snap Tap to the keyboard again, starts Studio if it was on, and shows the menu bar icon. Opening the app itself (rather than its Python) means macOS shows the app's name in the Input Monitoring and Microphone lists.
 
 Open it from `~/Applications` or Spotlight. To preview the interface without a keyboard, open `ui/index.html?demo` in a browser.
 
@@ -181,13 +182,13 @@ The app writes to the keyboard's built-in memory using commands the community wo
 **The app opens but stops working after a Python upgrade** Run `./install.sh` again.
 
 **Settings aren't sent again after login**
-- Check the login item is loaded: `launchctl list | grep huntsman-for-mac`.
+- Check the login item is loaded (it is from the first login after installing): `launchctl list | grep huntsman-for-mac`.
 - Check **System Settings → General → Login Items & Extensions**; it may be listed as Python. It must be allowed.
 - Its output goes to the same log, `~/Library/Logs/Huntsman for Mac.log`.
 
 **The keyboard stopped typing** This means it was left in test mode. Unplug it and plug it back in; opening the app, or running any `huntsman.py` command, also puts it back to typing.
 
-**Installer says the app is running** Quit it from the menu bar icon (or Cmd-Q while Studio is off), then run the installer again.
+**Installer says the app is running** Quit it from the menu bar icon (Quit Huntsman for Mac), then run the installer again.
 
 **Studio lights don't follow typing or sound** Studio → Typing or Sound shows the reason. Usually Input Monitoring or
 Microphone access is off for Huntsman for Mac (see [Permissions](#permissions)); quit and reopen the app after turning it on.

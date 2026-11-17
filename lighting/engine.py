@@ -152,7 +152,13 @@ class Engine:
             self._thread = None
         with self._send_lock:
             self._kb, self._need_mode, self._last_rows = None, True, None
-        if restore and self._restore is not None:
+        if restore:
+            self.restore_firmware()
+
+    def restore_firmware(self):
+        """Run the restore callback (the keyboard's own lighting back); errors go to on_error. Studio calls it
+        after stop(restore=False) once its own lock is released, since the callback takes the app's lock."""
+        if self._restore is not None:
             try:
                 self._restore()
             except Exception as e:

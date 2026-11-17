@@ -31,3 +31,21 @@ def test_demo_studio_matches_the_effect_library():
     spec.loader.exec_module(tool)
     with open(ROOT / "ui" / "demo-studio.js") as f:
         assert f.read() == tool.render(tool.read_studio()), "ui/demo-studio.js is stale: run python tools/make_demo_studio.py"
+
+
+def _install_sh():
+    return (ROOT / "install.sh").read_text()
+
+
+def test_install_does_not_start_the_app_hidden():
+    # A bootstrapped RunAtLoad agent would launch the app hidden right away (and block the next install);
+    # the login item is picked up at the next login, and the app is opened normally with its window.
+    sh = _install_sh()
+    assert "launchctl bootstrap" not in sh
+    assert 'open "$APP"' in sh.split("PLIST\n")[-1]
+
+
+def test_install_tells_the_user_to_quit_from_the_menu_bar():
+    sh = _install_sh()
+    line = next(ln for ln in sh.splitlines() if "is running" in ln)
+    assert "menu bar icon" in line and "Cmd-Q when Studio is off" not in line

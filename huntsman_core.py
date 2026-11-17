@@ -383,11 +383,13 @@ class Keyboard:
             self.cmd(0x02, 0x21, [p, 1 if pair else 0, a, b])
 
     # lighting
-    def set_effect(self, name, rgb1=None, rgb2=None, correct=True, **kw):
-        """Built-in effect, saved on the keyboard. Colours are gamma-corrected (verified to match on hardware)."""
+    def set_effect(self, name, rgb1=None, rgb2=None, correct=True, store=1, **kw):
+        """Built-in effect. store 1 saves it on the keyboard; store 0 shows it from RAM only (used to put back
+        what flash already holds, without another flash write). Colours are gamma-corrected (verified to match
+        on hardware)."""
         fix = gamma if correct else (lambda c: c)
         kw.update(rgb1=fix(rgb1) if rgb1 else None, rgb2=fix(rgb2) if rgb2 else None)
-        self.cmd(0x0F, 0x02, [1, LED_BACKLIGHT] + encode_effect(name, **kw))
+        self.cmd(0x0F, 0x02, [store, LED_BACKLIGHT] + encode_effect(name, **kw))
 
     def set_custom(self, colors, layout, base=(0, 0, 0), correct=True):
         """Per-key colours. The firmware keeps these in RAM only, so they are re-sent at app start/login."""

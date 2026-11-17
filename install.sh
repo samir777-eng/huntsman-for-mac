@@ -6,7 +6,8 @@
 #     (so it never reads from Downloads/Documents/Desktop, which macOS blocks for unsigned apps)
 #   - a login item that opens the app in the background after login (`open -g -a ... --args --background`,
 #     so macOS attributes Input Monitoring and Microphone to the app): it re-sends per-key colours, Rapid
-#     Trigger and Snap Tap, runs Lighting Studio if it was on, and shows a menu bar icon
+#     Trigger and Snap Tap, runs Lighting Studio if it was on, and shows a menu bar icon. It is not started
+#     now (launchd loads it at the next login); the app is opened normally, with its window, at the end.
 # Run it again after updating the code. Remove everything with ./uninstall.sh
 set -euo pipefail
 
@@ -27,7 +28,7 @@ fail() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 xml() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g"; }
 
 if pgrep -u "$(id -u)" -f "Contents/Resources/code/app.py" >/dev/null 2>&1; then
-  fail "Huntsman for Mac is running. Quit it first (menu bar icon > Quit, or Cmd-Q when Studio is off), then run ./install.sh again."
+  fail "Huntsman for Mac is running. Quit it from its menu bar icon (Quit Huntsman for Mac), then run ./install.sh again."
 fi
 
 # Newest tested Python first (3.13 down to 3.11), then whatever python3 is. 3.11 is the oldest the pinned
@@ -115,10 +116,12 @@ cat > "$AGENT" <<PLIST
   <key>StandardErrorPath</key><string>$(xml "$LOG")</string>
 </dict></plist>
 PLIST
+# Unload a login item from an earlier install, but don't load the new one now: with RunAtLoad that would start
+# the app hidden right away. launchd loads ~/Library/LaunchAgents at the next login.
 launchctl bootout "gui/$(id -u)" "$AGENT" 2>/dev/null || true
-launchctl bootstrap "gui/$(id -u)" "$AGENT" || say "Note: the login item starts working after you log out and back in."
 
 say ""
-say "Done. Open \"Huntsman for Mac\" from ~/Applications or Spotlight."
+say "Done. Opening \"Huntsman for Mac\" (later: ~/Applications or Spotlight). It also starts at login."
+open "$APP" || say "Couldn't open it automatically; open \"Huntsman for Mac\" from ~/Applications."
 say "The key tester and typing reactions need Input Monitoring; sound-reactive lighting needs Microphone."
 say "macOS asks the first time you use them."

@@ -12,8 +12,10 @@ lighting. app.Api exposes it to the window; menubar.StatusMenu drives it from th
   listener only while it needs sound. Permission errors are kept for the window to show.
 - Key presses and audio stay in memory; only per-key press counts are written, and only when the heatmap is on.
 
-Lock order: Studio._lock, then whatever the engine's restore callback takes (app.Api._lock). Nothing called
-with Studio._lock held may wait on the window.
+Lock order: nothing called with Studio._lock held may wait on another lock that can be held while waiting for
+the main thread, or on the window. So the engine's restore callback (which takes app.Api._lock) runs only after
+Studio._lock is released, and smart lighting notifications (delivered on the main thread) hand their work to a
+worker thread instead of taking Studio._lock there.
 """
 import copy
 import json
@@ -190,6 +192,10 @@ def _list_devices():
     return [{"index": d.index, "name": d.name, "loopback": d.is_loopback} for d in list_input_devices()]
 
 
+def _in_thread(fn):
+    threading.Thread(target=fn, name="huntsman-studio", daemon=True).start()
+
+
 def _timer(delay, fn):
     t = threading.Timer(delay, fn)
     t.daemon = True
@@ -199,8 +205,9 @@ def _timer(delay, fn):
 
 class Studio:
     def __init__(self, engine, settings, smart, *, save, keymap, push=None, key_listener=None, audio_listener=None,
-                 smart_lighting=None, list_devices=None, schedule=None, heat_path=None):
-        """save(studio_settings, smart_config) persists both. push(fn_name, payload) sends to the window."""
+                 smart_lighting=None, list_devices=None, schedule=None, spawn=None, heat_path=None):
+        """save(studio_settings, smart_config) persists both. push(fn_name, payload) sends to the window.
+        spawn(fn) runs fn on another thread (tests pass a synchronous one)."""
         self.engine, self.keymap = engine, keymap
         self.settings, self.smart_cfg = clean_studio(settings), clean_smart(smart)
         self._save, self._push = save, push or (lambda *_: None)
@@ -209,6 +216,9 @@ class Studio:
         self._make_smart = smart_lighting or _smart_lighting
         self._list_devices = list_devices or _list_devices
         self._schedule = schedule or _timer
+        self._spawn = spawn or _in_thread
+        self._smart_slot = threading.Lock()   # guards _smart_next / _smart_busy only; never held while waiting
+        self._smart_next, self._smart_busy = None, False
         self._heat_path = heat_path or os.path.join(hc.data_dir(), "heatmap.json")
         self._lock = threading.RLock()
         self._builtins = builtin_presets(keymap)
@@ -466,6 +476,7 @@ class Studio:
         keyboard lighting comes back; restore=False when the caller is about to set the lighting itself."""
         if not isinstance(on, bool):
             raise ValueError("on must be true or false")
+        stopped = False
         with self._lock:
             self.settings["enabled"] = on
             self._persist()
@@ -480,7 +491,10 @@ class Studio:
                 self.action = dict(NEUTRAL)
                 self._save_heat()
                 if self.engine.running:
-                    self.engine.stop(restore=restore)
+                    self.engine.stop(restore=False)
+                    stopped = True
+        if stopped and restore:
+            self._restore_unless_on()
         self._changed()
 
     def gui_ready(self):
@@ -493,15 +507,27 @@ class Studio:
     def shutdown(self):
         """Quit: stop listeners and smart lighting, restore the keyboard's own lighting. The on/off setting is
         kept, so Studio comes back at the next launch."""
+        stopped = False
         with self._lock:
             self._cancel_pending()
             self._stop_inputs()
             self._stop_smart()
             self._save_heat()
             if self.engine.running:
-                self.engine.stop(restore=True)
+                self.engine.stop(restore=False)
+                stopped = True
+        if stopped:
+            self.engine.restore_firmware()   # after releasing the lock (see Lock order)
 
     # ---------- internals ----------
+
+    def _restore_unless_on(self):
+        """The keyboard's own lighting back, without Studio._lock held (the restore takes app.Api._lock). If
+        Studio was switched on again meanwhile, the engine re-enters custom mode on its next frame anyway."""
+        with self._lock:
+            if self.engine.running:
+                return
+        self.engine.restore_firmware()
 
     def _persist(self):
         self._save(copy.deepcopy(self.settings), copy.deepcopy(self.smart_cfg))
@@ -531,10 +557,30 @@ class Studio:
         self._sync_inputs()
 
     def _on_smart(self, action):
-        with self._lock:
-            self.action = {**NEUTRAL, **action}
-            self._apply()
-        self._push("onStudioAction", dict(self.action))
+        """Called on the main thread (sleep/lock notifications) or the smart polling thread: never waits for
+        Studio._lock here. The newest action is applied on a worker thread; older pending ones are dropped."""
+        with self._smart_slot:
+            self._smart_next = dict(action)
+            if self._smart_busy:
+                return
+            self._smart_busy = True
+        self._spawn(self._drain_smart)
+
+    def _drain_smart(self):
+        while True:
+            with self._smart_slot:
+                action, self._smart_next = self._smart_next, None
+                if action is None:
+                    self._smart_busy = False
+                    return
+            try:
+                with self._lock:
+                    self.action = {**NEUTRAL, **action}
+                    self._apply()
+                    shown = dict(self.action)
+                self._push("onStudioAction", shown)
+            except Exception:
+                traceback.print_exc()
 
     def _start_smart(self):
         if not self._gui or self._smart is not None:

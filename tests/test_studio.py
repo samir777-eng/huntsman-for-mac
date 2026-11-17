@@ -41,7 +41,12 @@ class FakeEngine:
     def stop(self, restore=True):
         self.running = False
         self.log.append(("stop", restore))
-        if restore and self.restore:
+        if restore:
+            self.restore_firmware()
+
+    def restore_firmware(self):
+        self.log.append(("restore",))
+        if self.restore:
             self.restore()
 
     def pause(self):
@@ -149,7 +154,7 @@ def hooks():
     h["inputs"] = {"key_listener": keys, "audio_listener": audio, "smart_lighting": smart,
                    "list_devices": lambda: [{"index": 0, "name": "MacBook Microphone", "loopback": False},
                                             {"index": 3, "name": "BlackHole 2ch", "loopback": True}],
-                   "schedule": None}
+                   "schedule": None, "spawn": lambda fn: fn()}
     return h
 
 
@@ -322,7 +327,7 @@ def test_enable_disable_starts_and_stops_engine_and_restores(api, fake, app):
     ok(api.studio_enable(True))
     assert eng.running and eng.preset.name == "Rainbow wave"
     ok(api.studio_enable(False))
-    assert not eng.running and ("stop", True) in eng.log
+    assert not eng.running and ("restore",) in eng.log
     assert fake.writes(0x0F, 0x02)   # the saved static effect went back on the keyboard
     assert app.load_state()["studio"]["enabled"] is False
 
@@ -431,6 +436,7 @@ def test_key_tester_holds_the_engine_paused_until_it_ends(api, app, monkeypatch)
             return True
 
     monkeypatch.setattr(app.depth_stream, "DepthSession", Session)
+    monkeypatch.setattr(app, "in_background", lambda fn: fn())
     ok(api.start_test())
     assert eng.depth == 1
     api.stop_test()
@@ -453,7 +459,7 @@ def test_shutdown_stops_everything(api, hooks):
     ok(api.set_active_preset("Typing glow"))
     api.shutdown()
     eng = engine(api)
-    assert not eng.running and ("stop", True) in eng.log
+    assert not eng.running and ("restore",) in eng.log
     assert not hooks["keys"][-1].running and not hooks["smart"][-1].started
     assert api.app_state()["enabled"] is True     # quitting doesn't turn Studio off for next time
 
@@ -527,12 +533,16 @@ def run_main(app, fake, hooks, monkeypatch):
     dock = []
     monkeypatch.setattr(app, "set_dock_icon", dock.append)
     monkeypatch.setattr(app.depth_stream, "install_signal_stop", lambda: None)
+    monkeypatch.setattr(app.depth_stream, "_SHUTDOWN", [])
+    monkeypatch.setattr(app, "install_app_hooks", lambda on_terminate, on_reopen: made.update(
+        terminate=on_terminate, reopen=on_reopen))
     real_api = app.Api
     monkeypatch.setattr(app, "Api", lambda: made.setdefault("api", real_api(engine_cls=FakeEngine,
                                                                            inputs=hooks["inputs"])))
 
     def run(argv):
         app.main(argv)
+        made["win"].made = made
         return made["win"], made["api"], dock
     return run
 
@@ -560,7 +570,7 @@ def test_menu_quit_restores_and_closes(run_main):
     eng = engine(api)
     assert eng.running and eng.preset.name == "Aurora" and _Menu.last.enabled
     _Menu.last.on_quit()
-    assert ("stop", True) in eng.log and win.destroyed
+    assert ("restore",) in eng.log and win.destroyed
     assert win.events.closing.fire() == [None]
 
 
@@ -586,3 +596,164 @@ def test_real_engine_streams_pauses_for_device_calls_and_restores(app, fake, hoo
         assert len(fake.writes(0x0F, 0x02)) > before        # restore re-sent the stored effect
     finally:
         api.shutdown()
+
+
+# ---------- review fixes: key tester holds, lock order, quitting, restore in RAM ----------
+
+def _session(app, monkeypatch, start=None, end_ok=True):
+    """A fake DepthSession; start() returns or raises `start` (default True); stop() reports end_ok."""
+    sessions = []
+
+    class Session:
+        def __init__(self, kb, batch, ended):
+            self.ended, self.running = ended, False
+            sessions.append(self)
+
+        def start(self):
+            if isinstance(start, Exception):
+                raise start
+            self.running = start is not False
+            return True if start is None else start
+
+        def stop(self, reason=None):
+            self.running = False
+            self.ended(reason, end_ok)
+            return end_ok
+
+    monkeypatch.setattr(app.depth_stream, "DepthSession", Session)
+    monkeypatch.setattr(app, "in_background", lambda fn: fn())
+    return sessions
+
+
+def test_key_tester_resumes_the_engine_when_start_fails(api, app, monkeypatch):
+    eng = engine(api)
+    ok(api.studio_enable(True))
+    _session(app, monkeypatch, start=hc.DeviceError("Allow Input Monitoring"))
+    err(api.start_test())
+    assert eng.depth == 0
+
+
+def test_key_tester_resumes_the_engine_when_start_is_cancelled(api, app, monkeypatch):
+    eng = engine(api)
+    ok(api.studio_enable(True))
+    _session(app, monkeypatch, start=False)
+    assert ok(api.start_test()) is False
+    assert eng.depth == 0
+
+
+def test_key_tester_failed_switch_back_keeps_the_engine_paused_until_reconnect(api, app, monkeypatch):
+    eng = engine(api)
+    ok(api.studio_enable(True))
+    _session(app, monkeypatch, end_ok=False)
+    ok(api.start_test())
+    api.stop_test()
+    assert eng.depth == 1          # the keyboard may still be in driver mode: no frames
+    ok(api.reconnect())            # a fresh connection switches a stuck keyboard back to typing
+    assert eng.depth == 0
+
+
+def test_key_tester_follow_up_runs_paused_and_keeps_studio_frames(api, app, monkeypatch):
+    with app.update_state() as st:
+        st["custom"] = {"base": [1, 2, 3], "keys": {}}
+    eng = engine(api)
+    ok(api.studio_enable(True))
+    calls = []
+    monkeypatch.setattr(app, "apply_saved", lambda kb, state=None: calls.append(
+        (eng.depth, (state or app.load_state()).get("custom"))))
+    _session(app, monkeypatch)
+    ok(api.start_test())
+    del calls[:]                   # the connect-time re-send, not the test's follow-up
+    api.stop_test()
+    assert calls and calls[0][0] >= 1 and calls[0][1] is None   # paused, and no per-key colours over Studio
+    assert eng.depth == 0
+
+
+def test_studio_off_restores_after_releasing_the_studio_lock(api):
+    eng = engine(api)
+    s = api._get_studio()
+    owned = []
+    eng.restore = lambda: owned.append(s._lock._is_owned())
+    ok(api.studio_enable(True))
+    ok(api.studio_enable(False))
+    assert owned == [False]
+
+
+def test_shutdown_restores_after_releasing_the_studio_lock(api):
+    eng = engine(api)
+    s = api._get_studio()
+    owned = []
+    eng.restore = lambda: owned.append(s._lock._is_owned())
+    ok(api.studio_enable(True))
+    api.shutdown()
+    assert owned == [False]
+
+
+def test_smart_change_never_waits_for_the_studio_lock(api, app):
+    import threading
+    import time
+
+    import studio as studio_mod
+    ok(api.studio_enable(True))
+    s = api._get_studio()
+    s._spawn = studio_mod._in_thread
+    done = threading.Event()
+    with s._lock:   # e.g. the menu turning Studio off, waiting on the device
+        t = threading.Thread(target=lambda: (s._on_smart({"brightness": 0.3, "off": False, "preset": None}),
+                                             done.set()), daemon=True)
+        t.start()
+        assert done.wait(1), "a smart lighting notification blocked the main thread on Studio's lock"
+    deadline = time.monotonic() + 2
+    while engine(api).brightness != pytest.approx(0.3) and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert engine(api).brightness == pytest.approx(0.3)
+
+
+def test_progress_never_waits_on_the_window_while_holding_the_device_lock(api, fake):
+    import time
+    owned = []
+
+    class Win:
+        def evaluate_js(self, js):
+            if "onProgress" in js:
+                owned.append(api._lock._is_owned())
+    api._window = Win()
+    ok(api.read_depths())
+    deadline = time.monotonic() + 2
+    while not owned and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert owned and not any(owned)
+
+
+def test_quit_from_the_system_stops_studio_instead_of_hiding(run_main):
+    win, api, _ = run_main([])
+    ok(api.studio_enable(True))
+    win.made["terminate"]()                          # Cmd-Q, Quit menu, logout, restart, shut down
+    assert win.events.closing.fire() == [None]       # not cancelled: macOS may quit
+    eng = engine(api)
+    assert not eng.running and ("restore",) in eng.log
+
+
+def test_reopening_the_app_shows_the_hidden_window(run_main):
+    win, api, dock = run_main(["--background"])
+    assert win.hidden
+    win.made["reopen"]()                             # Dock icon, Finder or Spotlight while hidden
+    assert not win.hidden and dock[-1] is True
+
+
+def test_signal_shutdown_hook_is_the_app_shutdown(run_main, app):
+    win, api, _ = run_main([])
+    assert app.depth_stream._SHUTDOWN == [api.shutdown]
+
+
+def test_restore_lighting_effect_goes_to_ram_not_flash(app, fake):
+    kb = hc.Keyboard()
+    st = app.load_state()
+    st["effect"] = {"name": "static", "rgb1": [255, 0, 0]}
+    app.restore_lighting(kb, st)
+    assert [r[8] for r in fake.writes(0x0F, 0x02)] == [0]
+
+
+def test_restore_lighting_stored_effect_is_resent_to_ram(app, fake):
+    kb = hc.Keyboard()
+    app.restore_lighting(kb, app.load_state())
+    assert [r[8] for r in fake.writes(0x0F, 0x02)] == [0]

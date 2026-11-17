@@ -17,8 +17,14 @@ Current state of Huntsman for Mac (updated 2026-11-17). Version 0.1.0 published;
   (pywebview 6.2.1 `closing` runs on the main thread and False cancels: read from its source, not exercised),
   accessory/regular activation policy switching, login item via `open -g -a ... --args --background`, install.sh
   copying lighting/, inputs/, studio.py, menubar.py, ui/studio.js.
-- Known behaviour: while Studio is on, Cmd-Q also hides to the menu bar (pywebview routes quit through `closing`);
-  quit from the menu bar. Heat counts are saved on Studio off/quit only (a crash loses the session's counts).
+- Review fixes (v2, uncommitted, not yet on hardware/real macOS): only the red close button hides to the menu bar;
+  Cmd-Q / Quit menu / logout / power-off set `quitting` via a subclass of pywebview's AppDelegate
+  (`app.install_app_hooks`) plus NSWorkspaceWillPowerOffNotification, so `closing` lets the quit through; reopening
+  the app shows the window (applicationShouldHandleReopen); SIGTERM/SIGHUP run `api.shutdown` (2 s limit) before
+  exit; Studio restores lighting to RAM (store 0), never flash; a failed key-test start resumes the engine, a failed
+  switch-back keeps it paused until reconnect; smart notifications and window updates never block on locks
+  (lock order in studio.py). install.sh no longer starts the login item; it opens the app at the end.
+  Heat counts are saved on Studio off/quit/SIGTERM only (a crash loses the session's counts).
 
 ## Done
 - First version: clean open-source repo, installer, GPL-3.0, Synapse-style interface, live key tester.

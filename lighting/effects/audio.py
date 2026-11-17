@@ -4,7 +4,6 @@
 from lighting.effects.base import ParamSpec, Renderer, effect, keys_of
 from lighting.frame import PALETTES, sample, scale
 
-ROWS = 6
 BANDS = 16
 
 
@@ -14,12 +13,13 @@ BANDS = 16
 ], needs=("audio",))
 class AudioSpectrum(Renderer):
     """16 bands across the keyboard (low on the left, or in the middle when mirrored); a band's level
-    lights that many of the 6 rows from the bottom."""
+    lights that many of the keyboard's rows (6, or 5 on a Mini) from the bottom."""
 
     def render(self, t, ctx):
         p = self.params
         bands = list(ctx.audio.bands) if ctx.audio else []
         w = ctx.keymap.bounds[0] or 1.0
+        rows = ctx.keymap.rows
         out = {}
         for k in keys_of(ctx):
             u = ctx.keymap.center(k)[0] / w
@@ -27,10 +27,10 @@ class AudioSpectrum(Renderer):
                 u = abs(2 * u - 1)
             band = min(BANDS - 1, int(u * BANDS))
             value = bands[band] if band < len(bands) else 0.0
-            height = max(0.0, min(1.0, value)) * ROWS
-            level = ROWS - 1 - ctx.keymap.key(k).row  # 0 = bottom row
+            height = max(0.0, min(1.0, value)) * rows
+            level = rows - 1 - ctx.keymap.key(k).row  # 0 = bottom row
             lit = max(0.0, min(1.0, height - level))
-            out[k] = scale(sample(p["colors"], level / (ROWS - 1)), lit)
+            out[k] = scale(sample(p["colors"], level / max(1, rows - 1)), lit)
         return out
 
 

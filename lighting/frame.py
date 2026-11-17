@@ -45,7 +45,7 @@ class KeyInfo:
     y: float
     w: float
     h: float
-    row: int            # LED row 0..5 (0 = function row, 5 = bottom row)
+    row: int            # LED row 0..Keymap.rows - 1 (0 = top row: the function row, or numbers on a Mini)
     led: tuple[int, int]
 
 
@@ -62,6 +62,7 @@ class Keymap:
         self._centers = {k.id: (k.x + k.w / 2, k.y + k.h / 2) for k in self.keys}
         self.bounds = (max((k.x + k.w for k in self.keys), default=0.0),
                        max((k.y + k.h for k in self.keys), default=0.0))
+        self.rows = max((k.row for k in self.keys), default=0) + 1   # LED rows with keys: 6, or 5 on a Mini
 
     @classmethod
     def load(cls):

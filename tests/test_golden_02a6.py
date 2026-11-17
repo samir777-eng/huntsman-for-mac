@@ -134,6 +134,50 @@ SCENARIOS = {
 }
 
 
+def _digest(value):
+    import hashlib
+    return hashlib.sha256(json.dumps(value).encode()).hexdigest()
+
+
+def effect_frames():
+    """Every Studio effect with its defaults on the 02A6 layout, at a few times, with sound, presses and heat:
+    {effect: sha256 of the frames}. The row count the audio and ambient effects use must stay 6 on the 02A6."""
+    from lighting.effects import REGISTRY, AudioState, KeyEvent, RenderContext, create
+    from lighting.frame import Keymap
+    km = Keymap(hc.load_layout())
+    out = {}
+    for name in sorted(REGISTRY):
+        r = create(name)
+        frames = []
+        for t in (0.0, 0.95, 2.37, 7.5, 31.2):
+            ctx = RenderContext(keymap=km, keys=km.ids, params={},
+                                audio=AudioState(level=0.6, bands=[i / 15 for i in range(16)]),
+                                events=[KeyEvent(31, True, 0.9), KeyEvent(61, True, 2.3), KeyEvent(31, False, 2.35)],
+                                heat={31: 5, 61: 2, 110: 9})
+            frames.append(sorted([k, list(v)] for k, v in r.render(t, ctx).items()))
+        out[name] = _digest(frames)
+    return out
+
+
+def preset_packets():
+    """Every built-in Studio preset streamed by the engine to a 02A6 (FakeTransport): {preset: sha256 of the
+    packets of three frames}."""
+    from lighting.engine import Engine
+    from lighting.frame import KeyEvent, Keymap
+    from lighting.presets import builtin_presets
+    km = Keymap(hc.load_layout())
+    out = {}
+    for preset in builtin_presets(km):
+        t = FastFake()
+        eng = Engine(lambda: hc.Keyboard(t), km, fps=30)
+        eng.set_preset(preset)
+        eng.push_key_event(KeyEvent(31, True, 1.0))
+        for now in (1.05, 1.4, 3.0):
+            eng.step(now)
+        out[preset.name] = _digest([r.hex() for r in t.sent])
+    return out
+
+
 def run(name):
     t = FastFake()
     t.mode = depth_stream.MODE_DRIVER
@@ -149,6 +193,8 @@ def record():
         "all_key_ids": hc.all_key_ids(),
         "effects": sorted(hc.EFFECTS),
         "frame": [hc.FRAME_ROWS, hc.FRAME_COLS, hc.FRAME_SIZE],
+        "effect_frames": effect_frames(),
+        "preset_packets": preset_packets(),
     }
 
 
@@ -167,6 +213,14 @@ def test_02a6_frames_keys_and_effects_are_unchanged(golden):
     now = json.loads(json.dumps(record()))
     for field in ("frame_rows", "every_key_id", "all_key_ids", "effects", "frame"):
         assert now[field] == golden[field], field
+
+
+def test_02a6_studio_effect_frames_are_unchanged(golden):
+    assert effect_frames() == golden["effect_frames"]
+
+
+def test_02a6_studio_preset_packets_are_unchanged(golden):
+    assert preset_packets() == golden["preset_packets"]
 
 
 def test_02a6_layout_is_layout_json():

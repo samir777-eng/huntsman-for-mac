@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Huntsman for Mac contributors
 """The Studio controller: ties the lighting engine to presets, settings, typing and sound listeners and smart
-lighting. app.Api exposes it to the window; menubar.StatusMenu drives it from the menu bar.
+lighting. It lives in the lighting service (service.py), which exposes it to the app over ipc.py and drives it from
+the menu bar (menubar.StatusMenu).
 
 - Settings live in state.json under "studio" and "smart" (clean_studio / clean_smart validate them field by
   field); user presets in presets.json (lighting.presets); typing counts in heatmap.json.
@@ -13,7 +14,7 @@ lighting. app.Api exposes it to the window; menubar.StatusMenu drives it from th
 - Key presses and audio stay in memory; only per-key press counts are written, and only when the heatmap is on.
 
 Lock order: nothing called with Studio._lock held may wait on another lock that can be held while waiting for
-the main thread, or on the window. So the engine's restore callback (which takes app.Api._lock) runs only after
+the main thread, or on the window. So the engine's restore callback (which takes the service's device lock) runs only after
 Studio._lock is released, and smart lighting notifications (delivered on the main thread) hand their work to a
 worker thread instead of taking Studio._lock there.
 """
@@ -522,7 +523,7 @@ class Studio:
     # ---------- internals ----------
 
     def _restore_unless_on(self):
-        """The keyboard's own lighting back, without Studio._lock held (the restore takes app.Api._lock). If
+        """The keyboard's own lighting back, without Studio._lock held (the restore takes the service's lock). If
         Studio was switched on again meanwhile, the engine re-enters custom mode on its next frame anyway."""
         with self._lock:
             if self.engine.running:

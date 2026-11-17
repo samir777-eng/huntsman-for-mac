@@ -14,11 +14,16 @@ Not yet checked on hardware.
 - Presets: eight built-ins; save, save as, rename, duplicate, delete, import and export (JSON).
 - Sound-reactive lighting from any input device, including loopback devices such as BlackHole for system audio.
 - Smart lighting: dim or off when idle, off while the Mac sleeps or the screen is locked, a preset per frontmost app.
-- Menu bar icon (Studio on/off, presets, open, quit). Closing the window keeps Studio running in the menu bar.
+- Lighting service (Huntsman Lighting): Studio runs in a background menu bar app, started at login by a LaunchAgent
+  (`io.github.huntsman-for-mac.lighting`, restarted after a crash), so effects keep running after the app quits. Its menu
+  bar icon has Studio on/off, presets, Open Huntsman for Mac and Quit lighting service. The app talks to it over a local
+  socket and pauses it (with self-expiring leases) around every keyboard operation.
 
 ### Changed
-- The login item opens the app in the background (`open -g -a ... --args --background`) instead of running
-  `apply-saved`; it still re-sends per-key colours, Rapid Trigger and Snap Tap.
+- The `apply-saved` login item is replaced by the lighting service, which re-sends per-key colours, Rapid Trigger and
+  Snap Tap when it starts. The installer removes the old item and starts the service right away.
+- Quitting the app (red button, Cmd-Q) just closes it; Studio keeps running in the lighting service.
+- Typing and sound permissions are asked for, and listed, as Huntsman Lighting.
 - Applying a keyboard effect or per-key colours turns Studio off. Every other keyboard operation pauses Studio's stream.
 - New dependencies: numpy and sounddevice. The app asks for Microphone access when a sound effect is used.
 

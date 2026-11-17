@@ -1,14 +1,20 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Huntsman for Mac contributors
-"""Huntsman Control: a native window for the Razer Huntsman V3 Pro on macOS."""
+"""Huntsman for Mac: the control panel window for the Razer Huntsman V3 Pro on macOS.
+
+Keyboard settings (actuation, firmware lighting, per-key colours, key tester) run here; Lighting Studio runs in the
+background lighting service (service.py), reached through ServiceLink. Every keyboard operation here holds a pause
+lease on the service so its frames never interleave with them."""
 import contextlib
 import copy
 import fcntl
 import json
 import os
 import re
+import subprocess
 import sys
 import threading
+import time
 import traceback
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -16,6 +22,7 @@ sys.path.insert(0, HERE)
 
 import depth_stream  # noqa: E402
 import huntsman_core as hc  # noqa: E402
+import ipc  # noqa: E402
 import studio as studio_mod  # noqa: E402
 
 STATE_FILE = os.path.join(hc.data_dir(), "state.json")
@@ -299,98 +306,176 @@ class JsPusher:
             threading.Event().wait(self._interval)
 
 
+LIGHTING_LABEL = "io.github.huntsman-for-mac.lighting"
+LEASE_SECONDS = 5.0
+SERVICE_EVENTS = ("onStudioFrame", "onStudioChanged", "onStudioStatus", "onStudioAction", "onStudioLevel")
+NOT_RUNNING = ("The lighting service isn't running and couldn't be started ({}). "
+               "Reinstall with ./install.sh, or check ~/Library/Logs/Huntsman for Mac.log.")
+
+
+def service_socket():
+    return os.path.join(hc.data_dir(), "service.sock")
+
+
+def start_service():
+    """Ask launchd to (re)start the lighting service's LaunchAgent; load it first if it isn't loaded."""
+    target = f"gui/{os.getuid()}/{LIGHTING_LABEL}"
+    r = subprocess.run(["launchctl", "kickstart", "-k", target], capture_output=True, text=True, timeout=10)
+    if r.returncode == 0:
+        return
+    plist = os.path.expanduser(f"~/Library/LaunchAgents/{LIGHTING_LABEL}.plist")
+    if not os.path.exists(plist):
+        raise RuntimeError("its login item isn't installed")
+    subprocess.run(["launchctl", "bootstrap", f"gui/{os.getuid()}", plist], capture_output=True, text=True, timeout=10)
+    r = subprocess.run(["launchctl", "kickstart", "-k", target], capture_output=True, text=True, timeout=10)
+    if r.returncode != 0:
+        raise RuntimeError((r.stderr or "launchctl kickstart failed").strip())
+
+
+class Lease:
+    """A pause lease on the lighting service: the engine sends no frames while it is held. Renewed on a thread
+    every renew_every seconds, so a long operation (or a key test) keeps it; if this app dies the lease
+    expires on its own. Without a running service it does nothing (no engine to pause)."""
+
+    def __init__(self, link, seconds, renew_every):
+        self._link, self._seconds, self._every = link, seconds, renew_every
+        self.token, self._stop = None, threading.Event()
+
+    def acquire(self):
+        r = self._link.call("pause", {"lease_seconds": self._seconds})
+        if r["ok"]:
+            self.token = r["data"]["token"]
+            threading.Thread(target=self._renew, name="huntsman-lease", daemon=True).start()
+        elif not r.get("unavailable"):
+            print(f"huntsman: couldn't pause the lighting service: {r['error']}", file=sys.stderr)
+        return self
+
+    def _renew(self):
+        while not self._stop.wait(self._every):
+            tok = self.token
+            if tok is None:
+                return
+            r = self._link.call("pause", {"lease_seconds": self._seconds, "token": tok})
+            if not r["ok"] and not r.get("unavailable"):
+                self.token = None   # the service restarted: take a new lease
+                self.acquire()
+                return
+
+    def release(self):
+        self._stop.set()
+        tok, self.token = self.token, None
+        if tok is not None:
+            self._link.call("resume", {"token": tok})
+
+    def abandon(self):
+        """Stop renewing without resuming: the lease expires and the service checks the keyboard first."""
+        self._stop.set()
+        self.token = None
+
+    def __enter__(self):
+        return self.acquire()
+
+    def __exit__(self, *exc):
+        self.release()
+
+
+class ServiceLink:
+    """The app's side of the lighting service socket. connect() -> object with request(cmd, args) (an
+    ipc.Client by default); starter() starts the service (start_service by default)."""
+
+    def __init__(self, connect=None, starter=None, wait=10.0, lease_seconds=LEASE_SECONDS, renew_every=None):
+        self._client = None
+        self._connect = connect or (lambda: self._default_client())
+        self._starter = starter or start_service
+        self._wait, self._lease_seconds = wait, lease_seconds
+        self._renew_every = renew_every or lease_seconds / 2.5
+        self._lock = threading.Lock()
+
+    def _default_client(self):
+        if self._client is None:
+            self._client = ipc.Client(service_socket())
+        return self._client
+
+    def _request(self, cmd, args):
+        return self._connect().request(cmd, args)
+
+    def call(self, cmd, args=None, start=False):
+        """{"ok", "data" | "error"}; "unavailable": True when the service isn't running (and start is False or
+        starting it failed)."""
+        try:
+            return self._request(cmd, args or {})
+        except ipc.ServiceUnavailable as e:
+            if not start:
+                return {"ok": False, "error": NOT_RUNNING.format(e), "unavailable": True}
+        with self._lock:   # one start at a time
+            try:
+                return self._request(cmd, args or {})
+            except ipc.ServiceUnavailable:
+                pass
+            try:
+                self._starter()
+            except Exception as e:
+                return {"ok": False, "error": NOT_RUNNING.format(e), "unavailable": True}
+            deadline = time.monotonic() + self._wait
+            while True:
+                try:
+                    return self._request(cmd, args or {})
+                except ipc.ServiceUnavailable as e:
+                    if time.monotonic() >= deadline:
+                        return {"ok": False, "error": NOT_RUNNING.format(f"no answer: {e}"), "unavailable": True}
+                    time.sleep(0.1)
+
+    def lease(self):
+        return Lease(self, self._lease_seconds, self._renew_every)
+
+    def subscribe(self, on_event):
+        return ipc.Subscription(service_socket(), on_event, frames=True)
+
+
 class Api:
-    def __init__(self, engine_cls=None, inputs=None):
-        """engine_cls and inputs (key_listener, audio_listener, smart_lighting, list_devices, schedule) are
-        for tests; the app uses lighting.engine.Engine and the real macOS inputs."""
+    def __init__(self, service=None):
+        """service: a ServiceLink to the lighting service (tests pass one with a fake connection)."""
         self._kb = None
         self._lock = threading.RLock()
         self._test = None
+        self._test_lease = None
         self._window = None
         self._progress_open = False
         self.reapplied = []
-        self._engine_cls, self._inputs = engine_cls, dict(inputs or {})
-        self.studio = None
-        self._studio_lock = threading.Lock()
-        self._engine_broken = False
+        self._svc = service or ServiceLink()
+        self._events = None
         self._pusher = JsPusher(lambda: self._window)
-        self._stuck_hold = None   # engine pause kept after a key test failed to switch back to typing
 
-    # ----- Lighting Studio plumbing -----
-    def _get_studio(self):
-        with self._studio_lock:
-            if self.studio is None:
-                from lighting.engine import Engine
-                from lighting.frame import Keymap
-                km = Keymap.load()
-                st = load_state()
-                engine = (self._engine_cls or Engine)(self._engine_keyboard, km, fps=st["studio"]["fps"],
-                                                      restore=self._restore_lighting, on_error=self._engine_error,
-                                                      heat_enabled=st["studio"]["heat"])
-                engine.on_frame(lambda f: self._pusher.push("onStudioFrame", {str(k): list(v) for k, v in f.items()}))
-                s = studio_mod.Studio(engine, st["studio"], st["smart"], save=self._save_studio, keymap=km,
-                                      push=self._pusher.push, **self._inputs)
-                s.on_change(lambda summary: self._pusher.push("onStudioChanged", summary))
-                self.studio = s
-            return self.studio
-
-    def _save_studio(self, settings, smart):
-        with update_state() as st:
-            st["studio"], st["smart"] = settings, smart
-
-    def _engine_keyboard(self):
-        """The engine's keyboard: the app's own connection. Called by the engine thread while it holds its send
-        lock, and every other use of self._kb runs with the engine paused, so the two never overlap. Never takes
-        self._lock (an app call holding it may be waiting for the engine to pause)."""
-        if self._engine_broken:
-            self._engine_broken = False
-            if self._kb is not None and hasattr(self._kb.t, "close"):
-                self._kb.t.close()
-            self._kb = None
-        return self._keyboard()
-
-    def _engine_error(self, e):
-        if isinstance(e, (hc.DeviceError, OSError)):
-            self._engine_broken = True   # reconnect on the next try
-        self._pusher.push("onStudioStatus", {"engine": str(e)})
-
-    def _restore_lighting(self):
-        """The engine's restore callback. Studio calls it without holding its own lock (see studio.py)."""
-        with self._lock, self._paused():
-            restore_lighting(self._keyboard())
-
+    # ----- the lighting service -----
     def _paused(self):
-        return self.studio.engine.paused() if self.studio is not None else contextlib.nullcontext()
+        """Around every keyboard operation: the service's engine sends no frames meanwhile."""
+        return self._svc.lease()
 
-    def _studio_call(self, fn):
-        try:
-            return {"ok": True, "data": fn(self._get_studio())}
-        except (ValueError, TypeError) as e:
-            return {"ok": False, "error": str(e)}
-        except Exception as e:
-            traceback.print_exc()
-            return {"ok": False, "error": str(e)}
+    def _studio(self, cmd, **args):
+        return {k: v for k, v in self._svc.call(cmd, args, start=True).items() if k != "unavailable"}
+
+    def _on_service_event(self, name, args):
+        """Events from the service go to the window. Names are checked: they become JavaScript."""
+        if name in SERVICE_EVENTS and isinstance(args, list):
+            self._pusher.push(name, *args)
+
+    def start_events(self):
+        if self._events is None:
+            self._events = self._svc.subscribe(self._on_service_event)
 
     def _studio_off_for_firmware(self):
         """The keyboard's own effects and per-key colours replace Studio: stop streaming first (no restore,
-        since the caller is about to set the lighting)."""
-        if self.studio is not None and self.studio.settings["enabled"]:
-            self.studio.set_enabled(False, restore=False)
-
-    def app_state(self):
-        return self._get_studio().summary()
-
-    def gui_ready(self):
-        self._get_studio().gui_ready()
+        since the caller is about to set the lighting). Doesn't start a service that isn't running."""
+        r = self._svc.call("studio_enable", {"on": False, "restore": False})
+        if not r["ok"] and not r.get("unavailable"):
+            print(f"huntsman: couldn't turn Studio off: {r['error']}", file=sys.stderr)
 
     def shutdown(self):
-        """Quit: stop a key test, the engine (restoring the keyboard's lighting), listeners and smart lighting."""
+        """Quit: stop a key test and the event stream. Studio keeps running in the lighting service."""
         self.stop_test()
-        if self.studio is not None:
-            try:
-                self.studio.shutdown()
-            except Exception:
-                traceback.print_exc()
+        ev, self._events = self._events, None
+        if ev is not None:
+            ev.close()
 
     def _keyboard(self):
         """Connect; on every (re)connect put a keyboard stuck in driver mode back to typing (a crash
@@ -405,14 +490,7 @@ class Api:
                 log("couldn't save the first-launch snapshot")
             self.reapplied = apply_saved(kb)
             self._kb = kb
-            self._release_stuck_hold()
         return self._kb
-
-    def _release_stuck_hold(self):
-        """A fresh connection ran recover_typing: Studio may send frames again after a failed key test."""
-        h, self._stuck_hold = self._stuck_hold, None
-        if h is not None:
-            h.resume()
 
     def _drop(self):
         """Forget the handle so the next call reconnects. A running key test is stopped first: it needs
@@ -512,23 +590,25 @@ class Api:
             def batch(items):
                 self._pusher.push("onDepth", items)
 
-            # driver mode: the engine must not send frames until the keyboard types again
+            # driver mode: the lighting service must not send frames until the keyboard types again. The lease
+            # outlives this call (renewed while the test runs); a failed switch-back abandons it, so it expires
+            # and the service switches a stuck keyboard back to typing before it sends frames again.
             hold_lock = threading.Lock()
-            hold = [self.studio.engine if self.studio is not None else None]
-            if hold[0] is not None:
-                hold[0].pause()
+            hold = [self._svc.lease().acquire()]
+            self._test_lease = hold[0]
 
             def release(stuck=False):
-                """Exactly once. stuck: the keyboard may still be in driver mode, so keep the engine paused
-                until a fresh connection switches it back (_keyboard -> recover_typing)."""
+                """Exactly once."""
                 with hold_lock:
                     h, hold[0] = hold[0], None
                 if h is None:
                     return
+                if self._test_lease is h:
+                    self._test_lease = None
                 if stuck:
-                    self._stuck_hold = h
+                    h.abandon()
                 else:
-                    h.resume()
+                    h.release()
 
             def ended(reason, ok):
                 # Runs on whatever thread stopped the test (possibly the main thread while the window
@@ -539,11 +619,8 @@ class Api:
                 def follow_up():
                     try:
                         if ok:  # a mode switch reloads the live profile from flash: re-send RAM-only settings
-                            with self._lock, self._paused():
-                                st = load_state()
-                                if self.studio is not None and self.studio.settings["enabled"]:
-                                    st["custom"] = None   # Studio's frames stay; restore_lighting has them
-                                apply_saved(kb, st)
+                            with self._lock:
+                                apply_saved(kb, load_state())   # under the test's lease; Studio re-sends after
                     except Exception:
                         traceback.print_exc()
                     finally:
@@ -628,233 +705,107 @@ class Api:
     def restore_original(self):
         return self._run(restore_factory)
 
-    # ----- Lighting Studio (each returns {"ok", "data" | "error"}; inputs are validated in studio.py) -----
+    # ----- Lighting Studio: proxied to the lighting service (started if needed); each returns {"ok", ...} -----
     def studio_state(self):
-        return self._studio_call(lambda s: s.state())
+        return self._studio("studio_state")
 
     def studio_enable(self, on):
-        return self._studio_call(lambda s: s.set_enabled(on))
+        return self._studio("studio_enable", on=on)
 
     def set_active_preset(self, name):
-        return self._studio_call(lambda s: s.set_active(name))
+        return self._studio("set_active_preset", name=name)
 
     def save_preset(self, preset):
-        return self._studio_call(lambda s: s.save_preset(preset))
+        return self._studio("save_preset", preset=preset)
 
     def delete_preset(self, name):
-        return self._studio_call(lambda s: s.delete_preset(name))
+        return self._studio("delete_preset", name=name)
 
     def rename_preset(self, old, new):
-        return self._studio_call(lambda s: s.rename_preset(old, new))
+        return self._studio("rename_preset", old=old, new=new)
 
     def duplicate_preset(self, name, new=None):
-        return self._studio_call(lambda s: s.duplicate_preset(name, new))
+        return self._studio("duplicate_preset", name=name, new=new)
 
     def update_layers(self, layers):
-        return self._studio_call(lambda s: s.update_layers(layers))
+        return self._studio("update_layers", layers=layers)
 
     def set_studio_brightness(self, level):
-        return self._studio_call(lambda s: s.set_brightness(level))
+        return self._studio("set_studio_brightness", level=level)
 
     def set_fps(self, fps):
-        return self._studio_call(lambda s: s.set_fps(fps))
+        return self._studio("set_fps", fps=fps)
 
     def set_audio_device(self, device):
-        return self._studio_call(lambda s: s.set_audio_device(device))
+        return self._studio("set_audio_device", device=device)
 
     def set_audio_sensitivity(self, value):
-        return self._studio_call(lambda s: s.set_audio_sensitivity(value))
+        return self._studio("set_audio_sensitivity", value=value)
 
     def set_heat(self, on):
-        return self._studio_call(lambda s: s.set_heat(on))
+        return self._studio("set_heat", on=on)
 
     def reset_heat(self):
-        return self._studio_call(lambda s: s.reset_heat())
+        return self._studio("reset_heat")
 
     def set_smart(self, config):
-        return self._studio_call(lambda s: s.set_smart(config))
+        return self._studio("set_smart", config=config)
 
     def import_preset(self, text):
-        return self._studio_call(lambda s: s.import_preset(text))
+        return self._studio("import_preset", text=text)
+
+    def running_apps(self):
+        return self._studio("running_apps")
 
     def export_preset(self, name):
         """{"json": text}; in the app also asks where to save it and returns {"path"} (None if cancelled)."""
-        def f(s):
-            text = s.export_preset(name)
-            if self._window is None:
-                return {"json": text}
+        r = self._studio("export_preset", name=name)
+        if not r["ok"]:
+            return r
+        text = r["data"]
+        if self._window is None:
+            return {"ok": True, "data": {"json": text}}
+        try:
             import webview
             safe = re.sub(r"[^\w\- ]+", "", name).strip() or "preset"
             path = self._window.create_file_dialog(webview.FileDialog.SAVE, save_filename=f"{safe}.json")
             if not path:
-                return {"path": None}
+                return {"ok": True, "data": {"path": None}}
             path = path[0] if isinstance(path, (list, tuple)) else path
             with open(path, "w") as fh:
                 fh.write(text)
-            return {"path": path}
-        return self._studio_call(f)
-
-    def running_apps(self):
-        """Open apps with a Dock icon, for per-app rules: [{"name", "bundle_id"}]."""
-        try:
-            from AppKit import NSWorkspace
-            apps = NSWorkspace.sharedWorkspace().runningApplications()
-            out = sorted({(str(a.localizedName() or a.bundleIdentifier()), str(a.bundleIdentifier()))
-                          for a in apps if a.activationPolicy() == 0 and a.bundleIdentifier()})
-            return {"ok": True, "data": [{"name": n, "bundle_id": b} for n, b in out]}
+            return {"ok": True, "data": {"path": path}}
         except Exception as e:
-            return {"ok": False, "error": f"Couldn't list open apps: {e}"}
-
-
-def set_dock_icon(visible):
-    """Regular app (Dock icon, app menu) while the window shows; accessory (menu bar only) while hidden.
-    Main thread only."""
-    try:
-        from AppKit import NSApplication
-        NSApplication.sharedApplication().setActivationPolicy_(0 if visible else 1)
-    except Exception:
-        traceback.print_exc()
-
-
-def on_main(fn):
-    try:
-        from PyObjCTools import AppHelper
-        AppHelper.callAfter(fn)
-    except Exception:
-        traceback.print_exc()
+            traceback.print_exc()
+            return {"ok": False, "error": str(e)}
 
 
 def in_background(fn):
     threading.Thread(target=fn, daemon=True).start()
 
 
-_APP_HOOKS = {}   # keeps the delegate class and the power-off observer alive
-
-
-def install_app_hooks(on_terminate, on_reopen):
-    """Tell a system quit apart from closing the window, and show the window when the app is opened again.
-
-    pywebview 6.2.1 (platforms/cocoa.py) asks `closing` both from windowShouldClose: (the red close button)
-    and from its AppDelegate's applicationShouldTerminate: (Cmd-Q, the Quit menu, logout, restart, shut down),
-    and cancels either on False. So applicationShouldTerminate: first calls on_terminate (the app then lets
-    `closing` through and shuts down), and NSWorkspaceWillPowerOffNotification does the same before logout.
-    pywebview has no reopen hook: applicationShouldHandleReopen:hasVisibleWindows: (Dock icon, Finder,
-    Spotlight, `open` while the window is hidden) calls on_reopen. Done by subclassing pywebview's delegate
-    class before webview.start() creates it (BrowserView.AppDelegate.alloc() is looked up at window creation).
-    Must be called before webview.start(); any failure leaves pywebview's own behaviour."""
-    try:
-        import objc
-        from AppKit import NSWorkspace
-        from Foundation import NSOperationQueue
-        from webview.platforms.cocoa import BrowserView
-
-        base = BrowserView.AppDelegate
-        if "cls" not in _APP_HOOKS:
-            class HuntsmanAppDelegate(base):
-                def applicationShouldTerminate_(self, app):
-                    try:
-                        _APP_HOOKS["terminate"]()
-                    except Exception:
-                        traceback.print_exc()
-                    return objc.super(HuntsmanAppDelegate, self).applicationShouldTerminate_(app)
-
-                def applicationShouldHandleReopen_hasVisibleWindows_(self, app, visible):
-                    try:
-                        _APP_HOOKS["reopen"]()
-                    except Exception:
-                        traceback.print_exc()
-                    return True
-            _APP_HOOKS["cls"] = HuntsmanAppDelegate
-        _APP_HOOKS["terminate"], _APP_HOOKS["reopen"] = on_terminate, on_reopen
-        BrowserView.AppDelegate = _APP_HOOKS["cls"]
-
-        def power_off(_note):
-            try:
-                _APP_HOOKS["terminate"]()
-            except Exception:
-                traceback.print_exc()
-        center = NSWorkspace.sharedWorkspace().notificationCenter()
-        _APP_HOOKS["power_off"] = center.addObserverForName_object_queue_usingBlock_(
-            "NSWorkspaceWillPowerOffNotification", None, NSOperationQueue.mainQueue(), power_off)
-    except Exception:
-        traceback.print_exc()
-
-
 def main(argv=None):
-    """--background (the login item): start with the window hidden and only the menu bar icon showing.
-    The red close button keeps the app in the menu bar while Studio lighting is on (it needs this process);
-    otherwise it quits as before. Quitting (menu bar Quit, Cmd-Q, the app menu, logout, restart, shut down, or
-    SIGTERM/SIGHUP) stops Studio and restores the keyboard's lighting. Opening the app again shows the window."""
+    """The control panel window. Studio lighting runs in the lighting service (service.py), which keeps going
+    after this window quits; closing the window (red button, Cmd-Q, the app menu) quits the app normally.
+    SIGTERM/SIGHUP switch a running key test back to typing first."""
     import webview
 
-    from menubar import StatusMenu
-    background = "--background" in (sys.argv[1:] if argv is None else argv)
     api = Api()
     win = webview.create_window("Huntsman for Mac", os.path.join(HERE, "ui", "index.html"), js_api=api,
-                                width=1280, height=900, min_size=(1000, 720), background_color="#0e1013",
-                                hidden=background)
+                                width=1280, height=900, min_size=(1000, 720), background_color="#0e1013")
     api._window = win
-    api._pusher.visible = not background
-    quitting = threading.Event()
-
-    def hide():
-        api._pusher.visible = False
-        win.hide()
-        on_main(lambda: set_dock_icon(False))
 
     def closing():
         api.stop_test()  # never waits on the app lock (see stop_test)
-        if quitting.is_set():
-            api.shutdown()   # a system quit hasn't run it yet; after the menu's Quit it finds nothing to stop
-            return None
-        if api.studio is not None and api.studio.settings["enabled"]:
-            hide()
-            return False  # pywebview 6.2.1 runs `closing` on the main thread and cancels the close on False
-        quitting.set()
         api.shutdown()
         return None
 
-    def open_window():
-        api._pusher.visible = True
-        set_dock_icon(True)
-        win.show()
-
-    def quit_app():
-        quitting.set()
-
-        def work():
-            api.shutdown()
-            win.destroy()
-        in_background(work)
-
-    def toggle(on):
-        in_background(lambda: api.studio_enable(on))
-
-    def pick(name):
-        def work():
-            api.set_active_preset(name)
-            if not api.studio.settings["enabled"]:
-                api.studio_enable(True)
-        in_background(work)
-
     win.events.closing += closing
-    install_app_hooks(quitting.set, open_window)   # both called on the main thread
     depth_stream.add_shutdown_hook(api.shutdown)
     depth_stream.install_signal_stop()  # SIGTERM / SIGHUP: switch a running key test back, shut down, exit
 
     def started():
-        s = api._get_studio()
-        summary = s.summary()
-        menu = StatusMenu(toggle, pick, lambda: on_main(open_window), quit_app, presets=summary["presets"],
-                          enabled=summary["enabled"], active=summary["active"])
-        s.on_change(lambda m: menu.set_state(enabled=m["enabled"], presets=m["presets"], active=m["active"]))
-        menu.install_soon()
-        if background:
-            on_main(lambda: set_dock_icon(False))
-        api.startup()   # connect and re-send what the keyboard keeps only in RAM (what the login item is for)
-        api.gui_ready()
-        if s.settings["enabled"]:
-            api.studio_enable(True)
+        api.start_events()   # live preview and state changes from the lighting service
 
     webview.start(started)
     api.shutdown()

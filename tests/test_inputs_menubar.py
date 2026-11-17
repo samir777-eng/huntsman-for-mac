@@ -23,6 +23,12 @@ def test_menu_layout():
     assert items[3].action == "open" and items[5].action == "quit"
 
 
+def test_quit_title_can_name_the_lighting_service():
+    assert build_menu(True, [], None, "Quit lighting service")[-1].title == "Quit lighting service"
+    menu = StatusMenu(lambda on: None, lambda n: None, lambda: None, lambda: None, quit_title="Quit lighting service")
+    assert menu.model()[-1].title == "Quit lighting service"
+
+
 def test_lighting_unchecked_when_off():
     assert build_menu(False, [], None)[0].checked is False
 

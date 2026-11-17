@@ -37,15 +37,54 @@ def _install_sh():
     return (ROOT / "install.sh").read_text()
 
 
-def test_install_does_not_start_the_app_hidden():
-    # A bootstrapped RunAtLoad agent would launch the app hidden right away (and block the next install);
-    # the login item is picked up at the next login, and the app is opened normally with its window.
-    sh = _install_sh()
-    assert "launchctl bootstrap" not in sh
-    assert 'open "$APP"' in sh.split("PLIST\n")[-1]
+LABEL = "io.github.huntsman-for-mac.lighting"
 
 
-def test_install_tells_the_user_to_quit_from_the_menu_bar():
+def _uninstall_sh():
+    return (ROOT / "uninstall.sh").read_text()
+
+
+def test_install_writes_and_bootstraps_the_lighting_service_agent():
     sh = _install_sh()
+    assert LABEL in sh
+    assert "<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>" in sh
+    assert "<key>RunAtLoad</key><true/>" in sh
+    assert 'launchctl bootstrap "gui/$(id -u)" "$AGENT"' in sh       # lighting works right away
+
+
+def test_install_builds_the_nested_lighting_app():
+    sh = _install_sh()
+    assert "Contents/Library/LoginItems/Huntsman Lighting.app" in sh
+    assert "packaging/Lighting-Info.plist" in sh and "service.py" in sh and "ipc.py" in sh
+    assert "HuntsmanLighting" in sh
+    # the nested app is signed by the outer --deep ad-hoc signature, which comes after it is built
+    assert sh.index("HuntsmanLighting\"") < sh.index("codesign --force --deep")
+
+
+def test_install_removes_the_old_login_item():
+    sh = _install_sh()
+    assert "io.github.huntsman-for-mac.apply-saved" in sh
+    assert 'launchctl bootout "gui/$(id -u)" "$OLD_AGENT"' in sh and '/bin/rm -f "$OLD_AGENT"' in sh
+
+
+def test_install_stops_the_service_before_replacing_files():
+    sh = _install_sh()
+    stop = sh.index('launchctl bootout "gui/$(id -u)" "$AGENT"')
+    assert stop < sh.index('mv "$APP" "$STASH/"')
     line = next(ln for ln in sh.splitlines() if "is running" in ln)
-    assert "menu bar icon" in line and "Cmd-Q when Studio is off" not in line
+    assert "Quit it" in line
+
+
+def test_lighting_info_plist_is_a_menu_bar_agent_with_a_microphone_reason():
+    import plistlib
+    with open(ROOT / "packaging" / "Lighting-Info.plist", "rb") as f:
+        p = plistlib.load(f)
+    assert p["CFBundleIdentifier"] == LABEL and p["LSUIElement"] is True
+    assert p["CFBundleName"] == "Huntsman Lighting" and p["CFBundleExecutable"] == "HuntsmanLighting"
+    assert p["NSMicrophoneUsageDescription"] and p["NSInputMonitoringUsageDescription"]
+
+
+def test_uninstall_removes_the_service_agent_and_the_old_one():
+    sh = _uninstall_sh()
+    assert LABEL in sh and "io.github.huntsman-for-mac.apply-saved" in sh
+    assert sh.count("launchctl bootout") >= 2

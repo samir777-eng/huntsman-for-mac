@@ -2,7 +2,7 @@
 
 Current state of Huntsman for Mac (updated 2026-11-17). Version 0.1.0 published; v2 (0.2.0, Lighting Studio) in progress on branch `v2`, not committed.
 
-## v2 Lighting Studio (branch v2, plan docs/plans/2026-11-17-v2-lighting-studio.md)
+## v2 Lighting Studio (branch v2, plan docs/plans/2026-11-17-v2-lighting-studio.md; menu bar, hide-on-close and login-item notes below are superseded by the lighting service section below)
 - Parts A (lighting/ engine, effects, layers, presets, core fast path), B (inputs/ keys, audio, smart; menubar.py) and
   C (integration) are implemented. C added: `studio.py` (controller), Studio API in `app.py`, background launch + menu
   bar in `app.main`, `ui/studio.js` + Studio tab, demo simulation (`ui/demo.js`, generated `ui/demo-studio.js` via
@@ -25,6 +25,33 @@ Current state of Huntsman for Mac (updated 2026-11-17). Version 0.1.0 published;
   switch-back keeps it paused until reconnect; smart notifications and window updates never block on locks
   (lock order in studio.py). install.sh no longer starts the login item; it opens the app at the end.
   Heat counts are saved on Studio off/quit/SIGTERM only (a crash loses the session's counts).
+
+## v2 lighting service (branch v2, uncommitted, 2026-11-17) — NOT verified on hardware or real macOS
+- Owner requirement: Studio effects keep running after the app quits (like Synapse's service). `service.py` is the
+  lighting service ("Huntsman Lighting", accessory NSApplication, menu bar icon now lives here with "Quit lighting
+  service"); it hosts Studio (engine, key/audio listeners, smart lighting), single instance (flock service.lock),
+  re-sends RAM-only settings at start (replaces apply-saved), restores firmware lighting to RAM on quit/SIGTERM/logout.
+- `ipc.py`: UNIX socket `data_dir()/service.sock` (0600, same-uid peers, 2 MiB lines, NaN refused, typed args per
+  command in `service.SPECS`), JSON-lines request/reply plus an event stream (newest event per name; frames ~15 fps
+  only to subscribers that ask). Pause leases: `pause(lease_seconds 0.5–30[, token])` / `resume(token)`, max 16; the
+  app holds a 5 s lease renewed every 2 s around every keyboard operation and for the whole key test; on expiry the
+  service runs recover_typing before resuming; restores requested while leased wait for the last lease.
+- `app.py` is the control panel: Studio methods proxy through `ServiceLink` (starts the agent with
+  `launchctl kickstart -k`, bootstrapping its plist if needed, clear error otherwise); live preview from the
+  subscription via JsPusher (event names whitelisted). No menu bar, hide-to-menu-bar, dock-policy or AppDelegate hooks
+  any more: closing the window quits.
+- Packaging: `Huntsman for Mac.app/Contents/Library/LoginItems/Huntsman Lighting.app` (packaging/Lighting-Info.plist,
+  LSUIElement, mic/input reasons, exec's the bundled venv python on service.py), signed by the outer --deep ad-hoc
+  sign. LaunchAgent `io.github.huntsman-for-mac.lighting` (RunAtLoad, KeepAlive SuccessfulExit=false, Aqua,
+  Interactive), bootstrapped by install.sh (3 tries); install.sh boots the service out before replacing files, removes
+  the old apply-saved agent, re-bootstraps the previous service on rollback; uninstall.sh boots out and removes both.
+- Tests: 548 passed (`~/Documents/huntsman-control/venv/bin/python -m pytest -q tests`).
+- Verify on real macOS/hardware: install.sh end to end (bootstrap right after bootout, nested app signature
+  `codesign --verify --deep --strict`), menu bar icon from the service, Studio surviving app quit, Quit lighting service
+  restores lighting and stays quit (exit 0), crash restart (KeepAlive), TCC prompts attributed to "Huntsman Lighting"
+  (the bundle exec's a python binary from the outer bundle; attribution may instead show Python), smart lighting
+  notifications in the accessory app, logout restore, lease timing during long operations and the key tester, app
+  starting the service via kickstart, LOCAL_PEERCRED peer check (works in tests), socket path length (< 104 bytes).
 
 ## Done
 - First version: clean open-source repo, installer, GPL-3.0, Synapse-style interface, live key tester.

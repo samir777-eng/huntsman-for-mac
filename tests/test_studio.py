@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Huntsman for Mac contributors
-"""Studio integration (studio.py + the Api methods in app.py) with a fake engine, fake listeners and a fake
-keyboard. State files go to tmp_path; no USB device, IOKit, microphone or window is touched."""
+"""Studio integration end to end: app.Api (the control panel) -> ServiceLink -> service.LightingService
+(in-process, no socket) -> studio.py, with a fake engine, fake listeners, a fake clock and a fake keyboard.
+State files go to tmp_path; no USB device, IOKit, microphone, window or launchd is touched."""
 import contextlib
 import json
 import os
@@ -158,11 +159,38 @@ def hooks():
     return h
 
 
+class Clock:
+    def __init__(self):
+        self.t = 1000.0
+
+    def __call__(self):
+        return self.t
+
+
+class Local:
+    """The service's request handler called directly, as the socket would."""
+
+    def __init__(self, svc):
+        self.svc = svc
+
+    def request(self, cmd, args=None):
+        return self.svc.handle(cmd, dict(args or {}))
+
+
+def link_to(app, svc):
+    return app.ServiceLink(connect=lambda: Local(svc), starter=lambda: None)
+
+
 @pytest.fixture
 def api(app, fake, hooks):
-    a = app.Api(engine_cls=FakeEngine, inputs=hooks["inputs"])
+    import service
+    svc = service.LightingService(engine_cls=FakeEngine, inputs=hooks["inputs"], clock=Clock())
+    svc.start()
+    a = app.Api(service=link_to(app, svc))
+    a.svc = svc
     yield a
     a.shutdown()
+    svc.shutdown()
 
 
 def ok(r):
@@ -176,7 +204,7 @@ def err(r):
 
 
 def engine(api):
-    return api._get_studio().engine
+    return api.svc.studio.engine
 
 
 def layer(effect="solid", lid="l1", **kw):
@@ -281,7 +309,7 @@ def test_import_export_round_trip(api):
 
 def test_update_layers_validates_now_and_applies_debounced(api, hooks):
     pending = []
-    api._get_studio()._schedule = lambda delay, fn: pending.append((delay, fn)) or _Cancel()
+    api.svc.studio._schedule = lambda delay, fn: pending.append((delay, fn)) or _Cancel()
     eng = engine(api)
     ok(api.studio_enable(True))
     before = len(eng.log)
@@ -371,7 +399,7 @@ def test_permission_errors_are_reported(api, hooks):
 
 def test_smart_actions_dim_switch_off_and_pick_presets(api, hooks):
     ok(api.studio_enable(True))
-    api.gui_ready()
+    api.svc.gui_ready()
     smart = hooks["smart"][-1]
     assert smart.started
     smart.on_change({"brightness": 0.2, "off": False, "preset": None})
@@ -455,47 +483,18 @@ def test_restore_lighting_uses_saved_custom_colours(app, fake):
 
 def test_shutdown_stops_everything(api, hooks):
     ok(api.studio_enable(True))
-    api.gui_ready()
+    api.svc.gui_ready()
     ok(api.set_active_preset("Typing glow"))
-    api.shutdown()
+    api.shutdown()                                # quitting the app leaves the service's lighting running
     eng = engine(api)
+    assert eng.running
+    api.svc.shutdown()                            # quitting the service stops and restores
     assert not eng.running and ("restore",) in eng.log
     assert not hooks["keys"][-1].running and not hooks["smart"][-1].started
-    assert api.app_state()["enabled"] is True     # quitting doesn't turn Studio off for next time
+    assert api.svc.studio.summary()["enabled"] is True     # quitting doesn't turn Studio off for next time
 
 
-# ---------- window and menu bar lifecycle (main) with a fake pywebview ----------
-
-class _Events:
-    def __init__(self):
-        self.closing = _Hook()
-
-
-class _Hook:
-    def __init__(self):
-        self.fns = []
-
-    def __iadd__(self, fn):
-        self.fns.append(fn)
-        return self
-
-    def fire(self):
-        return [f() for f in self.fns]
-
-
-class _Window:
-    def __init__(self, hidden):
-        self.hidden, self.events, self.destroyed = hidden, _Events(), False
-
-    def hide(self):
-        self.hidden = True
-
-    def show(self):
-        self.hidden = False
-
-    def destroy(self):
-        self.destroyed = True
-
+# ---------- menu bar (a fake StatusMenu, used by test_service.py) ----------
 
 class _Menu:
     last = None
@@ -513,73 +512,17 @@ class _Menu:
             self.enabled = enabled
 
 
-@pytest.fixture
-def run_main(app, fake, hooks, monkeypatch):
-    import types
-
-    import menubar
-    made = {}
-    web = types.ModuleType("webview")
-
-    def create_window(*a, hidden=False, **k):
-        made["win"] = _Window(hidden)
-        return made["win"]
-    web.create_window = create_window
-    web.start = lambda func=None: func and func()
-    monkeypatch.setitem(sys.modules, "webview", web)
-    monkeypatch.setattr(menubar, "StatusMenu", _Menu)
-    monkeypatch.setattr(app, "on_main", lambda fn: fn())
-    monkeypatch.setattr(app, "in_background", lambda fn: fn())
-    dock = []
-    monkeypatch.setattr(app, "set_dock_icon", dock.append)
-    monkeypatch.setattr(app.depth_stream, "install_signal_stop", lambda: None)
-    monkeypatch.setattr(app.depth_stream, "_SHUTDOWN", [])
-    monkeypatch.setattr(app, "install_app_hooks", lambda on_terminate, on_reopen: made.update(
-        terminate=on_terminate, reopen=on_reopen))
-    real_api = app.Api
-    monkeypatch.setattr(app, "Api", lambda: made.setdefault("api", real_api(engine_cls=FakeEngine,
-                                                                           inputs=hooks["inputs"])))
-
-    def run(argv):
-        app.main(argv)
-        made["win"].made = made
-        return made["win"], made["api"], dock
-    return run
-
-
-def test_background_launch_starts_hidden_with_the_menu(run_main):
-    win, api, dock = run_main(["--background"])
-    assert win.hidden and _Menu.last.installed and dock == [False]
-
-
-def test_closing_hides_while_studio_runs_and_quits_otherwise(run_main):
-    win, api, dock = run_main([])
-    assert not win.hidden and _Menu.last.installed
-    ok(api.studio_enable(True))
-    assert win.events.closing.fire() == [False]      # cancelled: lighting keeps running in the menu bar
-    assert win.hidden and dock[-1] is False
-    _Menu.last.on_open()
-    assert not win.hidden and dock[-1] is True
-    ok(api.studio_enable(False))
-    assert win.events.closing.fire() == [None]       # Studio off: the window closes and the app quits
-
-
-def test_menu_quit_restores_and_closes(run_main):
-    win, api, _ = run_main([])
-    _Menu.last.on_preset("Aurora")                   # picking a preset from the menu also turns Studio on
-    eng = engine(api)
-    assert eng.running and eng.preset.name == "Aurora" and _Menu.last.enabled
-    _Menu.last.on_quit()
-    assert ("restore",) in eng.log and win.destroyed
-    assert win.events.closing.fire() == [None]
-
-
 def test_real_engine_streams_pauses_for_device_calls_and_restores(app, fake, hooks):
     """The real engine thread on the fake keyboard: frames go out, an app call in between doesn't deadlock,
     and turning Studio off waits for the thread and puts the keyboard's own effect back."""
     import threading
     import time
-    api = app.Api(inputs=hooks["inputs"])
+
+    import service
+    svc = service.LightingService(inputs=hooks["inputs"])
+    svc.start()
+    api = app.Api(service=link_to(app, svc))
+    api.svc = svc
     try:
         ok(api.set_active_preset("Rainbow wave"))
         ok(api.studio_enable(True))
@@ -592,10 +535,11 @@ def test_real_engine_streams_pauses_for_device_calls_and_restores(app, fake, hoo
         assert done.wait(3), "an app call while the engine runs deadlocked"
         before = len(fake.writes(0x0F, 0x02))
         ok(api.studio_enable(False))
-        assert not api.studio.engine.running
+        assert not svc.studio.engine.running
         assert len(fake.writes(0x0F, 0x02)) > before        # restore re-sent the stored effect
     finally:
         api.shutdown()
+        svc.shutdown()
 
 
 # ---------- review fixes: key tester holds, lock order, quitting, restore in RAM ----------
@@ -648,7 +592,8 @@ def test_key_tester_failed_switch_back_keeps_the_engine_paused_until_reconnect(a
     ok(api.start_test())
     api.stop_test()
     assert eng.depth == 1          # the keyboard may still be in driver mode: no frames
-    ok(api.reconnect())            # a fresh connection switches a stuck keyboard back to typing
+    api.svc._clock.t += 60         # the abandoned lease expires; the service switches the keyboard back first
+    api.svc.expire_leases()
     assert eng.depth == 0
 
 
@@ -664,13 +609,13 @@ def test_key_tester_follow_up_runs_paused_and_keeps_studio_frames(api, app, monk
     ok(api.start_test())
     del calls[:]                   # the connect-time re-send, not the test's follow-up
     api.stop_test()
-    assert calls and calls[0][0] >= 1 and calls[0][1] is None   # paused, and no per-key colours over Studio
+    assert calls and calls[0][0] >= 1    # paused; the engine re-sends its frame when the lease ends
     assert eng.depth == 0
 
 
 def test_studio_off_restores_after_releasing_the_studio_lock(api):
     eng = engine(api)
-    s = api._get_studio()
+    s = api.svc.studio
     owned = []
     eng.restore = lambda: owned.append(s._lock._is_owned())
     ok(api.studio_enable(True))
@@ -680,11 +625,11 @@ def test_studio_off_restores_after_releasing_the_studio_lock(api):
 
 def test_shutdown_restores_after_releasing_the_studio_lock(api):
     eng = engine(api)
-    s = api._get_studio()
+    s = api.svc.studio
     owned = []
     eng.restore = lambda: owned.append(s._lock._is_owned())
     ok(api.studio_enable(True))
-    api.shutdown()
+    api.svc.shutdown()
     assert owned == [False]
 
 
@@ -694,7 +639,7 @@ def test_smart_change_never_waits_for_the_studio_lock(api, app):
 
     import studio as studio_mod
     ok(api.studio_enable(True))
-    s = api._get_studio()
+    s = api.svc.studio
     s._spawn = studio_mod._in_thread
     done = threading.Event()
     with s._lock:   # e.g. the menu turning Studio off, waiting on the device
@@ -722,27 +667,6 @@ def test_progress_never_waits_on_the_window_while_holding_the_device_lock(api, f
     while not owned and time.monotonic() < deadline:
         time.sleep(0.01)
     assert owned and not any(owned)
-
-
-def test_quit_from_the_system_stops_studio_instead_of_hiding(run_main):
-    win, api, _ = run_main([])
-    ok(api.studio_enable(True))
-    win.made["terminate"]()                          # Cmd-Q, Quit menu, logout, restart, shut down
-    assert win.events.closing.fire() == [None]       # not cancelled: macOS may quit
-    eng = engine(api)
-    assert not eng.running and ("restore",) in eng.log
-
-
-def test_reopening_the_app_shows_the_hidden_window(run_main):
-    win, api, dock = run_main(["--background"])
-    assert win.hidden
-    win.made["reopen"]()                             # Dock icon, Finder or Spotlight while hidden
-    assert not win.hidden and dock[-1] is True
-
-
-def test_signal_shutdown_hook_is_the_app_shutdown(run_main, app):
-    win, api, _ = run_main([])
-    assert app.depth_stream._SHUTDOWN == [api.shutdown]
 
 
 def test_restore_lighting_effect_goes_to_ram_not_flash(app, fake):

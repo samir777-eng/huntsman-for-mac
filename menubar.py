@@ -1,17 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Huntsman for Mac contributors
-"""Menu bar status item: Lighting on/off, a presets submenu, Open Huntsman for Mac, Quit.
+"""Menu bar status item: Lighting on/off, a presets submenu, Open Huntsman for Mac, Quit (the lighting service
+passes quit_title="Quit lighting service"; service.py owns the icon).
 
 The menu is built from a plain model (build_menu -> list of MenuItem) so it can be tested without Cocoa;
 StatusMenu turns the model into an NSStatusItem and calls the handlers.
 
-Coexisting with pywebview: pywebview owns the Cocoa main run loop (NSApplication). The status item must be
-created on the main thread after that loop starts:
-
-    menu = StatusMenu(on_toggle, on_preset, on_open, on_quit, presets=[...])
-    webview.start(lambda: menu.install_soon())   # pywebview runs this function on a worker thread once the
-                                                 # GUI loop is up; install_soon() hops to the main thread
-                                                 # with PyObjCTools.AppHelper.callAfter.
+The lighting service (service.py) owns the icon. It runs its own Cocoa loop (an accessory NSApplication); the
+status item is created on the main thread once that loop runs (install(), or install_soon() from another thread).
 
 Handlers run on the main thread: keep them short and hand device work (engine, USB) to a thread.
 set_state() may be called from any thread.
@@ -38,7 +34,7 @@ class MenuItem:
 SEPARATOR = MenuItem("", separator=True)
 
 
-def build_menu(enabled, presets, active):
+def build_menu(enabled, presets, active, quit_title=f"Quit {APP_NAME}"):
     if presets:
         sub = tuple(MenuItem(p, "preset", checked=(p == active), payload=p) for p in presets)
     else:
@@ -49,7 +45,7 @@ def build_menu(enabled, presets, active):
         SEPARATOR,
         MenuItem(f"Open {APP_NAME}", "open"),
         SEPARATOR,
-        MenuItem(f"Quit {APP_NAME}", "quit"),
+        MenuItem(quit_title, "quit"),
     ]
 
 
@@ -60,10 +56,12 @@ class StatusMenu:
     the new state (e.g. on_toggle -> engine on/off -> menu.set_state(enabled=...)).
     """
 
-    def __init__(self, on_toggle, on_preset, on_open, on_quit, presets=(), enabled=True, active=None):
+    def __init__(self, on_toggle, on_preset, on_open, on_quit, presets=(), enabled=True, active=None,
+                 quit_title=f"Quit {APP_NAME}"):
         self.handlers = {"toggle": lambda _p: on_toggle(not self.enabled), "preset": on_preset,
                          "open": lambda _p: on_open(), "quit": lambda _p: on_quit()}
         self.presets, self.enabled, self.active = list(presets), bool(enabled), active
+        self.quit_title = quit_title
         self._lock = threading.Lock()
         self._item = None
         self._target = None
@@ -74,7 +72,7 @@ class StatusMenu:
 
     def model(self):
         with self._lock:
-            return build_menu(self.enabled, self.presets, self.active)
+            return build_menu(self.enabled, self.presets, self.active, self.quit_title)
 
     def activate(self, action, payload=None):
         """Runs the handler for a menu action. Never raises (it is called from Cocoa)."""

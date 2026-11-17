@@ -204,7 +204,7 @@ def test_default_starter_kickstarts_the_launch_agent(app, monkeypatch):
     monkeypatch.setattr(app.subprocess, "run", lambda cmd, **k: ran.append(cmd) or Done())
     app.start_service()
     assert ran[0][:2] == ["launchctl", "kickstart"] and "-k" not in ran[0]   # never kill a starting service
-    assert ran[0][3] == f"gui/{os.getuid()}/io.github.huntsman-for-mac.lighting"
+    assert ran[0][2] == f"gui/{os.getuid()}/io.github.huntsman-for-mac.lighting"
 
 
 def test_main_quits_normally_when_the_window_closes(app, monkeypatch):

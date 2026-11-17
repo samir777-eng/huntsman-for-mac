@@ -197,7 +197,14 @@ function lightMode(m) {
   $("#keysPane").hidden = m !== "keys"; $("#effectPane").hidden = m !== "effect";
 }
 $$("#lightMode button").forEach(b => b.onclick = () => lightMode(b.dataset.mode));
-function ensureCustom() { if (!custom) custom = { base: hex2rgb($("#bg").value), keys: {} }; }
+// The keyboard can only show per-key colours on all keys at once, so the first paint must give the
+// other keys a colour too: keep the colour they show now (a static effect's colour) instead of white.
+function ensureCustom() {
+  if (custom) return;
+  const current = effectColour && effectColour !== "#8e8e93" ? effectColour : $("#bg").value;
+  $("#bg").value = current;
+  custom = { base: hex2rgb(current), keys: {} };
+}
 async function sendCustom(btn, msg) { await busy(btn, async () => { await call("set_custom", custom.base, custom.keys); effectColour = null; paint(); applyAccent(); toast(msg); }); }
 $("#paintSel").onclick = e => { ensureCustom(); const c = hex2rgb($("#paint").value); selected.forEach(id => custom.keys[id] = c); sendCustom(e.target, `Painted ${selected.size} key${selected.size > 1 ? "s" : ""}`); };
 $("#eraseSel").onclick = e => { ensureCustom(); selected.forEach(id => delete custom.keys[id]); sendCustom(e.target, "Cleared"); };

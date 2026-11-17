@@ -226,7 +226,8 @@ function refreshButtons() {
 const FEATURE_TABS = { actuation: "actuation", rapid: "rapid", snap: "snap_tap", tester: "key_tester" };
 const experimentalModel = () => !!model && model.status === "experimental";
 const writesLocked = () => experimentalModel() && !model.experimental_on;
-const hasFeature = f => !model || !!model.features[f];
+// No keyboard answered (model null): claim no feature, so only Lighting and Studio show until one connects
+const hasFeature = f => !!model && !!model.features[f];
 const viewShown = v => !FEATURE_TABS[v] || hasFeature(FEATURE_TABS[v]);
 // While an experimental model's switch is off, every control that writes to it is disabled, with a note
 // pointing at the switch. Controls with their own enabled state (refreshButtons) only get forced off here.
@@ -239,15 +240,15 @@ function lockUi() {
   if (was && !lk) refreshButtons();
 }
 function applyModel() {
-  if (!model) return;
-  $(".device-name").textContent = model.name;
+  if (model) $(".device-name").textContent = model.name;
   $("#expBadge").hidden = !experimentalModel();
   Object.keys(FEATURE_TABS).forEach(v => { $(`#sources button[data-view="${v}"]`).hidden = !viewShown(v); });
   $("#actTest").hidden = !hasFeature("key_tester");
   $("#restore").hidden = $("#restoreHint").hidden = !hasFeature("actuation");
   $("#expBox").hidden = !experimentalModel();
-  $("#expOn").checked = !!model.experimental_on;
+  $("#expOn").checked = !!model?.experimental_on;
   $("#ledBox").hidden = !experimentalModel() || !model.experimental_on;
+  if (!model) { lockUi(); return; }
   const [rows, cols] = model.matrix;
   if ($("#ledRow").options.length !== rows || $("#ledCol").options.length !== cols) {
     for (const [sel, n] of [["#ledRow", rows], ["#ledCol", cols]]) {
@@ -755,7 +756,29 @@ function fromRaw(raw) {  // effect bytes the keyboard reports: store, led, effec
   if (name === "static") $("#c1").value = "#" + raw.slice(12, 18);
   if (name) { $("#effect").value = name; effectUi(); fxShown = fxFromForm(name); }
 }
-async function load() {
+function fillEffects() {
+  const sel = $("#effect"), was = sel.value;
+  sel.innerHTML = "";
+  // only list effects the keyboard code supports (firmware 1.03 refuses some that other models have)
+  for (const n of Object.keys(EFFECT_NAMES).filter(n => effects[n])) { const o = document.createElement("option"); o.value = n; o.textContent = EFFECT_NAMES[n]; sel.appendChild(o); }
+  if (effects[was]) sel.value = was;
+}
+// The connected model, again: on Reconnect a keyboard may have appeared, or another model replaced it. A new
+// PID (or the first one after none) brings its layout and effects; the same one keeps the board as drawn.
+async function followModel() {
+  const before = model?.pid ?? null;
+  try { model = await call("model"); } catch (e) { model = null; }   // connects, so layout and effects follow it
+  if (model && model.pid !== before) {
+    layout = await api.layout(); effects = await api.effects();
+    selected = new Set([...selected].filter(id => keyOf(id)));
+    fillEffects(); fillSnap(); drawBoard(); effectUi();
+    if (window.studioRefresh) studioRefresh();
+  }
+  applyModel(); show(view);
+  return !!model;
+}
+async function load(again = true) {
+  if (again && !(await followModel())) { setConn(false, "Not connected"); return; }
   setConn(true, "Reading");
   try {
     const i = await call("info");
@@ -778,11 +801,11 @@ async function start() {
   api = window.pywebview.api;
   try { model = await call("model"); } catch (e) { model = null; }   // connects, so layout and effects follow it
   layout = await api.layout(); effects = await api.effects();
-  // only list effects the keyboard code supports (firmware 1.03 refuses some that other models have)
-  for (const n of Object.keys(EFFECT_NAMES).filter(n => effects[n])) { const o = document.createElement("option"); o.value = n; o.textContent = EFFECT_NAMES[n]; $("#effect").appendChild(o); }
-  fillSnap(); drawBoard(); effectUi(); depthUi(); rtUi(); testerUi(); wellsUi(); applyModel(); show(view);
-  try { const done = await call("startup"); if (done.length) toast("Sent again: " + done.join(", ")); } catch (e) {}
-  await load();
+  fillEffects(); fillSnap(); drawBoard(); effectUi(); depthUi(); rtUi(); testerUi(); wellsUi(); applyModel(); show(view);
+  if (model) {
+    try { const done = await call("startup"); if (done.length) toast("Sent again: " + done.join(", ")); } catch (e) {}
+    await load(false);   // the model was just read
+  } else setConn(false, "Not connected");
   if (window.studioStart) await studioStart();
   let fitTimer;
   addEventListener("resize", () => { clearTimeout(fitTimer); fitTimer = setTimeout(() => { fit(); drawTrace(); }, 100); });

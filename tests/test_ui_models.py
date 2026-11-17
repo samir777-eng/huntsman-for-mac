@@ -169,3 +169,77 @@ def test_demo_model_picker(open_model):
     picker.select_option("02B0")
     page.wait_for_url("**model=02B0**")
     expect(page.locator(".device-name")).to_have_text("Huntsman V3 Pro Mini")
+
+
+# ---------- no keyboard at start, then Reconnect ----------
+
+@pytest.fixture
+def unplugged(browser):  # noqa: F811
+    """?demo&model=none: no keyboard answers; Reconnect plugs in `plug` (demo only)."""
+    pages = []
+
+    def go(plug=None):
+        pg = browser.new_page(viewport={"width": 1280, "height": 900})
+        pg.errors = []
+        pg.on("pageerror", lambda e: pg.errors.append(str(e)))
+        pg.add_init_script(RECORDER)
+        pg.goto(BASE + "&model=none" + (f"&plug={plug}" if plug else ""))
+        expect(pg.locator("#conn")).to_have_text("Not connected")
+        pages.append(pg)
+        return pg
+    yield go
+    for pg in pages:
+        pg.close()
+
+
+def reconnect(page):
+    page.click('button[data-view="device"]')
+    page.click("#reload")
+
+
+def test_no_keyboard_claims_no_features(unplugged):
+    page = unplugged()
+    assert visible_tabs(page) == ["lighting", "studio"]   # nothing that needs a model's feature
+    expect(page.locator('.pane[data-pane="lighting"]')).to_be_visible()
+    expect(page.locator("#expBadge")).to_be_hidden()
+    page.click('button[data-view="device"]')
+    expect(page.locator("#expBox")).to_be_hidden()
+    expect(page.locator("#ledBox")).to_be_hidden()
+    expect(page.locator("#restore")).to_be_hidden()
+    assert page.errors == []
+
+
+def test_reconnect_picks_up_a_model_plugged_in_later(unplugged):
+    page = unplugged("02B0")
+    assert page.locator(".cap").count() == 104       # the default layout until a keyboard answers
+    reconnect(page)
+    expect(page.locator("#conn")).to_have_text("Connected, firmware 1.03")
+    expect(page.locator(".device-name")).to_have_text("Huntsman V3 Pro Mini")
+    expect(page.locator("#expBadge")).to_be_visible()
+    expect(page.locator(".cap")).to_have_count(61)
+    ids = {int(i) for i in page.locator(".cap").evaluate_all("cs => cs.map(c => c.dataset.id)")}
+    assert ids == {k["id"] for k in layout_of("02B0")}
+    assert visible_tabs(page) == ["actuation", "rapid", "snap", "lighting", "studio"]
+    expect(page.locator(".pane[data-pane=\"actuation\"] .lock-note")).to_have_count(1)
+    assert len(calls(page, "layout")) == 2 and len(calls(page, "effects")) == 2
+    expect(page.locator("#expBox")).to_be_visible()
+    assert page.errors == []
+
+
+def test_reconnect_to_a_model_with_fewer_effects_refills_the_list(unplugged):
+    page = unplugged("0266")     # the V2 Analog has no starlight effects
+    assert page.locator('#effect option[value="starlight_one"]').count() == 1
+    reconnect(page)
+    expect(page.locator(".device-name")).to_have_text("Huntsman V2 Analog")
+    expect(page.locator('#effect option[value="starlight_one"]')).to_have_count(0)
+    expect(page.locator('#effect option[value="spectrum"]')).to_have_count(1)
+    assert page.errors == []
+
+
+def test_reconnect_to_the_same_model_keeps_the_layout(open_model):
+    page = open_model()
+    reconnect(page)
+    page.wait_for_function("() => window.__calls.filter(c => c[0] === 'model').length >= 2")
+    expect(page.locator("#conn")).to_have_text("Connected, firmware 1.03")
+    assert len(calls(page, "layout")) == 1 and len(calls(page, "effects")) == 1
+    assert page.locator(".cap").count() == 104 and page.errors == []

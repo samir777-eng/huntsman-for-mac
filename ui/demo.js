@@ -6,12 +6,18 @@
 (function () {
   const load = src => new Promise(res => { const s = document.createElement("script"); s.src = src; s.onload = res; document.body.appendChild(s); });
   Promise.all([load("demo-layout.js"), load("demo-studio.js")]).then(() => {
-    // ?demo&model=02B0 previews another model (default: the V3 Pro); a picker in the header switches
-    const want = (new URLSearchParams(location.search).get("model") || "").toUpperCase();
-    const M = window.DEMO_MODELS.find(m => m.pid === want) || window.DEMO_MODELS[0];
-    const layout = M.layout;
+    // ?demo&model=02B0 previews another model (default: the V3 Pro); a picker in the header switches.
+    // ?demo&model=none starts with no keyboard; Reconnect then finds &plug=<PID> (default: the V3 Pro).
+    const q = new URLSearchParams(location.search);
+    const want = (q.get("model") || "").toUpperCase();
+    const find = pid => window.DEMO_MODELS.find(m => m.pid === pid) || window.DEMO_MODELS[0];
+    let connected = want !== "NONE";
+    let M = find(want);   // with no keyboard: the V3 Pro's layout and effects, as the app falls back to
+    let layout = M.layout;
     const id = n => layout.find(k => k.name === n).id;
     const ok = d => Promise.resolve({ ok: true, data: d });
+    const NOT_FOUND = { ok: false, error: "No supported Razer Huntsman found. Is it plugged in by USB?" };
+    const plugged = fn => (...a) => connected ? fn(...a) : Promise.resolve(NOT_FOUND);
     let experimentalOn = false;
     const locked = () => M.status === "experimental" && !experimentalOn;
     // the same plain refusals as huntsman_core.gate, nothing "sent" while locked
@@ -19,16 +25,20 @@
       : feature === "key_tester" && M.status === "experimental" ? Promise.resolve({ ok: false, reason: "unavailable", error: `The key tester isn't offered on the ${M.name}: its support is experimental.` })
       : locked() ? Promise.resolve({ ok: false, reason: "experimental", error: `Support for the ${M.name} is experimental. Turn on Keyboard, Experimental support to change its settings.` }) : null;
     const gated = (feature, fn) => (...a) => refuse(feature) || fn(...a);
-    const pts = {};
-    if (M.features.actuation) {
-      layout.forEach(k => { if (k.name !== "RIGHT_GUI") pts[k.id] = [2.0, 1.9]; });
-      ["W", "A", "S", "D"].forEach(n => { pts[id(n)] = [1.0, 0.9]; });
-    }
-    const state = {
-      rapid: { enabled: false, press: 0.3, release: 0.3, keys: "all", continuous: false },
-      snap: null, effect: null,
-      custom: { base: [255, 255, 255], keys: Object.fromEntries(["W", "A", "S", "D"].map(n => [id(n), [255, 59, 48]])) },
+    let pts, state;
+    const use = m => {   // the keyboard the demo simulates (again after Reconnect finds another one)
+      M = m; layout = m.layout; pts = {};
+      if (M.features.actuation) {
+        layout.forEach(k => { if (k.name !== "RIGHT_GUI") pts[k.id] = [2.0, 1.9]; });
+        ["W", "A", "S", "D"].forEach(n => { pts[id(n)] = [1.0, 0.9]; });
+      }
+      state = {
+        rapid: { enabled: false, press: 0.3, release: 0.3, keys: "all", continuous: false },
+        snap: null, effect: null,
+        custom: { base: [255, 255, 255], keys: Object.fromEntries(["W", "A", "S", "D"].map(n => [id(n), [255, 59, 48]])) },
+      };
     };
+    use(M);
     const fx = {
       off: "", static: "{rgb1}", breathing_one: "{rgb1}", breathing_two: "{rgb1} {rgb2}", breathing_random: "",
       spectrum: "", wave: "{dir} {speed}", reactive_key_one: "{rgb1}", reactive_key_random: "",
@@ -39,7 +49,7 @@
     const studio = demoStudio(layout, ok);
     const info = () => { const { layout: _, ...m } = M; return { ...m, experimental_on: experimentalOn, locked: locked() }; };
     window.pywebview = { api: {
-      model: () => ok(info()),
+      model: plugged(() => ok(info())),
       experimental: () => ok(experimentalOn),
       set_experimental: on => { experimentalOn = on; return ok(on); },
       led_check: gated("per_key", (r, c) => { studio.studio_enable(false); return ok([r, c]); }),
@@ -47,10 +57,10 @@
       layout: () => Promise.resolve(layout),
       effects: () => Promise.resolve(Object.fromEntries(Object.entries(fx).filter(([n]) => M.effects.includes(n)).map(([n, t]) =>
         [n, { speed: speed(n), colors: (t.match(/\{rgb/g) || []).length, dir: t.includes("{dir}") }]))),
-      startup: () => ok([]),
-      reconnect: () => ok([]),
-      info: () => ok({ version: "0.2.0", model: info(), firmware: "1.03", profile: 1, brightness: 100, effect: "010501000001ffffff000000", state }),
-      read_depths: () => ok(pts),
+      startup: plugged(() => ok([])),
+      reconnect: () => { if (!connected) { connected = true; use(find((q.get("plug") || "").toUpperCase())); } return ok([]); },
+      info: plugged(() => ok({ version: "0.2.0", model: info(), firmware: "1.03", profile: 1, brightness: 100, effect: "010501000001ffffff000000", state })),
+      read_depths: plugged(() => ok(pts)),
       set_depth: gated("actuation", (keys, mm, rel) => {
         const done = {};
         (keys.length ? keys : Object.keys(pts)).forEach(k => { done[k] = pts[k] = [mm, rel ?? +(mm - 0.1).toFixed(1)]; });
@@ -83,7 +93,7 @@
     const pick = document.createElement("select");
     pick.id = "demoModel"; pick.setAttribute("aria-label", "Demo model");
     window.DEMO_MODELS.forEach(m => { const o = document.createElement("option"); o.value = m.pid; o.textContent = m.name; pick.appendChild(o); });
-    pick.value = M.pid;
+    pick.value = connected ? M.pid : "";
     pick.onchange = () => { const q = new URLSearchParams(location.search); q.set("model", pick.value); location.search = q.toString().replace("demo=&", "demo&").replace(/demo=$/, "demo"); };
     document.querySelector(".device-state").appendChild(pick);
     window.dispatchEvent(new Event("pywebviewready"));

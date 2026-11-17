@@ -1,6 +1,8 @@
-# Huntsman for Mac
+# Huntsman for Mac: Razer Huntsman V3 Pro settings on macOS, without Synapse
 
-Set the actuation point, Rapid Trigger, Snap Tap and lighting of a **Razer Huntsman V3 Pro** on macOS, where Razer Synapse doesn't support this keyboard. It also includes a live key tester that shows how far each key is pressed.
+Razer Synapse for Mac doesn't support the **Razer Huntsman V3 Pro** analog optical keyboard, so on a Mac you can't change its actuation point, Rapid Trigger or RGB lighting. **Huntsman for Mac** is a free, open-source macOS app that does: per-key actuation from 0.1 to 4.0 mm, Rapid Trigger, Snap Tap, per-key RGB colours and lighting effects. It also has a live key tester that shows how far each key is pressed.
+
+Works on Apple silicon Macs (M1, M2, M3, M4) without Razer Synapse or a Windows PC.
 
 > Unofficial. Not made, endorsed or supported by Razer. "Razer" and "Huntsman" are Razer Inc. trademarks, used here only to say which keyboard this works with. Use at your own risk; see [Safety](#safety).
 
@@ -47,8 +49,8 @@ You need:
 - [Homebrew](https://brew.sh), which the installer uses to add libusb if it's missing.
 
 ```bash
-git clone https://github.com/OWNER/REPO.git   # TODO: replace with the real repository URL
-cd REPO
+git clone https://github.com/samir777-eng/huntsman-for-mac.git
+cd huntsman-for-mac
 ./install.sh
 ```
 
@@ -170,6 +172,26 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requiremen
 ```
 
 The tests use a simulated keyboard and never touch USB. The interface tests open `ui/index.html?demo` in a headless browser; they are skipped if Playwright isn't installed.
+
+## FAQ
+
+**Does Razer Synapse work with the Huntsman V3 Pro on Mac?**
+Not at the time of writing. Synapse for macOS detects the keyboard but has no settings for it, so actuation, Rapid Trigger and per-key lighting can't be changed there. This app fills that gap.
+
+**How do I change the actuation point of a Razer Huntsman V3 Pro on macOS?**
+Open Huntsman for Mac, select keys (or none for all keys), pick a depth between 0.1 and 4.0 mm and press Apply. The setting is stored on the keyboard, so it stays after unplugging and also works on other computers.
+
+**Can I use Rapid Trigger or Snap Tap on a Mac?**
+Yes, from the Rapid Trigger and Snap Tap tabs. Both are experimental and not yet confirmed on real hardware; please report how they work for you.
+
+**Can I set per-key RGB lighting without Synapse?**
+Yes. Use Lighting → Per key to colour individual keys, or Effect for spectrum, wave, breathing, reactive, ripple, starlight and fire.
+
+**Do I need Windows, Boot Camp or a virtual machine?**
+No. It talks to the keyboard directly over USB from macOS.
+
+**Which keyboards are supported?**
+The Razer Huntsman V3 Pro (full size, USB ID 1532:02A6) is tested. The Huntsman V3 Pro TKL, V3 Pro Mini and 8KHz versions use the same commands but aren't enabled yet; see [CONTRIBUTING.md](CONTRIBUTING.md) to help add them.
 
 ## Credits
 

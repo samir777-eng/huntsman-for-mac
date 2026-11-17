@@ -2,7 +2,7 @@
 
 ## Reporting a problem
 
-Please report security problems privately, not in a public issue: email **TODO-security@example.com** (TODO: replace with a real address before publishing). Include what you found, how to reproduce it, and which version (`huntsman.py --version`).
+Please report security problems privately, not in a public issue: email **samireldirini@gmail.com** with "Huntsman for Mac security" in the subject. Include what you found, how to reproduce it, and which version (`huntsman.py --version`).
 
 You should get a reply within a week. Once a fix is out, we'll credit you unless you'd rather not be named.
 

@@ -44,6 +44,6 @@ The app only connects to 1532:02A6. Please don't change the Product ID and write
 - Keep changes small and focused. One logical change per pull request.
 - Every new `.py`, `.js`, `.sh`, `.html` or `.css` file starts with the SPDX licence header used in the existing files.
 - Interface text is plain and in sentence case.
-- Add an entry to `CHANGELOG.md` under "Unreleased".
+- Add an entry to `CHANGELOG.md` under a new "Unreleased" heading at the top.
 
 By contributing you agree that your contribution is licensed under GPL-3.0-or-later.

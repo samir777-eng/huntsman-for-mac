@@ -1,97 +1,76 @@
 # HANDOFF
 
-Current state of Huntsman for Mac (updated 2026-11-17). Version 0.1.0 published; v2 (0.2.0, Lighting Studio) in progress on branch `v2`, not committed.
+Current state of Huntsman for Mac, updated 2026-11-17.
 
-## v2 Lighting Studio (branch v2, plan docs/plans/2026-11-17-v2-lighting-studio.md; menu bar, hide-on-close and login-item notes below are superseded by the lighting service section below)
-- Parts A (lighting/ engine, effects, layers, presets, core fast path), B (inputs/ keys, audio, smart; menubar.py) and
-  C (integration) are implemented. C added: `studio.py` (controller), Studio API in `app.py`, background launch + menu
-  bar in `app.main`, `ui/studio.js` + Studio tab, demo simulation (`ui/demo.js`, generated `ui/demo-studio.js` via
-  `tools/make_demo_studio.py`), installer/plist/requirements changes, README/CHANGELOG.
-- Tests: `~/Documents/huntsman-control/venv/bin/python -m pytest -q tests` → 472 passed (fakes + headless Chromium).
-- Verified on hardware: only the spike numbers (per-key frame 294 fps with immediate reply polling; IOKit page-7
-  key events during normal typing).
-- NOT verified on hardware / real macOS (all of v2): engine streaming at 30 fps through the app, pausing for other
-  device calls, restore on Studio off/quit (incl. the raw re-send of the stored effect when state.json has no effect),
-  typing reactions and Input Monitoring prompt for the bundle, Microphone prompt (NSMicrophoneUsageDescription) and
-  sound input incl. BlackHole, smart lighting (idle/sleep/lock/front app), menu bar icon, hidden-window close
-  (pywebview 6.2.1 `closing` runs on the main thread and False cancels: read from its source, not exercised),
-  accessory/regular activation policy switching, login item via `open -g -a ... --args --background`, install.sh
-  copying lighting/, inputs/, studio.py, menubar.py, ui/studio.js.
-- Review fixes (v2, uncommitted, not yet on hardware/real macOS): only the red close button hides to the menu bar;
-  Cmd-Q / Quit menu / logout / power-off set `quitting` via a subclass of pywebview's AppDelegate
-  (`app.install_app_hooks`) plus NSWorkspaceWillPowerOffNotification, so `closing` lets the quit through; reopening
-  the app shows the window (applicationShouldHandleReopen); SIGTERM/SIGHUP run `api.shutdown` (2 s limit) before
-  exit; Studio restores lighting to RAM (store 0), never flash; a failed key-test start resumes the engine, a failed
-  switch-back keeps it paused until reconnect; smart notifications and window updates never block on locks
-  (lock order in studio.py). install.sh no longer starts the login item; it opens the app at the end.
-  Heat counts are saved on Studio off/quit/SIGTERM only (a crash loses the session's counts).
+## Status
+- **Released:** v0.2.0 "Lighting Studio" (https://github.com/samir777-eng/huntsman-for-mac/releases/tag/v0.2.0).
+  v0.1.0 is also tagged. `master` = v0.2.0 (merge of branch `v2`, kept for history).
+- **Repo:** public, GitHub `samir777-eng/huntsman-for-mac`, default branch `master`, SEO description + 18 topics.
+- **Tests:** 548 passing: `python -m pytest -q tests` (simulated keyboard, fake transports, headless Chromium UI
+  tests in demo mode). Dev env: `requirements.txt` + `requirements-dev.txt`, then `playwright install chromium`.
+- **Installed on the maintainer's Mac** from `master` via `./install.sh`; app + lighting service running.
 
-## v2 lighting service (branch v2, uncommitted, 2026-11-17) — NOT verified on hardware or real macOS
-- Owner requirement: Studio effects keep running after the app quits (like Synapse's service). `service.py` is the
-  lighting service ("Huntsman Lighting", accessory NSApplication, menu bar icon now lives here with "Quit lighting
-  service"); it hosts Studio (engine, key/audio listeners, smart lighting), single instance (flock service.lock),
-  re-sends RAM-only settings at start (replaces apply-saved), restores firmware lighting to RAM on quit/SIGTERM/logout.
-- `ipc.py`: UNIX socket `data_dir()/service.sock` (0600, same-uid peers, 2 MiB lines, NaN refused, typed args per
-  command in `service.SPECS`), JSON-lines request/reply plus an event stream (newest event per name; frames ~15 fps
-  only to subscribers that ask). Pause leases: `pause(lease_seconds 0.5–30[, token])` / `resume(token)`, max 16; the
-  app holds a 5 s lease renewed every 2 s around every keyboard operation and for the whole key test; on expiry the
-  service runs recover_typing before resuming; restores requested while leased wait for the last lease.
-- `app.py` is the control panel: Studio methods proxy through `ServiceLink` (starts the agent with
-  `launchctl kickstart -k`, bootstrapping its plist if needed, clear error otherwise); live preview from the
-  subscription via JsPusher (event names whitelisted). No menu bar, hide-to-menu-bar, dock-policy or AppDelegate hooks
-  any more: closing the window quits.
-- Packaging: `Huntsman for Mac.app/Contents/Library/LoginItems/Huntsman Lighting.app` (packaging/Lighting-Info.plist,
-  LSUIElement, mic/input reasons, exec's the bundled venv python on service.py), signed by the outer --deep ad-hoc
-  sign. LaunchAgent `io.github.huntsman-for-mac.lighting` (RunAtLoad, KeepAlive SuccessfulExit=false, Aqua,
-  Interactive), bootstrapped by install.sh (3 tries); install.sh boots the service out before replacing files, removes
-  the old apply-saved agent, re-bootstraps the previous service on rollback; uninstall.sh boots out and removes both.
-- Tests: 548 passed (`~/Documents/huntsman-control/venv/bin/python -m pytest -q tests`).
-- Verify on real macOS/hardware: install.sh end to end (bootstrap right after bootout, nested app signature
-  `codesign --verify --deep --strict`), menu bar icon from the service, Studio surviving app quit, Quit lighting service
-  restores lighting and stays quit (exit 0), crash restart (KeepAlive), TCC prompts attributed to "Huntsman Lighting"
-  (the bundle exec's a python binary from the outer bundle; attribution may instead show Python), smart lighting
-  notifications in the accessory app, logout restore, lease timing during long operations and the key tester, app
-  starting the service via kickstart, LOCAL_PEERCRED peer check (works in tests), socket path length (< 104 bytes).
+## What the product is
+Unofficial macOS control app for the Razer Huntsman V3 Pro (USB 1532:02A6), which Razer Synapse for Mac doesn't
+support. Both parts live inside `~/Applications/Huntsman for Mac.app` (install.sh copies the code and a `--copies`
+venv into the bundle and signs it ad hoc; unsigned apps can't read ~/Downloads):
+1. **The app** (`app.py` + `ui/`, pywebview): control panel with tabs Actuation, Rapid Trigger, Snap Tap, Lighting
+   (keyboard's own effects + per-key paint), Studio, Key tester, Keyboard (gear).
+2. **The lighting service** "Huntsman Lighting" (`service.py`, nested `Contents/Library/LoginItems/Huntsman
+   Lighting.app`, LaunchAgent `io.github.huntsman-for-mac.lighting`, RunAtLoad + KeepAlive SuccessfulExit=false):
+   owns the menu bar icon and the Studio engine, so app-drawn effects keep running after the app quits. The app talks
+   to it over `ipc.py` (UNIX socket `data_dir()/service.sock`, JSON lines, pause leases around every keyboard op).
 
-## Done
-- First version: clean open-source repo, installer, GPL-3.0, Synapse-style interface, live key tester.
-- Full audit (7 auditors: keyboard safety, security, concurrency, accessibility, design, docs/licensing, tests), fixed in three batches:
-- Audit batch 1: keyboard safety (CRC-checked replies, saved-before-live writes, driver-mode recovery on connect, SIGTERM stop, file locks shared with the login item and CLI, input validation).
-- Audit batch 2: accessible, livelier interface (keyboard-operable key grid, contrast-correct accent text, live effect previews, testing banner).
-- Audit batch 3: open-source readiness. UI smoke tests (Playwright, demo mode), demo-layout and licence-header checks, installer hardening (quarantine strip, ad-hoc signing, running-app check, escaped plist and launcher paths, Python 3.13→3.11 preference with an "untested" note for 3.14+, venv built with --copies so the ad-hoc signature verifies, rollback to the previous app if the build fails), pinned requirements, requirements-dev.txt, SPDX headers, NOTICE, CONTRIBUTING, SECURITY, CHANGELOG, issue templates, `__version__` (CLI `--version`, Keyboard pane), progress bar, README rewrite.
-- Tests: `python -m pytest -q tests` (simulated keyboard + headless Chromium), all green.
+## Code map
+- `huntsman_core.py`: protocol + USB transport (pyusb/libusb control transfers to interface 3, 90-byte reports, CRC,
+  process + file USB lock, fast frame path `exchange_fast`/`send_frame_fast`, `DeviceBusy`, `__version__`).
+- `depth_stream.py`: key tester (driver mode + IOKit report 0x0B), `recover_typing`, signal/shutdown hooks.
+- `lighting/`: engine (frame streaming, busy-skip, back-off), 17 app-drawn effects, layers/blends, presets.
+- `inputs/`: key listener (IOKit page-7 values), audio (sounddevice + numpy, 16 bands), smart lighting rules.
+- `studio.py` Studio controller · `service.py` lighting service · `ipc.py` socket · `menubar.py` status menu.
+- `app.py`: pywebview Api (actuation, firmware lighting, key tester, Studio proxy) · `huntsman.py`: CLI.
+- `ui/`: index.html, style.css, app.js, studio.js, demo.js (+ generated demo-layout.js / demo-studio.js via
+  `tools/make_demo_layout.py` / `tools/make_demo_studio.py`; tests fail if stale). `ui/index.html?demo` = no hardware.
+- Data: `~/Library/Application Support/Huntsman for Mac/` (state.json, presets.json, heatmap.json,
+  first-launch-snapshot.json, *.lock, service.sock). Log: `~/Library/Logs/Huntsman for Mac.log`.
 
-## Verified on hardware (Huntsman V3 Pro 1532:02A6, firmware 1.03, macOS 26, Apple silicon, 2026-11-17)
-- Actuation and release write, read-back, persist after replug; release follows actuation − 6 units.
-- Lighting: static effect and brightness, persist on the keyboard.
-- Per-key colour frame (0F:03, rows 0–5, cols 0–21, size 0x47; then effect [0,0,8] size 0x0C).
-- Colour correction (gamma 2.2) matches the picker (visual check on hardware).
-- Driver mode (00:04 [3,0]) streams report 0x0B; switching back (00:04 [0,0]) confirmed.
-- SIGTERM during a key test: keyboard returns to typing (exit 143).
-- Keyboard left in driver mode: recovered automatically on the next connect.
-- CRC-checked replies and saved-before-live writes on hardware.
-- Installed .app opens and reads the keyboard.
-- New installer (2026-11-17): real re-install ran, quarantine stripped, ad-hoc signed bundle passes `codesign --verify --strict --deep`, app opens and connects.
+## Protocol facts (verified on hardware, V3 Pro firmware 1.03)
+- Actuation = byte 3, release = byte 4 of 02:12/02:92 (release = actuation − 6, min threshold 7, factory 76/70).
+  Writes go to the active saved profile first, then live profile 0.
+- Rapid Trigger 02:1A, continuous 02:20, Snap Tap 02:21: ON goes to live profile only (service re-sends at start).
+- Firmware effects 0F:02: static, breathing ×3, spectrum, wave, reactive ×2, starlight ×3. **Fire (09) is refused
+  (status 03); effect 06 ("ripple") only lights pressed keys in random colours.** Both removed from the app.
+- Per-key frame 0F:03 rows 0–5, cols 0–21, size 0x47, then [0,0,8] size 0x0C; ~290 fps with immediate polling.
+  While the user types, frames can stay busy (status 01) → skipped (`DeviceBusy`), reported only after ~1 s.
+- Gamma 2.2 matches the colour picker. Restores use store 0 (RAM), never rewriting flash.
+- Driver mode 00:04 [3,0] streams report 0x0B (u16 BE, 16380 units/mm); back with [0,0]. SIGTERM and reconnect
+  both restore typing. Normal typing is visible as HID page-7 values with Input Monitoring.
 
-- Rapid Trigger ON and Snap Tap ON work on hardware (owner test, 2026-11-17).
-- Studio: rainbow, aurora, matrix, fire, typing glow, gaming WASD, music; effects keep running after the app quits (lighting service).
-- Firmware effect 06 ("ripple") only lights pressed keys in random colours, so it was removed.
+## Verified by the owner on hardware (2026-11-17)
+Actuation (selection, presets, reset point, live meter), Rapid Trigger, Snap Tap, firmware lighting + per-key paint +
+brightness, key tester, Studio presets (rainbow, aurora, matrix, fire, typing glow, gaming WASD, music via microphone),
+Studio layers/params/presets/Sound/Typing/Smart panels, effects continuing after the app quits.
 
 ## Not yet verified
-- Key tester inside the installed .app (Input Monitoring grant for the bundled Python).
-- install.sh rollback after a failed build on a real install (checked only in a scratch script).
-- Other models, Intel Macs, macOS < 26, SIGKILL during a test (relies on reconnect recovery, which is verified).
+- macOS permission prompt names for the service ("Huntsman Lighting" vs "Python").
+- Lighting restore at logout/shutdown; KeepAlive restart after a crash; install.sh rollback after a failed build.
+- Smart lighting over a long session (real sleep/lock); BlackHole/system-audio input.
+- Other models (V3 Pro TKL/Mini/8KHz), Intel Macs, macOS < 26.
 
-## Layout
-- `huntsman_core.py` protocol/transport, `depth_stream.py` live travel, `app.py` + `ui/` window, `huntsman.py` CLI.
-- User data: `~/Library/Application Support/Huntsman for Mac/` (state.json, first-launch-snapshot.json, usb.lock, state.lock); log `~/Library/Logs/Huntsman for Mac.log`.
-- `install.sh` copies code + venv into `~/Applications/Huntsman for Mac.app` (unsigned apps can't read ~/Downloads); login item `io.github.huntsman-for-mac.apply-saved`.
+## Decisions (don't re-raise)
+- Name stays "Huntsman for Mac"; discoverability via README/FAQ/topics, not a rename.
+- Owner's personal email is fine in commits and SECURITY.md.
+- No Razer logos/assets/code copied; Synapse look and flow only. Default accent ice #6ad7ff.
+- Hardware testing with the owner: one item at a time, multiple-choice questions.
+- Workflow per feature: plan in docs/plans/, tests first, Opus implementers, independent Opus review, hardware test
+  with the owner, then merge to master and release.
 
-## Next
-Published 2026-11-17: https://github.com/samir777-eng/huntsman-for-mac (public, branch master, SEO description + 18 topics).
-1. Upload a social preview image (GitHub → Settings → Social preview; use docs/screenshot-actuation.png).
-2. Find testers for Rapid Trigger, Snap Tap, other V3 models, Intel and older macOS.
-3. Optional: a GitHub Pages landing page and a first release tag (v0.1.0) for search visibility.
+## Next (pick with the owner)
+1. GitHub social preview image (Settings → Social preview, `docs/screenshot-actuation.png`) — owner's manual step.
+2. Optional GitHub Pages landing page for search visibility.
+3. Support/testers for other Huntsman V3 models (VID/PID constants in huntsman_core).
+4. Work through "Not yet verified".
 
-## Plan record
-- docs/plans/2026-11-17-open-source-release.md
+## Plan records
+- docs/plans/2026-11-17-open-source-release.md (v0.1.0)
+- docs/plans/2026-11-17-v2-lighting-studio.md (v0.2.0)

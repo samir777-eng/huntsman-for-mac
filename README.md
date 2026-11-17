@@ -243,7 +243,7 @@ Not at the time of writing. Synapse for macOS detects the keyboard but has no se
 Open Huntsman for Mac, select keys (or none for all keys), pick a depth between 0.1 and 4.0 mm and press Apply. The setting is stored on the keyboard, so it stays after unplugging and also works on other computers.
 
 **Can I use Rapid Trigger or Snap Tap on a Mac?**
-Yes, from the Rapid Trigger and Snap Tap tabs. Both are experimental and not yet confirmed on real hardware; please report how they work for you.
+Yes, from the Rapid Trigger and Snap Tap tabs. Both have been confirmed on a Huntsman V3 Pro; please report how they work on other models.
 
 **Can I set per-key RGB lighting without Synapse?**
 Yes. Use Lighting → Per key to colour individual keys, or Effect for spectrum, wave, breathing, reactive and starlight. Ripple and other typing effects are in Studio.

@@ -203,7 +203,7 @@ input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 4px; }
   color: #d4d4dc; font-weight: 650; font-variant-numeric: tabular-nums;
 }
 .kb.num-on-top .front { background: none; bottom: 12px; height: auto; line-height: 1; color: #c4c4cc; }
-.kb.num-on-top[data-view="actuation"] .legend, .kb.num-on-top[data-view="tester"] .legend { top: 6%; }
+.kb.num-on-top[data-view="actuation"] .legend { top: 6%; }
 .cap .fill { position: absolute; inset-inline: 0; top: 0; height: 0; background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--accent) 55%, transparent)); pointer-events: none; }
 
 .cap.sel { box-shadow: 0 0 0 2px var(--sel), 0 0 0 4px rgba(0,0,0,.55), 0 0 18px -4px var(--sel), inset 0 1px 0 rgba(255,255,255,.09), 0 2px 0 #060607; }

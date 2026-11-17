@@ -133,17 +133,68 @@ def test_wave_with_selection_calls_set_effect_and_warns(page):
     assert calls(page, "set_custom") == []
 
 
-def test_tester_start_stop(page):
-    page.click('button[data-view="tester"]')
-    banner = page.locator("#testBanner")
+def test_key_tester_tab_is_gone(page):
+    assert page.locator('[data-view="tester"]').count() == 0
+    assert page.locator('[data-pane="tester"]').count() == 0
+    assert page.locator("#testToggle").count() == 0
+
+
+def quiet_tester(page):
+    """start_test succeeds without the demo's simulated presses, so a test feeds its own depth readings."""
+    page.evaluate("window.__override.start_test = () => Promise.resolve({ok: true, data: true})")
+
+
+def test_actuation_test_button_starts_and_stops_one_session(page):
+    banner, btn = page.locator("#testBanner"), page.locator("#actTest")
+    sync_api.expect(btn).to_have_text("Test with a key press")
+    sync_api.expect(page.locator("#actReadings")).to_be_visible()
+    sync_api.expect(page.locator("#actReadings")).to_contain_text("sends travel readings instead of typing")
     sync_api.expect(banner).to_be_hidden()
-    page.click("#testToggle")
+    sync_api.expect(page.locator("#traceWrap")).to_be_hidden()
+    btn.click()
     wait_for_call(page, "start_test")
     sync_api.expect(banner).to_be_visible()
-    sync_api.expect(page.locator("#testToggle")).to_have_text("Stop testing")
-    page.click("#testToggle")
+    sync_api.expect(btn).to_have_text("Stop testing")
+    sync_api.expect(page.locator("#traceWrap")).to_be_visible()
+    btn.click()
     wait_for_call(page, "stop_test")
     sync_api.expect(banner).to_be_hidden()
+    sync_api.expect(btn).to_have_text("Test with a key press")
+    sync_api.expect(page.locator("#traceWrap")).to_be_hidden()
+    assert len(calls(page, "start_test")) == 1 and len(calls(page, "stop_test")) == 1
+    assert page.errors == []
+
+
+def test_readings_follow_the_last_key(page):
+    quiet_tester(page)
+    page.click("#actTest")
+    wait_for_call(page, "start_test")
+    w = IDS["W"]
+    page.evaluate(f"window.onDepth([[{w}, 1.2]])")
+    page.evaluate(f"window.onDepth([[{w}, 2.6]])")
+    sync_api.expect(cap(page, "W").locator(".front")).to_have_text("2.60")   # live travel on the key, as the tab showed
+    page.evaluate(f"window.onDepth([[{w}, 0.4]])")
+    sync_api.expect(page.locator("#tPeak")).to_have_text("2.60 mm")
+    sync_api.expect(page.locator("#mKey")).to_have_text("Key W")
+    sync_api.expect(page.locator("#mNum")).to_have_text("0.40")
+    act = page.locator("#tAct").inner_text()
+    rel = page.locator("#tRel").inner_text()
+    assert act.endswith(" mm") and rel.endswith(" mm")
+    page.evaluate("window.onDepth([])")
+    sync_api.expect(cap(page, "W").locator(".front")).to_have_text(act.split()[0])   # back to its actuation point
+    assert page.errors == []
+
+
+def test_switching_tab_stops_the_test(page):
+    page.click("#actTest")
+    wait_for_call(page, "start_test")
+    page.click('button[data-view="lighting"]')
+    wait_for_call(page, "stop_test")
+    sync_api.expect(page.locator("#testBanner")).to_be_hidden()
+    sync_api.expect(page.locator("#traceWrap")).to_be_hidden()
+    page.click('button[data-view="actuation"]')
+    sync_api.expect(page.locator("#actTest")).to_have_text("Test with a key press")
+    assert len(calls(page, "start_test")) == 1
 
 
 def test_failed_paint_keeps_previous_colours(page):

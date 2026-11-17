@@ -19,8 +19,11 @@ All notable changes to this project are listed here. Versions follow [Semantic V
 - Tests: golden bytes for every packet sent to the V3 Pro, recorded from 0.2.0, so its behaviour stays the same.
 
 ### Changed
-- The V2 family has no actuation, Rapid Trigger, Snap Tap or key tester tabs; the V2 Analog has no starlight effects.
+- The V2 family has no actuation, Rapid Trigger or Snap Tap tabs and no key tester; the V2 Analog has no starlight effects.
 - The key tester is only offered on the V3 Pro (02A6). It is never offered on an experimental model.
+- The key tester moved into Actuation: the Key tester tab is gone, and *Test with a key press* starts the same test.
+  The last key's types at, resets at and deepest press show below the button, and the travel trace shows under the
+  keyboard while testing.
 - The first-launch snapshot records its model and is never written to another one. Models without adjustable
   actuation get none.
 - Studio's audio, matrix and fire effects use the keyboard's row count.

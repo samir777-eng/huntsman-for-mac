@@ -3,14 +3,14 @@
 "use strict";
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 
-const TITLES = { actuation: "Actuation", rapid: "Rapid Trigger", snap: "Snap Tap", lighting: "Lighting", studio: "Studio", tester: "Key tester", device: "Keyboard" };
+const TITLES = { actuation: "Actuation", rapid: "Rapid Trigger", snap: "Snap Tap", lighting: "Lighting", studio: "Studio", device: "Keyboard" };
 const NOTES = {
   actuation: "Click a key to select it, or drag across several. The number on each key is the depth it types at, in mm.",
   rapid: "Select keys to limit Rapid Trigger to them, or leave nothing selected for all keys.",
   snap: "The two outlined keys are the pair. Choose them in the panel on the left.",
   lighting: "Each key shows the colour its LED is set to.",
   studio: "",
-  tester: "Keys sink as you press them. The trace shows the last key's travel.",
+  testing: "Keys sink as you press them. The trace shows the last key's travel.",
   device: "",
 };
 const EFFECT_NAMES = { static: "Static", breathing_one: "Breathing, one colour", breathing_two: "Breathing, two colours", breathing_random: "Breathing, random", spectrum: "Spectrum", wave: "Wave", reactive_key_one: "Reactive", reactive_key_random: "Reactive, random", reactive_ripple_one: "Ripple", reactive_ripple_random: "Ripple, random", starlight_one: "Starlight, one colour", starlight_two: "Starlight, two colours", starlight_random: "Starlight, random", fire: "Fire", off: "Off" };
@@ -110,7 +110,7 @@ function fit() {
   const kb = $("#kb"), stage = $("#stage");
   const nw = parseFloat($("#board").style.width) + 44, nh = parseFloat($("#board").style.height) + 68;
   const cs = getComputedStyle(stage);
-  const reserved = (view === "tester" ? 280 : 0) + $("#dock").offsetHeight + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + 64;
+  const reserved = (traceShown() ? 280 : 0) + $("#dock").offsetHeight + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + 64;
   zoom = Math.max(0.5, Math.min(1.6, stage.clientWidth * 0.9 / nw, (stage.clientHeight - reserved) / nh));
   kb.style.zoom = zoom;
   // keep small type at or above ~9.5 px on screen whatever the zoom
@@ -172,9 +172,9 @@ function paint() {
     c.classList.toggle("unlit", dark);
     c.tabIndex = id === focusId ? 0 : -1;
     if (view === "actuation") {
-      front.textContent = p ? p[0].toFixed(1) : "";
+      if (!(testing && c.classList.contains("pressed"))) front.textContent = p ? p[0].toFixed(1) : "";   // a pressed key shows its travel
       c.title = p ? `Types at ${mm(p[0])}, resets at ${mm(p[1])}` : "";
-    } else if (view !== "tester") { front.textContent = ""; if (!c.classList.contains("off")) c.title = ""; }
+    } else { front.textContent = ""; if (!c.classList.contains("off")) c.title = ""; }
     c.setAttribute("aria-label", capName(id));
   }
   // the glow the keyboard throws on the desk: the most common LED colour
@@ -223,7 +223,7 @@ function refreshButtons() {
 }
 
 /* ---------- models: experimental support, features, LED check ---------- */
-const FEATURE_TABS = { actuation: "actuation", rapid: "rapid", snap: "snap_tap", tester: "key_tester" };
+const FEATURE_TABS = { actuation: "actuation", rapid: "rapid", snap: "snap_tap" };
 const experimentalModel = () => !!model && model.status === "experimental";
 const writesLocked = () => experimentalModel() && !model.experimental_on;
 // No keyboard answered (model null): claim no feature, so only Lighting and Studio show until one connects
@@ -243,7 +243,7 @@ function applyModel() {
   if (model) $(".device-name").textContent = model.name;
   $("#expBadge").hidden = !experimentalModel();
   Object.keys(FEATURE_TABS).forEach(v => { $(`#sources button[data-view="${v}"]`).hidden = !viewShown(v); });
-  $("#actTest").hidden = !hasFeature("key_tester");
+  $("#actTest").hidden = $("#actReadings").hidden = !hasFeature("key_tester");
   $("#restore").hidden = $("#restoreHint").hidden = !hasFeature("actuation");
   $("#expBox").hidden = !experimentalModel();
   $("#expOn").checked = !!model?.experimental_on;
@@ -369,21 +369,24 @@ $$("#selectTools button").forEach(b => b.onclick = () => {
 });
 
 /* ---------- navigation ---------- */
+// The key tester runs from Actuation: while it runs, the stage shows the travel trace under the keyboard
+const traceShown = () => testing && view === "actuation";
+const stageNote = v => v === "actuation" && testing ? NOTES.testing : NOTES[v];
 async function show(v) {
   if (!viewShown(v)) v = "lighting";   // a tab this model doesn't have
-  if (testing && v !== "tester" && v !== "actuation") await stopTest();
+  if (testing && v !== "actuation") await stopTest();   // the key tester lives in Actuation
   view = v;
   $$("button[data-view]").forEach(b => { if (b.dataset.view === v) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   $$(".pane").forEach(p => p.hidden = p.dataset.pane !== v);
   document.title = `${TITLES[v]} · Huntsman for Mac`;
-  $("#stageNote").textContent = NOTES[v];
+  $("#stageNote").textContent = stageNote(v);
   $("#selectTools").hidden = !selecting();
   $("#board").setAttribute("aria-multiselectable", selecting());
-  $("#traceWrap").hidden = v !== "tester";
+  $("#traceWrap").hidden = !traceShown();
   $("#stage").dataset.view = v;
   $$(".cap").forEach(c => c.classList.remove("pressed", "typed"));
   fit(); paint(); fillAll(); snapUi();
-  if (v === "tester") drawTrace();
+  if (traceShown()) drawTrace();
   if (window.studioShown) studioShown(v);
 }
 $$("button[data-view]").forEach(b => b.onclick = () => show(b.dataset.view));
@@ -570,7 +573,7 @@ window.onDepth = batch => {            // batch: [[keyId, mm], ...] from the app
     c.classList.toggle("pressed", d > 0.05);
     c.querySelector(".fill").style.height = (d / 4 * 100).toFixed(1) + "%";
     c.classList.toggle("typed", !!(p && d >= p[0]));
-    if (view === "tester") c.querySelector(".front").textContent = d > 0 ? d.toFixed(2) : "";
+    if (view === "actuation") c.querySelector(".front").textContent = d > 0 ? d.toFixed(2) : p ? p[0].toFixed(1) : "";
   }
   if (batch.length) {
     const [id] = batch.reduce((a, b) => b[1] > a[1] ? b : a);
@@ -581,8 +584,6 @@ window.onDepth = batch => {            // batch: [[keyId, mm], ...] from the app
   while (trace.samples.length && now - trace.samples[0][0] > WINDOW_MS) trace.samples.shift();
   if (trace.key != null) {
     const p = points[trace.key] || [];
-    $("#testKey").textContent = `Key ${label(trace.key)}`;
-    $("#liveNum").textContent = d.toFixed(2);
     $("#tAct").textContent = p[0] != null ? mm(p[0]) : "–";
     $("#tRel").textContent = p[1] != null ? mm(p[1]) : "–";
     $("#tPeak").textContent = trace.peak.toFixed(2) + " mm";
@@ -653,16 +654,15 @@ function drawTrace() {
 }
 
 function testerUi() {
-  $("#testToggle").textContent = testing ? "Stop testing" : "Start testing";
-  $("#testToggle").classList.toggle("primary", !testing);
-  $("#testToggle").classList.toggle("secondary", testing);
-  $("#liveSub").textContent = testing ? "Press keys on the Huntsman now." : "Travel of the last key you pressed.";
   $("#actTest").textContent = testing ? "Stop testing" : "Test with a key press";
   $("#actTest").classList.toggle("on", testing);
   $("#testBanner").hidden = !testing;
   $("#stage").classList.toggle("testing", testing);
   if (testing) { $("#mLive").dataset.idle = "true"; $("#mKey").textContent = "Press a key on the Huntsman"; $("#mNum").textContent = "0.00"; $("#mHit").textContent = `Types at ${mm(depth())}`; }
   $("#mLive").classList.toggle("active", testing);
+  $("#traceWrap").hidden = !traceShown();
+  if (view === "actuation") $("#stageNote").textContent = stageNote(view);
+  fit(); if (traceShown()) drawTrace();
   if (!testing) { meterKey(0, false); $$(".cap").forEach(c => { c.classList.remove("pressed", "typed"); c.querySelector(".fill").style.height = 0; }); paint(); traceLabel(true); }
 }
 async function stopTest() { if (!testing) return; testing = false; testerUi(); try { await call("stop_test"); toast("Testing stopped. The keyboard types normally again."); } catch (e) { /* error toast already shown */ } }
@@ -670,7 +670,6 @@ async function toggleTest() {
   if (testing) return stopTest();
   await call("start_test"); testing = true; trace.key = null; trace.samples = []; testerUi();
 }
-$("#testToggle").onclick = e => busy(e.target, toggleTest);
 $("#actTest").onclick = e => busy(e.target, toggleTest);
 $("#bannerStop").onclick = e => busy(e.target, stopTest);
 addEventListener("beforeunload", () => { if (testing) api.stop_test(); });

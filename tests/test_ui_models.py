@@ -12,7 +12,7 @@ from test_ui import RECORDER, ROOT, browser, calls, sync_api, wait_for_call  # n
 
 expect = sync_api.expect
 BASE = (ROOT / "ui" / "index.html").as_uri() + "?demo"
-TABS = ["actuation", "rapid", "snap", "lighting", "studio", "tester"]
+TABS = ["actuation", "rapid", "snap", "lighting", "studio"]
 
 
 def layout_of(pid):
@@ -61,8 +61,9 @@ def test_experimental_model_shows_its_name_and_badge(open_model):
     expect(page.locator(".device-name")).to_have_text("Huntsman V3 Pro TKL")
     expect(page.locator("#expBadge")).to_be_visible()
     expect(page.locator("#expBadge")).to_have_text("Experimental")
-    assert visible_tabs(page) == ["actuation", "rapid", "snap", "lighting", "studio"]   # never the key tester
-    expect(page.locator("#actTest")).to_be_hidden()
+    assert visible_tabs(page) == ["actuation", "rapid", "snap", "lighting", "studio"]
+    expect(page.locator("#actTest")).to_be_hidden()      # never the key tester
+    expect(page.locator("#actReadings")).to_be_hidden()
     page.click('button[data-view="device"]')
     expect(page.locator("#devInfo")).to_contain_text("1532:02A7")
     assert page.errors == []

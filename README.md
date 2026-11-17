@@ -20,7 +20,7 @@ Works on Apple silicon Macs (M1, M2, M3, M4) without Razer Synapse or a Windows 
 | Per-key colours | No, kept until unplugged | Sent again when the app opens and at login |
 | Rapid Trigger | No, kept until unplugged | Confirmed on hardware (2026-11-17) |
 | Snap Tap (one pair) | No, kept until unplugged | Confirmed on hardware (2026-11-17) |
-| Live key tester and actuation meter | – | While testing, the keyboard sends travel readings instead of typing |
+| Live key tester and actuation meter, in Actuation | – | While testing, the keyboard sends travel readings instead of typing |
 | Lighting Studio (layers, typing and sound effects, presets, smart lighting) | No, drawn by the app while it runs | New in 0.2.0. Presets, layers and panels confirmed on hardware (2026-11-17); smart lighting over a long session and system sound not checked yet. See [Lighting Studio](#lighting-studio) |
 
 ## Lighting Studio
@@ -104,7 +104,7 @@ them with the [LED check](#led-check).
 | Huntsman V2 Analog | 1532:0266 | Experimental, untested | Lighting, per-key colours and Studio only. No starlight effects; its analog features aren't supported |
 
 "What works" means what the app offers; on the experimental models none of it has been seen working yet. The V2
-family has no actuation, Rapid Trigger, Snap Tap or key tester tabs. The key tester is only offered on a tested model.
+family has no actuation, Rapid Trigger or Snap Tap tabs and no key tester. The key tester is only offered on a tested model.
 
 If more than one supported keyboard is plugged in, the app uses the first one it finds in the order of this table.
 
@@ -167,7 +167,7 @@ Open it from `~/Applications` or Spotlight. To preview the interface without a k
 
 ### Input Monitoring for the key tester
 
-The key tester reads the keyboard's travel reports, which macOS treats as input monitoring. The first time you start testing (*Start testing* in Key tester, or *Test with a key press* in Actuation), macOS asks for permission. If you said no, or nothing was asked:
+The key tester reads the keyboard's travel reports, which macOS treats as input monitoring. The first time you start testing (*Test with a key press* in Actuation), macOS asks for permission. If you said no, or nothing was asked:
 
 1. Open **System Settings → Privacy & Security → Input Monitoring**.
 2. Turn on **Huntsman for Mac**. If it isn't listed but **Python** is, turn that on instead. If neither is listed, click **+** and choose `~/Applications/Huntsman for Mac.app`.

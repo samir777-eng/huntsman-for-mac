@@ -632,6 +632,15 @@ class Studio:
             self._push("onStudioStatus", {"errors": dict(self.errors)})
         return lst
 
+    def restart_key_listener(self):
+        """Another model was plugged in: a running key listener matches the old product id, so start a new one.
+        Never call with the engine's send lock held (this takes Studio._lock); the service spawns it."""
+        with self._lock:
+            if self._keys is None:
+                return
+            self._stop_keys()
+            self._sync_inputs()
+
     def _stop_keys(self):
         k, self._keys = self._keys, None
         if k is not None:

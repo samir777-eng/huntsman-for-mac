@@ -512,3 +512,37 @@ def test_engine_device_errors_still_reconnect(app, plug, hooks):
         assert s._engine_broken is True and s.studio.engine.running
     finally:
         s.shutdown()
+
+
+# ---------- the key listener matches the connected model's product id ----------
+
+def test_key_listener_restarts_when_another_model_is_plugged_in(app, plug, hooks):
+    p = plug(V3)
+    hc.set_experimental(True)
+    s = make_service(hooks)
+    s.start()
+    try:
+        s.handle("set_heat", {"on": True})          # the heatmap counts presses: the key listener runs
+        s.handle("studio_enable", {"on": True})
+        assert len(hooks["keys"]) == 1 and hooks["keys"][0].running
+        s._drop()                                    # same keyboard reconnects: the listener stays
+        s._engine_keyboard()
+        assert len(hooks["keys"]) == 1 and hooks["keys"][0].running
+        s._drop()                                    # a Mini replaces it: a new listener matches 02B0
+        p.pid = MINI
+        s._engine_keyboard()
+        assert len(hooks["keys"]) == 2 and not hooks["keys"][0].running and hooks["keys"][1].running
+    finally:
+        s.shutdown()
+
+
+def test_no_key_listener_is_started_by_a_model_change_when_none_ran(app, plug, hooks):
+    p = plug(None)
+    s = make_service(hooks)
+    s.start()
+    try:
+        p.pid = MINI
+        s._engine_keyboard()
+        assert hooks["keys"] == []
+    finally:
+        s.shutdown()

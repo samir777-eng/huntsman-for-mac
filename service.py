@@ -181,13 +181,17 @@ class LightingService:
 
     def _follow_model(self, model):
         """A keyboard first reached after start (or a different model plugged in): Studio and the engine switch to
-        its layout. The engine thread holds its send lock here or is paused, so no frame is being built."""
+        its layout, and the key listener to its product id. The engine thread holds its send lock here or is
+        paused, so no frame is being built."""
         if self.studio is None or model.pid == self._keymap_pid:
             return
         from lighting.frame import Keymap
         km = Keymap(hc.load_layout(model))
         self._keymap_pid = model.pid
         self.studio.engine.keymap = self.studio.keymap = km
+        # the key listener matches one product id; restart it off this thread (it may be the engine's, holding
+        # the send lock, and the restart takes Studio's lock)
+        self.studio._spawn(self.studio.restart_key_listener)
         log(f"{model.name} connected; using its layout")
 
     def studio_blocked(self):

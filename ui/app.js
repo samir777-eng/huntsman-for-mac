@@ -95,6 +95,7 @@ function paint() {
   $("#applyDepth").textContent = n ? `Apply to ${n} key${n > 1 ? "s" : ""}` : "Apply to all keys";
   $("#paintScope").textContent = n ? `${n} key${n > 1 ? "s" : ""} selected` : "Select keys to paint";
   $("#paintSel").disabled = $("#eraseSel").disabled = !n;
+  fxScopeUi();
 }
 
 // selection: click toggles; dragging applies the same toggle to every key it crosses
@@ -221,10 +222,21 @@ function speedUi() {
   const v = +$("#speed").value, [lo, hi] = fx.speed;  // lower value = faster
   $("#speedOut").textContent = fx.dir ? Math.round((hi - v) / (hi - lo) * 100) + "%" : ["", "Fast", "Medium", "Slow"][v];
 }
-$("#speed").oninput = speedUi; $("#effect").onchange = effectUi;
+$("#speed").oninput = speedUi; $("#effect").onchange = () => { effectUi(); fxScopeUi(); };
 function effectPreview(name) { const fx = effects[name]; return name === "off" ? "#000000" : fx && fx.colors ? $("#c1").value : "#8e8e93"; }
+// Effects always cover the whole keyboard. A static colour with keys selected is really a per-key paint.
+function fxScopeUi() {
+  const n = selected.size, name = $("#effect").value, staticSel = n && name === "static";
+  $("#applyFx").textContent = staticSel ? `Apply to ${n} key${n > 1 ? "s" : ""}` : (n ? "Apply to whole keyboard" : "Apply effect");
+  $("#fxNote").textContent = staticSel ? "Only the selected keys change; the others keep their colour."
+    : n ? "Effects light the whole keyboard. To colour only the selected keys, use Per key or choose Static." : "Effects run on the keyboard and are saved on it.";
+}
 $("#applyFx").onclick = e => {
   const name = $("#effect").value, fx = effects[name], o = {};
+  if (name === "static" && selected.size) {   // colour just the selected keys
+    ensureCustom(); const c = hex2rgb($("#c1").value); selected.forEach(id => custom.keys[id] = c);
+    return sendCustom(e.target, `Coloured ${selected.size} key${selected.size > 1 ? "s" : ""}`);
+  }
   if (fx.colors >= 1) o.rgb1 = hex2rgb($("#c1").value);
   if (fx.colors >= 2) o.rgb2 = hex2rgb($("#c2").value);
   if (fx.speed) o.speed = +$("#speed").value;

@@ -70,3 +70,15 @@ Fixed: snapshot tied to its model (PID, mismatch refused); window re-reads the m
 once on a locked model instead of retrying; key listener follows a model change; effects use the model's row count;
 CLI `experimental off` stops Studio first; more 02A6 golden scenarios (key tester, apply_saved, restores, Studio
 frames) recorded from master; switch read cached by mtime. Open: one snapshot file per user (a second model gets none).
+
+## Hardware regression on 02A6 (owner, 2026-11-17, installed build 1ea5947)
+Window unchanged (all tabs, no badge/switch); actuation; Rapid Trigger + Snap Tap; firmware effect, per-key paint,
+brightness; Studio typing + ambient presets and running after quit; key tester start/stop with typing back. All passed.
+
+## Added to 0.3.0 at the owner's request: key tester inside Actuation
+Requirement: remove the separate Key tester tab. The Actuation "Test with a key press" button starts the one tester
+(same driver-mode session, 60 s timeout, same stop/recovery paths); it drives the live meter and shows, below it,
+the last key's types at / resets at / deepest press. Anything the Key tester tab showed on the on-screen keyboard
+stays available while testing in Actuation. Models without the key tester: button hidden, as now.
+Tests first: UI tests that the tab is gone, the button starts/stops one session, readings rows update, stop on tab
+change/close as before; no change in bytes (golden key tester scenario passes unchanged).

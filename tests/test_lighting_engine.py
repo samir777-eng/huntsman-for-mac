@@ -344,6 +344,6 @@ def test_a_model_change_mid_frame_is_reported_not_fatal(tmp_path, monkeypatch):
         eng.set_preset(preset("rainbow", {"speed": 1.0}))
         hc.set_active_model(models.MODELS[0x02B0])     # 5x15: 02A6 LEDs in row 5 or column 15+ don't fit
         assert eng.step(1.0) is False
-        assert len(errors) == 1
+        assert len(errors) == 1 and "another keyboard model" in str(errors[0]).lower()
     finally:
         hc.set_active_model(models.DEFAULT)

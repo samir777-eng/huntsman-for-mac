@@ -200,8 +200,8 @@ class Engine:
         self._preview(now, frame)
         try:
             rows = self._rows(frame, ctx.keymap)
-        except (KeyError, IndexError) as e:   # the model changed under this frame: drop it, render the next one
-            self._report(e)
+        except (KeyError, IndexError):   # the model changed under this frame: drop it, render the next one
+            self._report(hc.DeviceError("Another keyboard model was connected; waiting for its layout."))
             return False
         error = None
         with self._send_lock:

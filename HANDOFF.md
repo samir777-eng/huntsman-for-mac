@@ -34,11 +34,10 @@ Current state of Huntsman for Mac (updated 2026-11-17). Version 0.1.0, not yet p
 - `install.sh` copies code + venv into `~/Applications/Huntsman for Mac.app` (unsigned apps can't read ~/Downloads); login item `io.github.huntsman-for-mac.apply-saved`.
 
 ## Next
-1. Decide the project name (the current one contains the "Huntsman" trademark).
-2. Decide the commit author email for the public history (current commits carry a personal address).
-3. Fill in the TODOs: clone URL in README.md (`OWNER/REPO`), security contact in SECURITY.md.
-4. Create the GitHub repo and push.
-5. Find testers for Rapid Trigger, Snap Tap, other V3 models, Intel and older macOS.
+Published 2026-11-17: https://github.com/samir777-eng/huntsman-for-mac (public, branch master, SEO description + 18 topics).
+1. Upload a social preview image (GitHub → Settings → Social preview; use docs/screenshot-actuation.png).
+2. Find testers for Rapid Trigger, Snap Tap, other V3 models, Intel and older macOS.
+3. Optional: a GitHub Pages landing page and a first release tag (v0.1.0) for search visibility.
 
 ## Plan record
 - docs/plans/2026-11-17-open-source-release.md

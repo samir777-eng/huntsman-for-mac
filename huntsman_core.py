@@ -17,7 +17,7 @@ import os
 import threading
 import time
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 VID, PID = 0x1532, 0x02A6
 TID = 0x1F

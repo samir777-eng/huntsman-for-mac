@@ -20,7 +20,7 @@ import time
 
 import models
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 VID, PID = 0x1532, 0x02A6   # PID: the verified model; the connected one is active_model().pid
 TID = 0x1F

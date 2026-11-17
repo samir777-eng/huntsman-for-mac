@@ -20,24 +20,32 @@ python3 -m venv .venv
 
 - `tests/test_core.py` and `tests/test_app.py` run against a simulated keyboard (`FakeTransport`). They never open USB and redirect settings files to a temporary folder.
 - `tests/test_ui.py` opens `ui/index.html?demo` in headless Chromium and records what the interface sends. It is skipped when Playwright isn't installed.
-- `tests/test_repo.py` checks that `ui/demo-layout.js` matches `layout.json` and that every source file has its licence header.
+- `tests/test_repo.py` checks that `ui/demo-layout.js` matches `layout.json` and `layouts/` and that every source file has its licence header.
 
-If you change `layout.json`, regenerate the demo layout with `python tools/make_demo_layout.py`.
+If you change `layout.json` or a file in `layouts/`, regenerate the demo layout with `python tools/make_demo_layout.py`.
 
 ## Previewing the interface
 
-Open `ui/index.html?demo` in a browser. A simulated keyboard answers every call, including the key tester.
+Open `ui/index.html?demo` in a browser. A simulated keyboard answers every call, including the key tester. Add `&model=02B0` (or another product ID) to preview another model; a list in the header switches between them.
 
-## Reporting a new model
+## Testing an experimental model
 
-Open a [new model issue](.github/ISSUE_TEMPLATE/new_model.md) with:
+The Huntsman V3 Pro TKL (02A7), V3 Pro 8KHz (02CF), V3 Pro Mini (02B0), V2 (026C), V2 TKL (026B) and V2 Analog (0266)
+have experimental support. Nobody has tested them with this app, and their LED positions are a guess. If you own one:
 
-1. The model name, exactly as on the box.
-2. The USB Product ID and Vendor ID: **Apple menu → About This Mac → More Info → System Report → USB**, then select the Razer keyboard.
-3. The firmware version, if you know it (Synapse on Windows shows it).
-4. If you have a Huntsman V3 Pro: the output of `huntsman.py status` (see the README's command line section).
+1. Install the app and open it. The header shows the model name with an *Experimental* badge.
+2. Run `huntsman.py status` (see the README's command line section) and keep the output. It only reads.
+3. Turn on **Keyboard → Experimental support**, or run `huntsman.py experimental on`. Read the warning first.
+4. Run the **LED check** in the Keyboard tab: note which key lights for each row and column, then click
+   **Copy summary**. Every cell helps; the corners and edges of each row help most.
+5. Try the features the README lists for your model, one at a time, and note what happened.
+6. Open a [new model issue](.github/ISSUE_TEMPLATE/new_model.md) with all of the above.
 
-The app only connects to 1532:02A6. Please don't change the Product ID and write to another model on your own; open the issue and we'll work out a read-only check first.
+To stop, turn the switch off (or `huntsman.py experimental off`). *Restore factory depth* puts the V3 Pro models'
+keys back to 1.2 mm.
+
+If your model isn't in the list, open the same issue with the model name, USB IDs and firmware version. Please don't
+add a Product ID to `models.py` and write to it on your own; we'll work out a read-only check first.
 
 ## Code style
 

@@ -2,6 +2,8 @@
 
 Razer Synapse for Mac doesn't support the **Razer Huntsman V3 Pro** analog optical keyboard, so on a Mac you can't change its actuation point, Rapid Trigger or RGB lighting. **Huntsman for Mac** is a free, open-source macOS app that does: per-key actuation from 0.1 to 4.0 mm, Rapid Trigger, Snap Tap, per-key RGB colours and lighting effects. It also has a live key tester that shows how far each key is pressed.
 
+Six more Huntsman models (V3 Pro TKL, V3 Pro 8KHz, V3 Pro Mini, V2, V2 TKL and V2 Analog) have experimental support: nobody has tested them with this app yet, changes stay off until you turn them on, and testers are wanted. See [Supported hardware](#supported-hardware).
+
 Works on Apple silicon Macs (M1, M2, M3, M4) without Razer Synapse or a Windows PC.
 
 > Unofficial. Not made, endorsed or supported by Razer. "Razer" and "Huntsman" are Razer Inc. trademarks, used here only to say which keyboard this works with. Use at your own risk; see [Safety](#safety).
@@ -74,7 +76,7 @@ Checked on 2026-11-17 with a Huntsman V3 Pro (USB ID 1532:02A6), firmware 1.03, 
 
 | Checked on hardware | Not checked yet |
 |---|---|
-| Actuation and reset points: written, read back, still there after unplugging | Other Huntsman models |
+| Actuation and reset points: written, read back, still there after unplugging | The six models with [experimental support](#experimental-support) |
 | Rapid Trigger and Snap Tap turned on | Intel Macs |
 | Keyboard lighting effects, per-key colours and brightness | macOS versions before 26 |
 | Colour correction (the keyboard matches the picker) | A hard kill (SIGKILL) during a key test; this relies on the recovery on the next connect, which is checked |
@@ -87,7 +89,59 @@ Checked on 2026-11-17 with a Huntsman V3 Pro (USB ID 1532:02A6), firmware 1.03, 
 
 ## Supported hardware
 
-Only the **Huntsman V3 Pro (USB ID 1532:02A6), wired**. Other Huntsman V3 models use the same commands, but the app only connects to 1532:02A6 until someone tests them. If you own another model, see [CONTRIBUTING.md](CONTRIBUTING.md#reporting-a-new-model).
+Wired only. Only the Huntsman V3 Pro (1532:02A6) has been tested with this app. The other models are experimental:
+the app sends them only commands checked on the V3 Pro, and their LED positions are a guess until a tester confirms
+them with the [LED check](#led-check).
+
+| Model | USB ID | Status | What works |
+|---|---|---|---|
+| Huntsman V3 Pro | 1532:02A6 | Tested | Everything: actuation, Rapid Trigger, Snap Tap, lighting, per-key colours, Studio, key tester |
+| Huntsman V3 Pro TKL | 1532:02A7 | Experimental, untested | Lighting, per-key colours, Studio, actuation, Rapid Trigger, Snap Tap. No key tester |
+| Huntsman V3 Pro 8KHz | 1532:02CF | Experimental, untested | Lighting, per-key colours, Studio, actuation, Rapid Trigger, Snap Tap. No key tester |
+| Huntsman V3 Pro Mini | 1532:02B0 | Experimental, untested | Lighting, per-key colours, Studio, actuation, Rapid Trigger, Snap Tap. No key tester |
+| Huntsman V2 | 1532:026C | Experimental, untested | Lighting, per-key colours and Studio only |
+| Huntsman V2 TKL | 1532:026B | Experimental, untested | Lighting, per-key colours and Studio only |
+| Huntsman V2 Analog | 1532:0266 | Experimental, untested | Lighting, per-key colours and Studio only. No starlight effects; its analog features aren't supported |
+
+"What works" means what the app offers; on the experimental models none of it has been seen working yet. The V2
+family has no actuation, Rapid Trigger, Snap Tap or key tester tabs. The key tester is only offered on a tested model.
+
+If more than one supported keyboard is plugged in, the app uses the first one it finds in the order of this table.
+
+### Experimental support
+
+On an experimental model, the app connects and reads the model, firmware, profile, effect and brightness, but changes
+nothing until you turn on **Keyboard → Experimental support**. Until then, every control that would change the keyboard
+is off, with a note pointing at the switch, and the lighting service doesn't send saved settings again or run Studio.
+
+Turning it on allows lighting effects, brightness, per-key colours and Studio, and on the V3 Pro models also actuation,
+Rapid Trigger, Snap Tap and *Restore factory depth*. The switch shows this warning:
+
+> This keyboard hasn't been tested with this app. When on, the app sends it only commands checked on the Huntsman V3
+> Pro; they may not work, or may light or change the wrong keys. The key tester stays off.
+
+The switch is remembered (in `state.json`) and applies to every experimental model. From the command line:
+
+```bash
+huntsman.py experimental on
+huntsman.py experimental off
+```
+
+Turning it off stops Studio first, so the keyboard's own lighting comes back while changes are still allowed.
+
+### LED check
+
+The LED check is in the Keyboard tab of an experimental model, once Experimental support is on. It helps confirm
+which LED belongs to which key:
+
+1. Click **Start LED check**. Studio turns off, and only the LED at the chosen row and column lights up, in white.
+2. Type the key that lit in **Key that lit** (or *none*), then click **Next**. **Previous** and the Row and Column
+   lists move around the matrix.
+3. Click **Copy summary** and paste it into a [new model issue](.github/ISSUE_TEMPLATE/new_model.md). The summary
+   lists the model, USB ID, firmware, app version and every cell you noted.
+4. Click **End LED check** to put the keyboard's lighting back.
+
+How to report results is in [CONTRIBUTING.md](CONTRIBUTING.md#testing-an-experimental-model).
 
 Intel Macs and macOS versions before 26 are untested. They will probably work; please report back either way.
 
@@ -109,7 +163,7 @@ This installs:
 - **libusb**, through Homebrew, if it's missing.
 - **The lighting service**, `Huntsman Lighting.app`, inside the app (`Contents/Library/LoginItems`), and a LaunchAgent (`io.github.huntsman-for-mac.lighting`) that starts it now and at every login, and restarts it if it crashes (not after *Quit lighting service*). At start it sends per-key colours, Rapid Trigger and Snap Tap to the keyboard again, starts Studio if it was on, and shows the menu bar icon. It replaces the `apply-saved` login item of earlier versions, which the installer removes. Its own small app bundle is meant to make macOS show **Huntsman Lighting** (not yet confirmed on hardware) in the Input Monitoring and Microphone lists.
 
-Open it from `~/Applications` or Spotlight. To preview the interface without a keyboard, open `ui/index.html?demo` in a browser.
+Open it from `~/Applications` or Spotlight. To preview the interface without a keyboard, open `ui/index.html?demo` in a browser; `ui/index.html?demo&model=02B0` (or any USB product ID from the table) previews another model, and a list in the header switches between them.
 
 ### Input Monitoring for the key tester
 
@@ -151,7 +205,8 @@ $APP/venv/bin/python $APP/code/huntsman.py status
 
 | Command | What it does |
 |---|---|
-| `status` | Firmware, saved profile, brightness, and the A key's actuation and reset points |
+| `status` | Model, USB ID and status, the Experimental support switch (experimental models), firmware, saved profile, brightness, and the A key's actuation and reset points (models with adjustable actuation) |
+| `experimental on`, `experimental off` | Turn Experimental support on or off. Doesn't need a keyboard |
 | `depth 2.0` | Every key types at 2.0 mm (0.1 to 4.0); the reset point follows 0.1 mm above |
 | `depth 0.5 W A S D` | Only those keys |
 | `color 255 255 255` | Solid colour, saved on the keyboard |
@@ -169,15 +224,16 @@ The app writes to the keyboard's built-in memory using commands the community wo
 - **Actuation** has been checked on real hardware: written, read back and confirmed after unplugging. **Static lighting and brightness** were checked to stay after unplugging.
 - Every command checks that the keyboard's reply matches the request and passes its checksum. Actuation writes are also read back key by key; lighting writes are not read back.
 - **Restore factory depth** (in the app, or `huntsman.py factory`) puts every key back to 1.2 mm and turns off Rapid Trigger and Snap Tap.
-- **Your original settings are saved.** On first launch the app copies every key's settings to `~/Library/Application Support/Huntsman for Mac/first-launch-snapshot.json`; `huntsman.py restore-snapshot` puts them back.
+- **Your original settings are saved.** On first launch the app copies every key's settings to `~/Library/Application Support/Huntsman for Mac/first-launch-snapshot.json`; `huntsman.py restore-snapshot` puts them back. The snapshot records its model and is never written to another one. There is one snapshot per Mac user: a second model plugged in later gets none. The V2 family has no actuation settings, so it gets none either.
 - **The key tester switches the keyboard back to typing** when you stop, after 60 seconds, when you close the window, when the app quits, and when macOS ends it (SIGTERM). If the app is killed outright, the next time the app or the command line connects it puts the keyboard back to typing. Unplugging and replugging should also work, since test mode isn't stored.
+- **Experimental models** get only commands already checked on the Huntsman V3 Pro, and nothing that changes them is sent until Experimental support is on. The key tester is never offered on them.
 - **If everything else fails**, connecting the keyboard to Windows with Razer Synapse should reset it. This hasn't been needed or tried.
 
 ## Troubleshooting
 
-**"Huntsman V3 Pro not found"**
+**"No supported Razer Huntsman found"**
 - Connect it with its USB cable, directly or through a powered hub, then open Keyboard info (the gear icon) and click *Reconnect*.
-- Check it's the right model: **Apple menu → About This Mac → More Info → System Report → USB**. Look for a Razer device with **Product ID 0x02a6** and Vendor ID 0x1532. Other IDs aren't supported yet.
+- Check it's the right model: **Apple menu → About This Mac → More Info → System Report → USB**. Look for a Razer device with Vendor ID 0x1532 and one of the Product IDs in [Supported hardware](#supported-hardware). Other IDs aren't supported.
 - Only one program can use the keyboard's control interface. Quit Razer Synapse, OpenRazer-based tools or anything else that talks to Razer devices, then click *Reconnect* in Keyboard info.
 
 **"libusb is missing"** Run `brew install libusb`, then `./install.sh` again.
@@ -254,7 +310,13 @@ Yes. Use Lighting → Per key to colour individual keys, or Effect for spectrum,
 No. It talks to the keyboard directly over USB from macOS.
 
 **Which keyboards are supported?**
-The Razer Huntsman V3 Pro (full size, USB ID 1532:02A6) is tested. The Huntsman V3 Pro TKL, V3 Pro Mini and 8KHz versions use the same commands but aren't enabled yet; see [CONTRIBUTING.md](CONTRIBUTING.md) to help add them.
+The Razer Huntsman V3 Pro (full size, USB ID 1532:02A6) is tested. The V3 Pro TKL, V3 Pro 8KHz, V3 Pro Mini, V2, V2 TKL and V2 Analog have experimental support: untested, and off until you turn on Experimental support. See [Supported hardware](#supported-hardware).
+
+**I have one of the experimental models. How can I help?**
+Turn on Experimental support, run the LED check, and report what worked and what didn't. The steps are in [CONTRIBUTING.md](CONTRIBUTING.md#testing-an-experimental-model).
+
+**Why is there no key tester on my model?**
+The key tester switches the keyboard into a mode where it stops typing. It is only offered on a model that has been tested, so an untested keyboard can't be left unable to type. The V2 family also has no analog keys to test.
 
 ## Credits
 

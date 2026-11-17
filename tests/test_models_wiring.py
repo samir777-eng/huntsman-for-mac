@@ -546,3 +546,56 @@ def test_no_key_listener_is_started_by_a_model_change_when_none_ran(app, plug, h
         assert hooks["keys"] == []
     finally:
         s.shutdown()
+
+
+# ---------- huntsman.py experimental off stops Studio first, like the window ----------
+
+class _SwitchWatcher(FakeService):
+    """Records, for each request, whether Experimental support was still on when it arrived."""
+
+    def request(self, cmd, args=None):
+        self.switch_at = getattr(self, "switch_at", []) + [(cmd, hc.experimental_enabled())]
+        return super().request(cmd, args)
+
+
+def _cli_link(app, monkeypatch, svc):
+    real = app.ServiceLink
+
+    def never_start():
+        raise AssertionError("the CLI must not start the lighting service to turn the switch off")
+    monkeypatch.setattr(app, "ServiceLink", lambda: real(connect=svc.connect, starter=never_start, wait=0.2))
+
+
+def test_cli_switch_off_stops_studio_while_writes_are_still_allowed(app, plug, monkeypatch, capsys):
+    import huntsman
+    plug(None)
+    svc = _SwitchWatcher()
+    _cli_link(app, monkeypatch, svc)
+    hc.set_experimental(True)
+    huntsman.main(["experimental", "off"])
+    assert svc.calls == [("studio_enable", {"on": False})]
+    assert svc.switch_at == [("studio_enable", True)]    # the lighting comes back before writes lock
+    assert hc.experimental_enabled() is False and "Experimental support: off" in capsys.readouterr().out
+
+
+def test_cli_switch_off_without_the_service_running(app, plug, monkeypatch, capsys):
+    import huntsman
+    plug(None)
+    svc = FakeService(up=False)
+    _cli_link(app, monkeypatch, svc)
+    hc.set_experimental(True)
+    huntsman.main(["experimental", "off"])
+    assert hc.experimental_enabled() is False
+    captured = capsys.readouterr()
+    assert "Experimental support: off" in captured.out and "Traceback" not in captured.err
+
+
+@pytest.mark.parametrize("start, arg", [(False, "on"), (False, "off"), (True, "on")])
+def test_cli_switch_only_stops_studio_when_turning_it_off(app, plug, monkeypatch, start, arg):
+    import huntsman
+    plug(None)
+    svc = FakeService()
+    _cli_link(app, monkeypatch, svc)
+    hc.set_experimental(start)
+    huntsman.main(["experimental", arg])
+    assert svc.calls == [] and hc.experimental_enabled() is (arg == "on")

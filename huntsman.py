@@ -38,6 +38,8 @@ def main(argv):
     if argv[0] == "experimental":   # a setting only: no keyboard needed
         if argv[1:] not in (["on"], ["off"]):
             raise ValueError("use: huntsman.py experimental on|off")
+        if argv[1] == "off" and hc.experimental_enabled():
+            app.studio_off_before_lock(app.ServiceLink())   # as the window does: lighting back while allowed
         hc.set_experimental(argv[1] == "on")
         print(f"Experimental support: {argv[1]}")
         return

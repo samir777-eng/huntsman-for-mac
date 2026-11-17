@@ -580,9 +580,7 @@ class Api:
             if not on and hc.experimental_enabled():
                 if self._led_check:
                     self.end_led_check()
-                r = self._svc.call("studio_enable", {"on": False})
-                if not r["ok"] and not r.get("unavailable"):
-                    print(f"huntsman: couldn't turn Studio off: {r['error']}", file=sys.stderr)
+                studio_off_before_lock(self._svc)
             hc.set_experimental(on)
         return {"ok": True, "data": on}
 
@@ -866,6 +864,15 @@ class Api:
         except Exception as e:
             traceback.print_exc()
             return {"ok": False, "error": str(e)}
+
+
+def studio_off_before_lock(svc):
+    """Before Experimental support goes off (the window and huntsman.py): stop Studio through the lighting service,
+    which puts the keyboard's own lighting back while writes are still allowed. A service that isn't running has
+    nothing streaming and isn't started for this."""
+    r = svc.call("studio_enable", {"on": False})
+    if not r["ok"] and not r.get("unavailable"):
+        print(f"huntsman: couldn't turn Studio off: {r['error']}", file=sys.stderr)
 
 
 def refused(e):

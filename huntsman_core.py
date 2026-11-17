@@ -32,7 +32,8 @@ STATUS_NEW, STATUS_BUSY, STATUS_OK = 0x00, 0x01, 0x02
 STATUS_NOT_SUPPORTED = 0x03
 FRAME_ROWS, FRAME_COLS = 6, 22   # verified: rows 6-7 and column 22 are refused (status 05)
 FRAME_SIZE = 0x47
-FAST_POLLS = 50                  # fast path: reply reads per packet before giving up (hardware: 294 fps, 0 failures)
+FAST_POLLS = 50                  # fast path: quick reply reads before pausing between reads (hardware: 294 fps)
+FAST_BUSY_BUDGET = 0.025         # fast path: wait at most this long for a busy reply before skipping the frame
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 EFFECTS = {
@@ -59,6 +60,11 @@ LED_BACKLIGHT = 0x05
 
 class DeviceError(RuntimeError):
     pass
+
+
+class DeviceBusy(DeviceError):
+    """The keyboard stayed busy (status 01) past the time budget, e.g. while sending keystrokes. Not a fault:
+    the caller may simply skip this frame."""
 
 
 # ---------- pure encoding (unit-tested) ----------
@@ -262,10 +268,16 @@ class UsbTransport:
                 replies = []
                 for report in reports:
                     self.dev.ctrl_transfer(0x21, 0x09, 0x300, CONTROL_INTERFACE, report)
-                    for _ in range(FAST_POLLS):
+                    # Poll by time, not count: while the user types the keyboard is busy longer (hardware).
+                    deadline = time.monotonic() + FAST_BUSY_BUDGET
+                    polls = 0
+                    while True:
                         resp = bytes(self.dev.ctrl_transfer(0xA1, 0x01, 0x300, CONTROL_INTERFACE, 90))
-                        if resp[0] not in (STATUS_NEW, STATUS_BUSY):
+                        polls += 1
+                        if resp[0] not in (STATUS_NEW, STATUS_BUSY) or time.monotonic() > deadline:
                             break
+                        if polls > FAST_POLLS:
+                            time.sleep(0.0005)  # stop hammering after the quick reads
                     replies.append(resp)
                     if resp[0] != STATUS_OK:
                         break
@@ -420,6 +432,8 @@ class Keyboard:
         fast = getattr(self.t, "exchange_fast", None)
         resps = fast(reqs) if fast else [self.t.exchange(r) for r in reqs]
         for req, resp in zip(reqs, resps):
+            if resp[0] in (STATUS_NEW, STATUS_BUSY) and len(resp) >= 90 and resp[6:8] == req[6:8]:
+                raise DeviceBusy("keyboard busy; frame skipped")
             check_reply(req, resp)
         if len(resps) != len(reqs):
             raise DeviceError(f"frame cut short: {len(resps)} of {len(reqs)} rows answered")

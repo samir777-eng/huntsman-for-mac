@@ -165,11 +165,12 @@ def test_exchange_fast_holds_the_usb_lock_once_per_batch(usb, monkeypatch):
     assert entered == [1]
 
 
-def test_exchange_fast_gives_up_after_bounded_polls_and_stops_the_batch(usb):
+def test_exchange_fast_gives_up_after_its_time_budget_and_stops_the_batch(usb):
     t = usb(never_ready=True)
     reqs = [hc.build_report(0x0F, 0x03, [0, 0, i, 0, 21], hc.FRAME_SIZE) for i in range(6)]
     resps = t.exchange_fast(reqs)
     assert len(resps) == 1 and resps[0][0] == hc.STATUS_BUSY  # nothing more is written to a busy keyboard
-    assert sum(1 for e in t.dev.log if e[0] == "in") == hc.FAST_POLLS
-    with pytest.raises(hc.DeviceError):
+    # bounded by time (FAST_BUSY_BUDGET), so typing-induced busy periods are waited out briefly
+    assert sum(1 for e in t.dev.log if e[0] == "in") >= hc.FAST_POLLS
+    with pytest.raises(hc.DeviceBusy):
         hc.Keyboard(t).send_frame_fast(_rows())

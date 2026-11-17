@@ -24,6 +24,9 @@ MIN_FPS, MAX_FPS = 1, 120
 MAX_PENDING_EVENTS = 512
 
 
+BUSY_REPORT_AFTER = 30   # consecutive busy frames (~1 s at 30 fps) before telling the user
+
+
 class Engine:
     def __init__(self, keyboard_factory, keymap, fps=30, *, restore=None, on_error=None,
                  clock=time.monotonic, backoff=(0.5, 8.0), heat_enabled=False):
@@ -47,6 +50,7 @@ class Engine:
         self._kb, self._need_mode, self._last_rows = None, True, None
         self._pause_count = 0
         self._retry_at, self._backoff = None, None
+        self._busy_count = 0
         self._lut = [hc.gamma([i, i, i])[0] for i in range(256)]
 
     # ---------- configuration and inputs (any thread) ----------
@@ -209,6 +213,13 @@ class Engine:
                     self._kb.enter_custom_mode()
                     self._need_mode = False
                 self._last_rows, self._retry_at, self._backoff = rows, None, None
+                self._busy_count = 0
+            except hc.DeviceBusy as e:
+                # Busy while the user types: drop this frame, try the next one, keep the connection.
+                self._busy_count += 1
+                if self._busy_count >= BUSY_REPORT_AFTER:
+                    self._busy_count = 0
+                    error = e
             except Exception as e:
                 self._kb, self._need_mode, self._last_rows = None, True, None
                 self._backoff = (self._backoff_min if self._backoff is None

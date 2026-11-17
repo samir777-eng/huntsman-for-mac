@@ -118,14 +118,33 @@ def _state_path():
     return os.path.join(data_dir(), "state.json")
 
 
+_switch_cache = (None, None)   # ((path, inode, mtime, ctime, size) of state.json, the switch it held)
+_switch_lock = threading.Lock()
+
+
 def experimental_enabled():
-    """Keyboard -> Experimental support (state.json "experimental"). Anything but a stored true is off."""
+    """Keyboard -> Experimental support (state.json "experimental"). Anything but a stored true is off.
+    The gate asks on every write (each Studio frame), so state.json is parsed again only when it changed; a stat
+    per check still sees a switch flipped by the app, the CLI or the service at once."""
+    global _switch_cache
+    path = _state_path()
     try:
-        with open(_state_path()) as f:
+        st = os.stat(path)
+    except OSError:
+        return False
+    key = (path, st.st_ino, st.st_mtime_ns, st.st_ctime_ns, st.st_size)
+    with _switch_lock:
+        if _switch_cache[0] == key:
+            return _switch_cache[1]
+    try:
+        with open(path) as f:
             raw = json.load(f)
     except Exception:
         return False
-    return isinstance(raw, dict) and raw.get("experimental") is True
+    on = isinstance(raw, dict) and raw.get("experimental") is True
+    with _switch_lock:
+        _switch_cache = (key, on)
+    return on
 
 
 def set_experimental(on):

@@ -477,3 +477,50 @@ def test_model_info_for_the_interface():
     info = models.by_pid(0x026B).info()
     assert info["pid"] == "026B" and info["status"] == "experimental" and info["matrix"] == [6, 18]
     assert info["features"]["actuation"] is False and info["features"]["lighting"] is True
+
+
+# ---------- the switch is read from state.json only when the file changed ----------
+
+def _count_opens(monkeypatch):
+    opened = []
+
+    def counting(path, *a, **kw):
+        opened.append(path)
+        return open(path, *a, **kw)
+    monkeypatch.setattr(hc, "open", counting, raising=False)
+    return opened
+
+
+def test_gate_reads_the_switch_once_while_state_json_is_unchanged(monkeypatch):
+    hc.set_experimental(True)
+    opened = _count_opens(monkeypatch)
+    kb = kb_for(0x02B0, FakeTransport())
+    for _ in range(200):   # a Studio frame loop: one gate check per frame
+        kb.check_write("per_key")
+    assert len([p for p in opened if p.endswith("state.json")]) <= 1
+
+
+def test_toggling_the_switch_takes_effect_at_once():
+    kb = kb_for(0x02B0, FakeTransport())
+    assert not kb.allowed("per_key")
+    hc.set_experimental(True)
+    assert kb.allowed("per_key")
+    hc.set_experimental(False)
+    assert not kb.allowed("per_key")
+    hc.set_experimental(True)
+    assert kb.allowed("per_key")
+
+
+def test_the_switch_follows_state_json_written_by_another_process(tmp_path):
+    """The app's update_state, the CLI and the service each write state.json; any of them turning the switch off
+    locks writes at the next check, and a deleted file is off."""
+    path = tmp_path / "state.json"
+    kb = kb_for(0x02B0, FakeTransport())
+    path.write_text(json.dumps({"experimental": True}))
+    assert kb.allowed("lighting")
+    path.write_text(json.dumps({"experimental": False, "ui": {"accent": "#123456"}}))
+    assert not kb.allowed("lighting")
+    path.write_text(json.dumps({"experimental": True}))
+    assert kb.allowed("lighting")
+    os.remove(path)
+    assert not kb.allowed("lighting")

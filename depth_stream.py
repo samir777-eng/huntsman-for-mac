@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Huntsman for Mac contributors
 """Live key-travel stream (report 0x0B) from the Huntsman V3 Pro on macOS, via IOKit.
 
 The keyboard only sends travel readings in "driver mode", where it stops typing by itself.

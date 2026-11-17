@@ -1,5 +1,7 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Huntsman for Mac contributors
 """app.py and huntsman.py against FakeTransport. Every test redirects the state files to tmp_path,
-so the owner's real ~/Library/Application Support folder is never touched."""
+so your real ~/Library/Application Support folder is never touched."""
 import json
 import os
 import sys
@@ -135,6 +137,78 @@ def test_cli_switches_a_stuck_keyboard_back_to_typing(app, fake):
     fake.mode = 3
     huntsman.main(["apply-saved"])
     assert fake.mode == 0
+
+
+def test_cli_version_needs_no_keyboard(app, capsys, monkeypatch):
+    import huntsman
+    monkeypatch.setattr(hc, "Keyboard", lambda *a: pytest.fail("--version must not open the keyboard"))
+    huntsman.main(["--version"])
+    assert capsys.readouterr().out.strip() == f"Huntsman for Mac {hc.__version__}"
+
+
+def test_info_reports_the_app_version(app, fake):
+    r = app.Api().info()
+    assert r["ok"] is True and r["data"]["version"] == hc.__version__
+
+
+# ---------- progress bar contract (window.onProgress) ----------
+
+class RecordingWindow:
+    def __init__(self):
+        self.progress = []
+
+    def evaluate_js(self, js):
+        if "onProgress" in js:
+            self.progress.append(tuple(int(v) for v in js[js.rindex("(") + 1:-1].split(",")))
+
+
+def progress_api(app):
+    api = app.Api()
+    api.startup()
+    api._window = RecordingWindow()
+    return api
+
+
+def test_read_depths_progress_ends_complete(app, fake):
+    api = progress_api(app)
+    assert api.read_depths()["ok"] is True
+    p = api._window.progress
+    assert p[-1][0] == p[-1][1] and all(d < t for d, t in p[:-1])
+
+
+def test_set_depth_progress_ends_after_the_read_back(app, fake, monkeypatch):
+    api = progress_api(app)
+    reads_after_last_progress = []
+    real_read = REAL_KEYBOARD.read_points
+    monkeypatch.setattr(REAL_KEYBOARD, "read_points",
+                        lambda kb, k: (reads_after_last_progress.append(api._window.progress[-1]), real_read(kb, k))[1])
+    assert api.set_depth([31, 32], 2.0)["ok"] is True
+    p = api._window.progress
+    assert p[-1][0] == p[-1][1] and all(d < t for d, t in p[:-1])
+    assert all(d < t for d, t in reads_after_last_progress)  # no read happens after the bar says done
+
+
+def test_failed_long_operation_still_completes_the_progress_bar(app, fake, monkeypatch):
+    api = progress_api(app)
+    calls = {"n": 0}
+    real_read = REAL_KEYBOARD.read_points
+
+    def flaky(kb, k):
+        calls["n"] += 1
+        if calls["n"] == 20:
+            raise hc.DeviceError("short reply from keyboard")
+        return real_read(kb, k)
+    monkeypatch.setattr(REAL_KEYBOARD, "read_points", flaky)
+    assert api.read_depths()["ok"] is False
+    p = api._window.progress
+    assert p and p[-1][0] == p[-1][1]
+
+
+def test_quick_calls_send_no_progress(app, fake):
+    api = progress_api(app)
+    api.set_effect("static", {"rgb1": [1, 2, 3]})
+    api.info()
+    assert api._window.progress == []
 
 
 # ---------- input validation ----------

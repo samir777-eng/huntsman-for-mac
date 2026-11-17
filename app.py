@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Huntsman for Mac contributors
 """Huntsman Control: a native window for the Razer Huntsman V3 Pro on macOS."""
 import contextlib
 import copy
@@ -244,6 +246,7 @@ class Api:
         self._lock = threading.RLock()
         self._test = None
         self._window = None
+        self._progress_open = False
         self.reapplied = []
 
     def _keyboard(self):
@@ -282,8 +285,12 @@ class Api:
                 traceback.print_exc()
                 self._drop()
                 return {"ok": False, "error": str(e)}
+            finally:
+                if self._progress_open:  # a long operation stopped part-way: don't leave the bar showing
+                    self._progress(1, 1)
 
     def _progress(self, done, total):
+        self._progress_open = done < total
         if self._window:
             self._window.evaluate_js(f"window.onProgress && window.onProgress({done},{total})")
 
@@ -301,7 +308,7 @@ class Api:
 
     def info(self):
         def f(kb):
-            return {"firmware": kb.firmware(), "profile": kb.saved,
+            return {"version": hc.__version__, "firmware": kb.firmware(), "profile": kb.saved,
                     "brightness": kb.brightness(), "effect": kb.get_effect_raw().hex(),
                     "state": load_state()}
         return self._run(f)
@@ -330,14 +337,19 @@ class Api:
             return {"ok": False, "error": str(e)}
 
         def f(kb):
-            failed, done = [], []
-            for i, k in enumerate(ids):
+            failed, done, n = [], [], len(ids)
+            for i, k in enumerate(ids):  # the first half of the bar: writes; the second: reading them back
                 if kb.set_actuation([k], mm, release_mm):
                     failed.append(k)
                 else:
                     done.append(k)
-                self._progress(i + 1, len(ids))
-            return {"failed": failed, "done": {k: kb.read_points(k) for k in done}, "count": len(ids)}
+                self._progress(i + 1, 2 * n)
+            points = {}
+            for j, k in enumerate(done):
+                points[k] = kb.read_points(k)
+                self._progress(n + j + 1, n + len(done))
+            # if no key confirmed, _run's finally completes the bar
+            return {"failed": failed, "done": points, "count": n}
         return self._run(f)
 
     # ----- key tester -----

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Huntsman for Mac contributors
 """Razer Huntsman V3 Pro (1532:02A6) protocol, macOS, no Synapse.
 
 Sources: OpenRazer (packet, lighting), janeblower/easyrazer (analog, Rapid Trigger, Snap Tap,
@@ -14,6 +16,8 @@ import json
 import os
 import threading
 import time
+
+__version__ = "0.1.0"
 
 VID, PID = 0x1532, 0x02A6
 TID = 0x1F

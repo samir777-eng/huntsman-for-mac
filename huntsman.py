@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Huntsman for Mac contributors
 """Command-line control for the Razer Huntsman V3 Pro (1532:02A6) on macOS, without Synapse.
 
   huntsman.py status
@@ -10,6 +12,7 @@
   huntsman.py apply-saved            send per-key colours, Rapid Trigger and Snap Tap again (runs at login)
   huntsman.py factory                every key back to 1.2 mm; Rapid Trigger and Snap Tap off
   huntsman.py restore-snapshot       put back every key exactly as it was on the app's first launch
+  huntsman.py --version              print the version
 """
 import json
 import os
@@ -26,6 +29,9 @@ import huntsman_core as hc  # noqa: E402
 def main(argv):
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(__doc__)
+        return
+    if argv[0] == "--version":
+        print(f"Huntsman for Mac {hc.__version__}")
         return
     layout = hc.load_layout()
     names = {k["name"].upper(): k["id"] for k in layout}

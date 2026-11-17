@@ -1,0 +1,35 @@
+Huntsman for Mac
+Copyright (C) 2026 Huntsman for Mac contributors
+
+This program is free software: you can redistribute it and/or modify it under the terms of the
+GNU General Public License as published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version. See LICENSE.
+
+Unofficial. Not made, endorsed or supported by Razer Inc. "Razer" and "Huntsman" are trademarks of
+Razer Inc., used only to say which keyboard this software works with. No Razer logos, artwork or
+software are included.
+
+Third-party sources
+-------------------
+
+easyrazer
+  https://github.com/janeblower/easyrazer
+  License: GPL-3.0-or-later
+  Used: layout.json and keymap.json (key geometry, key IDs and the LED map) are derived from its data.
+  Protocol facts for analog actuation, Rapid Trigger, Snap Tap and the per-key colour frame.
+
+OpenRazer
+  https://github.com/openrazer/openrazer
+  License: GPL-2.0-or-later (driver)
+  Used: protocol facts only (the 90-byte report format, checksum and lighting commands).
+  No OpenRazer code is included.
+
+SensorFinder for Razer Huntsman
+  https://github.com/ohy1/SensorFinder-for-Razer-Huntsman
+  License: MIT
+  Used: protocol facts only (the actuation and release-point rules and the travel report format).
+  No SensorFinder code is included.
+
+Python packages installed by install.sh (not included in this repository): pyusb (BSD-3-Clause),
+pywebview (BSD-3-Clause) and their dependencies, listed in requirements.txt. libusb (LGPL-2.1-or-later)
+is installed through Homebrew.

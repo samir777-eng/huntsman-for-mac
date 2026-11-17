@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Huntsman for Mac contributors
 // Demo mode: a simulated keyboard so the interface can be previewed in a browser without hardware.
 (function () {
   const s = document.createElement("script");
@@ -27,7 +29,7 @@
         [n, { speed: speed(n), colors: (t.match(/\{rgb/g) || []).length, dir: t.includes("{dir}") }]))),
       startup: () => ok([]),
       reconnect: () => ok([]),
-      info: () => ok({ firmware: "1.03", profile: 1, brightness: 100, effect: "010501000001ffffff000000", state }),
+      info: () => ok({ version: "0.1.0", firmware: "1.03", profile: 1, brightness: 100, effect: "010501000001ffffff000000", state }),
       read_depths: () => ok(pts),
       set_depth: (keys, mm, rel) => {
         const done = {};

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Huntsman for Mac contributors
 "use strict";
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 
@@ -571,6 +573,15 @@ $("#actTest").onclick = e => busy(e.target, toggleTest);
 $("#bannerStop").onclick = e => busy(e.target, stopTest);
 addEventListener("beforeunload", () => { if (testing) api.stop_test(); });
 
+/* ---------- progress of long reads and writes (app.py calls window.onProgress) ---------- */
+let progressTimer;
+window.onProgress = (done, total) => {
+  const el = $("#progress"), pct = total > 0 ? Math.min(100, Math.round(done / total * 100)) : 100;
+  clearTimeout(progressTimer);
+  el.hidden = false; el.style.setProperty("--p", pct + "%"); el.setAttribute("aria-valuenow", pct);
+  if (pct >= 100) progressTimer = setTimeout(() => { el.hidden = true; }, 250);
+};
+
 /* ---------- keyboard info ---------- */
 $("#reload").onclick = e => busy(e.target, async () => { const done = await call("reconnect"); if (done.length) toast("Sent again: " + done.join(", ")); await load(); });
 $("#restore").onclick = () => { $("#confirmRestore").returnValue = ""; $("#confirmRestore").showModal(); };
@@ -652,7 +663,7 @@ async function load() {
     if (!state.effect && !state.custom) fromRaw(i.effect);
     applyState();
     $("#devInfo").innerHTML = "";
-    [["Model", "Huntsman V3 Pro"], ["USB ID", "1532:02A6"], ["Firmware", i.firmware], ["Stored profile", String(i.profile)], ["Brightness", i.brightness + "%"]]
+    [["Model", "Huntsman V3 Pro"], ["USB ID", "1532:02A6"], ["Firmware", i.firmware], ["Stored profile", String(i.profile)], ["Brightness", i.brightness + "%"], ["App version", i.version || "–"]]
       .forEach(([k, v]) => { const r = document.createElement("div"); r.className = "row"; r.innerHTML = '<span></span><span class="val"></span>'; r.children[0].textContent = k; r.children[1].textContent = v; $("#devInfo").appendChild(r); });
     await readPoints();
     setConn(true, `Connected, firmware ${i.firmware}`);

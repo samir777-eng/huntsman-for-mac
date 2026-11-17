@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+   Copyright (C) 2026 Huntsman for Mac contributors */
 /* Dark control room. The keyboard is the hero: black doubleshot caps whose legends glow in the
    real LED colour, on a dark aluminium plate. The app's own accent (ice) stays out of the LEDs. */
 [hidden] { display: none !important; }
@@ -133,6 +135,9 @@ input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 4px; }
   position: relative; overflow: auto; padding: 28px 32px 18px; display: flex; flex-direction: column; align-items: center; gap: 18px;
   background: radial-gradient(1000px 460px at 50% 44%, #17181b 0%, var(--bg) 72%);
 }
+/* thin bar along the top of the stage while many keys are read or written */
+.progress { position: absolute; top: 0; inset-inline: 0; height: 2px; background: var(--line); z-index: 5; pointer-events: none; }
+.progress-bar { height: 100%; width: var(--p, 0%); background: var(--accent); box-shadow: 0 0 6px var(--accent); transition: width .12s linear; }
 .kb-wrap { width: 100%; flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; }
 
 /* the keyboard body: brushed dark aluminium top plate, visible between the keys */
@@ -304,4 +309,5 @@ input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 4px; }
   .kb[data-fx^="starlight"] .cap:not(.off) { color: color-mix(in srgb, var(--legend) 70%, #1a1a1e); }
   .kb[data-fx="fire"] .cap:not(.off) { color: hsl(calc(8deg + var(--r1) * 30deg) 100% 55%); }
   .test-banner .rec { animation: none; }
+  .progress-bar { transition: none; }
 }

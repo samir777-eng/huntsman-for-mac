@@ -434,7 +434,7 @@ function fxScopeUi() {
   const n = selected.size, name = $("#effect").value, staticSel = n && name === "static";
   $("#applyFx").textContent = staticSel ? `Apply to ${plural(n, "key")}` : "Apply to whole keyboard";
   $("#fxNote").textContent = staticSel ? "Only the selected keys change; the others keep their colour."
-    : n ? "Effects light the whole keyboard. To colour only the selected keys, use Per key or choose Static." : "Effects run on the keyboard and are saved on it.";
+    : n ? "Effects light the whole keyboard. To colour only the selected keys, use Per key or choose Static." : "Effects run on the keyboard and are saved on it. For a real ripple, typing trails and more, use Studio.";
 }
 $("#applyFx").onclick = e => {
   const name = $("#effect").value, fx = effects[name], o = {};
@@ -655,7 +655,7 @@ function applyState() {
   wellsUi(); snapUi(); paint(); applyAccent();
 }
 function fromRaw(raw) {  // effect bytes the keyboard reports: store, led, effect id, ...
-  const names = { 0: "off", 1: "static", 2: "breathing_one", 3: "spectrum", 4: "wave", 5: "reactive_key_one", 6: "reactive_ripple_one", 7: "starlight_one", 9: "fire" };
+  const names = { 0: "off", 1: "static", 2: "breathing_one", 3: "spectrum", 4: "wave", 5: "reactive_key_one", 6: "reactive_key_random", 7: "starlight_one", 9: "fire" };
   const name = names[parseInt(raw.slice(4, 6), 16)];
   if (name === "static") $("#c1").value = "#" + raw.slice(12, 18);
   if (name) { $("#effect").value = name; effectUi(); fxShown = fxFromForm(name); }

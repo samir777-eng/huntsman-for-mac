@@ -73,8 +73,11 @@ Current state of Huntsman for Mac (updated 2026-11-17). Version 0.1.0 published;
 - Installed .app opens and reads the keyboard.
 - New installer (2026-11-17): real re-install ran, quarantine stripped, ad-hoc signed bundle passes `codesign --verify --strict --deep`, app opens and connects.
 
+- Rapid Trigger ON and Snap Tap ON work on hardware (owner test, 2026-11-17).
+- Studio: rainbow, aurora, matrix, fire, typing glow, gaming WASD, music; effects keep running after the app quits (lighting service).
+- Firmware effect 06 ("ripple") only lights pressed keys in random colours, so it was removed.
+
 ## Not yet verified
-- Rapid Trigger ON, Snap Tap ON (protocol from easyrazer; only OFF was seen accepted).
 - Key tester inside the installed .app (Input Monitoring grant for the bundled Python).
 - install.sh rollback after a failed build on a real install (checked only in a scratch script).
 - Other models, Intel Macs, macOS < 26, SIGKILL during a test (relies on reconnect recovery, which is verified).

@@ -13,11 +13,11 @@ Works on Apple silicon Macs (M1, M2, M3, M4) without Razer Synapse or a Windows 
 | Feature | Saved on the keyboard | Notes |
 |---|---|---|
 | Actuation point, per key, 0.1 to 4.0 mm | Yes | The reset point follows 0.1 mm above it, or set it yourself |
-| Lighting effects (static, breathing, spectrum, wave, reactive, ripple, starlight) | Yes | Colours are corrected so the keyboard matches the colour you pick. All of them were accepted by the keyboard on hardware; the Fire effect some Razer keyboards have is refused by this one's firmware, so it isn't offered |
+| Lighting effects (static, breathing, spectrum, wave, reactive, starlight) | Yes | Colours are corrected so the keyboard matches the colour you pick. All of them were accepted by the keyboard on hardware; the Fire effect some Razer keyboards have is refused by this one's firmware, so it isn't offered |
 | Brightness | Yes | |
 | Per-key colours | No, kept until unplugged | Sent again when the app opens and at login |
-| Rapid Trigger | No, kept until unplugged | **Experimental**: not yet confirmed on real hardware |
-| Snap Tap (one pair) | No, kept until unplugged | **Experimental**: not yet confirmed on real hardware |
+| Rapid Trigger | No, kept until unplugged | Confirmed on hardware (2026-11-17) |
+| Snap Tap (one pair) | No, kept until unplugged | Confirmed on hardware (2026-11-17) |
 | Live key tester and actuation meter | – | While testing, the keyboard sends travel readings instead of typing |
 | Lighting Studio (layers, typing and sound effects, presets, smart lighting) | No, drawn by the app while it runs | **New in 0.2.0, not yet checked on hardware**. See [Lighting Studio](#lighting-studio) |
 
@@ -246,7 +246,7 @@ Open Huntsman for Mac, select keys (or none for all keys), pick a depth between 
 Yes, from the Rapid Trigger and Snap Tap tabs. Both are experimental and not yet confirmed on real hardware; please report how they work for you.
 
 **Can I set per-key RGB lighting without Synapse?**
-Yes. Use Lighting → Per key to colour individual keys, or Effect for spectrum, wave, breathing, reactive, ripple and starlight.
+Yes. Use Lighting → Per key to colour individual keys, or Effect for spectrum, wave, breathing, reactive and starlight. Ripple and other typing effects are in Studio.
 
 **Do I need Windows, Boot Camp or a virtual machine?**
 No. It talks to the keyboard directly over USB from macOS.

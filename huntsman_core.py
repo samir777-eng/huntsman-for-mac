@@ -46,8 +46,8 @@ EFFECTS = {
     "wave": ("04 {dir} {speed} 00", (1, 255)),
     "reactive_key_one": ("05 00 02 01 {rgb1}", None),
     "reactive_key_random": ("05 00 02 00", None),
-    "reactive_ripple_one": ("06 00 02 01 {rgb1}", None),
-    "reactive_ripple_random": ("06 00 02 00", None),
+    # Effect 06 ("ripple" in easyrazer) is accepted but only lights each pressed key in a random colour on
+    # firmware 1.03 (checked on hardware); a real ripple is app-drawn (Studio: reactive_ripple), so it is not offered.
     "starlight_random": ("07 00 {speed} 00", (1, 3)),
     "starlight_one": ("07 00 {speed} 01 {rgb1}", (1, 3)),
     "starlight_two": ("07 00 {speed} 02 {rgb1} {rgb2}", (1, 3)),

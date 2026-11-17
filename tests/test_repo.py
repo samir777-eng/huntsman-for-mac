@@ -8,12 +8,28 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 SKIP_DIRS = {".git", ".venv", "venv", "env", "__pycache__", ".pytest_cache"}
 
 
-def test_demo_layout_matches_layout_json():
+def _demo_layout_tool():
     spec = importlib.util.spec_from_file_location("make_demo_layout", ROOT / "tools" / "make_demo_layout.py")
     tool = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(tool)  # importing must not write anything
+    return tool
+
+
+def test_demo_layout_matches_the_models_and_layout_files():
+    tool = _demo_layout_tool()
     with open(ROOT / "ui" / "demo-layout.js") as f:
-        assert f.read() == tool.render(tool.read_layout()), "ui/demo-layout.js is stale: run python tools/make_demo_layout.py"
+        assert f.read() == tool.render(tool.read_models()), "ui/demo-layout.js is stale: run python tools/make_demo_layout.py"
+
+
+def test_demo_has_every_model_and_starts_with_the_v3_pro():
+    import json
+    import sys
+    sys.path.insert(0, str(ROOT))
+    import models
+    data = _demo_layout_tool().read_models()
+    assert [d["pid"] for d in data] == [f"{p:04X}" for p in models.MODELS]
+    with open(ROOT / "layout.json") as f:
+        assert data[0]["pid"] == "02A6" and data[0]["layout"] == json.load(f)
 
 
 def test_every_source_file_has_a_licence_header():

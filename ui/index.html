@@ -14,7 +14,7 @@
 
   <header class="head">
     <div class="device">
-      <span class="device-name">Huntsman V3 Pro</span>
+      <span class="device-title"><span class="device-name">Huntsman V3 Pro</span><span class="badge" id="expBadge" title="Support for this model is experimental: it hasn't been tested with this app" hidden>Experimental</span></span>
       <span class="device-state"><span class="led" id="led"></span><span id="conn">Connecting</span></span>
     </div>
     <nav class="tabs" id="sources" aria-label="Sections">
@@ -34,6 +34,7 @@
 
     <div class="pane" data-pane="actuation">
       <div class="pane-head"><h2>Actuation point</h2><span class="unsaved" id="actDirty" hidden>Not applied yet</span></div>
+      <p class="notice lock-note" hidden>Support for this keyboard is experimental, so changes are off. To allow them, turn on Experimental support in <button class="link" data-view="device">Keyboard</button>.</p>
       <p class="scope" id="actScope">All keys</p>
       <div class="act-top">
         <div>
@@ -55,18 +56,19 @@
       </div>
       <input class="travel" type="range" id="depth" min="0.1" max="4" step="0.1" value="2" aria-label="Actuation depth">
       <div class="scale"><span>0.1 mm, lightest</span><span>4.0 mm, deepest</span></div>
-      <button id="actTest" class="secondary test-btn">Test with a key press</button>
+      <button id="actTest" class="secondary test-btn" data-write>Test with a key press</button>
       <div class="presets" id="presets"></div>
       <div class="group">
         <label class="row"><span>Reset point</span><select id="relMode"><option value="auto">Just above</option><option value="custom">Custom</option></select></label>
         <div class="row" id="relRow" hidden><label for="rel">Resets at</label><span class="row-ctl"><input type="range" id="rel" min="0" max="3.9" step="0.1" value="1.5" aria-label="Reset point"><output id="relOut" aria-hidden="true"></output></span></div>
       </div>
       <p class="hint">A key types once pressed past the actuation point, and is ready again after rising above the reset point.</p>
-      <button class="primary" id="applyDepth">Apply to all keys</button>
+      <button class="primary" id="applyDepth" data-write>Apply to all keys</button>
     </div>
 
     <div class="pane" data-pane="rapid" hidden>
       <div class="pane-head"><h2>Rapid Trigger</h2><span class="unsaved" id="rtDirty" hidden>Not applied yet</span></div>
+      <p class="notice lock-note" hidden>Support for this keyboard is experimental, so changes are off. To allow them, turn on Experimental support in <button class="link" data-view="device">Keyboard</button>.</p>
       <p class="scope" id="rtScope">All keys</p>
       <div class="group">
         <label class="row"><span>Rapid Trigger</span><input type="checkbox" class="switch" id="rtOn"></label>
@@ -76,11 +78,12 @@
       </div>
       <p class="hint">The key fires again as soon as it moves down by the press distance after rising by the release distance, anywhere in its travel.</p>
       <p class="hint">Sent again by the lighting service when it starts, because the keyboard forgets it when unplugged.</p>
-      <button class="primary" id="applyRt">Apply to all keys</button>
+      <button class="primary" id="applyRt" data-write>Apply to all keys</button>
     </div>
 
     <div class="pane" data-pane="snap" hidden>
       <h2>Snap Tap</h2>
+      <p class="notice lock-note" hidden>Support for this keyboard is experimental, so changes are off. To allow them, turn on Experimental support in <button class="link" data-view="device">Keyboard</button>.</p>
       <p class="scope">One pair of keys</p>
       <div class="group">
         <label class="row"><span>First key</span><select id="snapA"></select></label>
@@ -88,11 +91,12 @@
       </div>
       <p class="hint">While both keys are held, only the one pressed last counts. Usually A and D.</p>
       <p class="status" id="snapState" role="status"></p>
-      <div class="buttons"><button class="primary" id="applySnap">Turn on</button><button id="offSnap">Turn off Snap Tap</button></div>
+      <div class="buttons"><button class="primary" id="applySnap" data-write>Turn on</button><button id="offSnap" data-write>Turn off Snap Tap</button></div>
     </div>
 
     <div class="pane" data-pane="lighting" hidden>
       <h2>Keyboard lighting</h2>
+      <p class="notice lock-note" hidden>Support for this keyboard is experimental, so changes are off. To allow them, turn on Experimental support in <button class="link" data-view="device">Keyboard</button>.</p>
       <p class="hint">Saved on the keyboard and runs without this app. For layered, typing and sound effects, use <button class="link" data-view="studio">Studio</button>.</p>
       <p class="hint warn" id="studioOnNote" hidden>Studio is lighting the keyboard now. Applying anything here turns Studio off.</p>
       <div class="seg" id="lightMode" role="tablist" aria-label="Lighting mode">
@@ -104,10 +108,10 @@
         <p class="hint">Only the selected keys change. The others keep their current colour; animated effects stop, since per-key colours replace them.</p>
         <div class="group"><label class="row"><span>Colour</span><input type="color" id="paint" value="#ff3b30"></label></div>
         <div class="wells" data-for="paint" role="group" aria-label="Paint colour"></div>
-        <div class="buttons"><button class="primary" id="paintSel">Paint selected keys</button><button id="eraseSel">Clear selected keys</button></div>
+        <div class="buttons"><button class="primary" id="paintSel" data-write>Paint selected keys</button><button id="eraseSel" data-write>Clear selected keys</button></div>
         <div class="group"><label class="row"><span>Unpainted keys</span><input type="color" id="bg" value="#ffffff"></label></div>
         <div class="wells" data-for="bg" role="group" aria-label="Unpainted keys colour"></div>
-        <button id="applyBg">Apply to unpainted keys</button>
+        <button id="applyBg" data-write>Apply to unpainted keys</button>
       </div>
       <div id="effectPane" class="subpane" role="tabpanel" aria-labelledby="tabEffect" hidden>
         <div class="group">
@@ -118,18 +122,19 @@
           <label class="row" id="dirRow"><span>Direction</span><select id="dir"><option value="right">Left to right</option><option value="left">Right to left</option></select></label>
         </div>
         <p class="hint" id="fxNote">Effects run on the keyboard and are saved on it. For a real ripple, typing trails and more, use Studio.</p>
-        <button class="primary" id="applyFx">Apply to whole keyboard</button>
+        <button class="primary" id="applyFx" data-write>Apply to whole keyboard</button>
       </div>
-      <div class="group"><div class="row"><label for="bright">Brightness</label><span class="row-ctl"><input type="range" id="bright" min="0" max="100" aria-label="Brightness"><output id="brightOut" aria-hidden="true"></output></span></div></div>
+      <div class="group"><div class="row"><label for="bright">Brightness</label><span class="row-ctl"><input type="range" id="bright" min="0" max="100" aria-label="Brightness" data-write><output id="brightOut" aria-hidden="true"></output></span></div></div>
     </div>
 
     <div class="pane studio-pane" data-pane="studio" hidden>
       <div class="pane-head">
         <h2>Studio</h2>
         <span class="unsaved" id="stDirty" hidden>Unsaved changes</span>
-        <label class="master"><span id="stOnLabel">Off</span><input type="checkbox" class="switch" id="stOn" aria-describedby="stOnHint" aria-label="Studio lighting"></label>
+        <label class="master"><span id="stOnLabel">Off</span><input type="checkbox" class="switch" id="stOn" aria-describedby="stOnHint" aria-label="Studio lighting" data-write></label>
       </div>
       <p class="hint" id="stOnHint">Effects drawn by this app and streamed to the keys while it runs.</p>
+      <p class="notice lock-note" hidden>Support for this keyboard is experimental, so changes are off. To allow them, turn on Experimental support in <button class="link" data-view="device">Keyboard</button>.</p>
       <div class="notice" id="stNotice" role="alert" hidden></div>
 
       <div class="preset-bar">
@@ -253,6 +258,24 @@
     <div class="pane" data-pane="device" hidden>
       <h2>Keyboard</h2>
       <div class="group" id="devInfo"></div>
+      <div class="exp" id="expBox" hidden>
+        <div class="group"><label class="row"><span>Experimental support</span><input type="checkbox" class="switch" id="expOn" aria-describedby="expWarn"></label></div>
+        <p class="hint warn" id="expWarn">This keyboard hasn't been tested with this app. When on, the app sends it only commands checked on the Huntsman V3 Pro; they may not work, or may light or change the wrong keys. The key tester stays off.</p>
+        <section class="led-check" id="ledBox" aria-labelledby="ledTitle" hidden>
+          <h3 id="ledTitle">LED check</h3>
+          <p class="hint">Lights one LED at a time. Note which key lights up, then paste the summary into an issue so this keyboard's layout can be confirmed.</p>
+          <div class="group">
+            <label class="row"><span>Row</span><select id="ledRow"></select></label>
+            <label class="row"><span>Column</span><select id="ledCol"></select></label>
+            <label class="row"><span>Key that lit</span><input type="text" id="ledKey" class="text-input" placeholder="e.g. Q, or none" maxlength="40" autocomplete="off" spellcheck="false"></label>
+          </div>
+          <p class="status" id="ledCell" role="status">Row 0, column 0</p>
+          <div class="buttons"><button id="ledPrev">Previous</button><button id="ledNext">Next</button></div>
+          <div class="buttons"><button class="primary" id="ledStart" data-write>Start LED check</button><button id="ledStop" hidden>End LED check</button></div>
+          <label class="field"><span>Summary for an issue</span><textarea id="ledReport" rows="6" readonly spellcheck="false"></textarea></label>
+          <button id="ledCopy" class="secondary">Copy summary</button>
+        </section>
+      </div>
       <div class="group">
         <div class="row"><span>App accent colour</span></div>
         <div class="row accent-row"><div class="wells" id="accentWells" role="group" aria-label="App accent colour"></div></div>
@@ -260,8 +283,8 @@
       </div>
       <p class="hint">Depth, effects and brightness are stored on the keyboard. Per-key colours, Rapid Trigger and Snap Tap stay in its memory until it's unplugged; this app sends them again when it opens and at login.</p>
       <button id="reload" class="secondary">Reconnect</button>
-      <button id="restore" class="secondary destructive">Restore factory depth…</button>
-      <p class="hint">Sets every key back to 1.2 mm and turns off Rapid Trigger and Snap Tap. Lighting is left alone.</p>
+      <button id="restore" class="secondary destructive" data-write>Restore factory depth…</button>
+      <p class="hint" id="restoreHint">Sets every key back to 1.2 mm and turns off Rapid Trigger and Snap Tap. Lighting is left alone.</p>
     </div>
   </aside>
 

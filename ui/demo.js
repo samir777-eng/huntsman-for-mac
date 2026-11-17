@@ -6,12 +6,24 @@
 (function () {
   const load = src => new Promise(res => { const s = document.createElement("script"); s.src = src; s.onload = res; document.body.appendChild(s); });
   Promise.all([load("demo-layout.js"), load("demo-studio.js")]).then(() => {
-    const layout = window.DEMO_LAYOUT;
+    // ?demo&model=02B0 previews another model (default: the V3 Pro); a picker in the header switches
+    const want = (new URLSearchParams(location.search).get("model") || "").toUpperCase();
+    const M = window.DEMO_MODELS.find(m => m.pid === want) || window.DEMO_MODELS[0];
+    const layout = M.layout;
     const id = n => layout.find(k => k.name === n).id;
     const ok = d => Promise.resolve({ ok: true, data: d });
+    let experimentalOn = false;
+    const locked = () => M.status === "experimental" && !experimentalOn;
+    // the same plain refusals as huntsman_core.gate, nothing "sent" while locked
+    const refuse = feature => !M.features[feature] ? Promise.resolve({ ok: false, reason: "unavailable", error: `This isn't available on the ${M.name}.` })
+      : feature === "key_tester" && M.status === "experimental" ? Promise.resolve({ ok: false, reason: "unavailable", error: `The key tester isn't offered on the ${M.name}: its support is experimental.` })
+      : locked() ? Promise.resolve({ ok: false, reason: "experimental", error: `Support for the ${M.name} is experimental. Turn on Keyboard, Experimental support to change its settings.` }) : null;
+    const gated = (feature, fn) => (...a) => refuse(feature) || fn(...a);
     const pts = {};
-    layout.forEach(k => { if (k.name !== "RIGHT_GUI") pts[k.id] = [2.0, 1.9]; });
-    ["W", "A", "S", "D"].forEach(n => { pts[id(n)] = [1.0, 0.9]; });
+    if (M.features.actuation) {
+      layout.forEach(k => { if (k.name !== "RIGHT_GUI") pts[k.id] = [2.0, 1.9]; });
+      ["W", "A", "S", "D"].forEach(n => { pts[id(n)] = [1.0, 0.9]; });
+    }
     const state = {
       rapid: { enabled: false, press: 0.3, release: 0.3, keys: "all", continuous: false },
       snap: null, effect: null,
@@ -25,27 +37,33 @@
     const speed = n => n === "wave" ? [1, 255] : n.startsWith("starlight") ? [1, 3] : null;
     let timer = null;
     const studio = demoStudio(layout, ok);
+    const info = () => { const { layout: _, ...m } = M; return { ...m, experimental_on: experimentalOn, locked: locked() }; };
     window.pywebview = { api: {
+      model: () => ok(info()),
+      experimental: () => ok(experimentalOn),
+      set_experimental: on => { experimentalOn = on; return ok(on); },
+      led_check: gated("per_key", (r, c) => { studio.studio_enable(false); return ok([r, c]); }),
+      end_led_check: () => ok(true),
       layout: () => Promise.resolve(layout),
-      effects: () => Promise.resolve(Object.fromEntries(Object.entries(fx).map(([n, t]) =>
+      effects: () => Promise.resolve(Object.fromEntries(Object.entries(fx).filter(([n]) => M.effects.includes(n)).map(([n, t]) =>
         [n, { speed: speed(n), colors: (t.match(/\{rgb/g) || []).length, dir: t.includes("{dir}") }]))),
       startup: () => ok([]),
       reconnect: () => ok([]),
-      info: () => ok({ version: "0.2.0", firmware: "1.03", profile: 1, brightness: 100, effect: "010501000001ffffff000000", state }),
+      info: () => ok({ version: "0.2.0", model: info(), firmware: "1.03", profile: 1, brightness: 100, effect: "010501000001ffffff000000", state }),
       read_depths: () => ok(pts),
-      set_depth: (keys, mm, rel) => {
+      set_depth: gated("actuation", (keys, mm, rel) => {
         const done = {};
         (keys.length ? keys : Object.keys(pts)).forEach(k => { done[k] = pts[k] = [mm, rel ?? +(mm - 0.1).toFixed(1)]; });
         return ok({ failed: [], done, count: Object.keys(done).length });
-      },
-      set_rapid: () => ok(true), set_snap: () => ok(true), set_prefs: () => ok(true),
+      }),
+      set_rapid: gated("rapid", () => ok(true)), set_snap: gated("snap_tap", () => ok(true)), set_prefs: () => ok(true),
       // the keyboard's own lighting replaces Studio, as in app.py
-      set_effect: () => { studio.studio_enable(false); return ok(true); },
-      set_custom: () => { studio.studio_enable(false); return ok(true); },
-      set_brightness: () => ok(null),   // live only
-      save_brightness: () => ok(null),  // written to the keyboard's memory
-      restore_original: () => ok(state),
-      start_test: () => {
+      set_effect: gated("lighting", () => { studio.studio_enable(false); return ok(true); }),
+      set_custom: gated("per_key", () => { studio.studio_enable(false); return ok(true); }),
+      set_brightness: gated("lighting", () => ok(null)),   // live only
+      save_brightness: gated("lighting", () => ok(null)),  // written to the keyboard's memory
+      restore_original: gated("actuation", () => ok(state)),
+      start_test: gated("key_tester", () => {
         const seq = ["W", "A", "S", "D"].map(id);
         let t = 0;
         timer = setInterval(() => {
@@ -55,11 +73,19 @@
           window.onDepth(d > 0.01 ? [[seq[i], +d.toFixed(2)]] : []);
         }, 33);
         return ok(true);
-      },
+      }),
       stop_test: () => { clearInterval(timer); return ok([]); },
       ...studio,
+      studio_enable: on => (on && refuse("studio")) || studio.studio_enable(on),
     } };
     document.title += " (demo)";
+    // model picker, demo only
+    const pick = document.createElement("select");
+    pick.id = "demoModel"; pick.setAttribute("aria-label", "Demo model");
+    window.DEMO_MODELS.forEach(m => { const o = document.createElement("option"); o.value = m.pid; o.textContent = m.name; pick.appendChild(o); });
+    pick.value = M.pid;
+    pick.onchange = () => { const q = new URLSearchParams(location.search); q.set("model", pick.value); location.search = q.toString().replace("demo=&", "demo&").replace(/demo=$/, "demo"); };
+    document.querySelector(".device-state").appendChild(pick);
     window.dispatchEvent(new Event("pywebviewready"));
   });
 

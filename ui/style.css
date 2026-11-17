@@ -429,3 +429,22 @@ h4 { margin: 4px 0 -6px; font-size: 12px; font-weight: 600; color: var(--ink-2);
 .field-err { min-height: 18px; margin: 0 0 10px; color: var(--danger); font-size: 12px; }
 
 @media (prefers-reduced-motion: reduce) { .level-bar { transition: none; } }
+
+/* ---------- other models: Experimental badge, switch, LED check ---------- */
+.device-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.badge {
+  flex: none; padding: 1px 7px; border-radius: 6px; border: 1px solid #5a4318; background: #2a2010;
+  color: #ffe2a8; font-size: 11px; font-weight: 600; letter-spacing: .1px;
+}
+.exp, .led-check { display: flex; flex-direction: column; gap: 12px; }
+.led-check { margin-top: 6px; }
+.text-input {
+  width: 140px; background: var(--bg); border: 1px solid var(--line-2); border-radius: 6px; padding: 3px 7px;
+  -webkit-user-select: text; user-select: text;
+}
+.led-check .field { margin: 0; }
+.led-check textarea {
+  font: 12px/1.45 ui-monospace, "SF Mono", Menlo, monospace; color: var(--ink); resize: vertical;
+  background: var(--bg); border: 1px solid var(--line-2); border-radius: 8px; padding: 8px 10px;
+  -webkit-user-select: text; user-select: text;
+}

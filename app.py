@@ -318,16 +318,17 @@ def service_socket():
 
 
 def start_service():
-    """Ask launchd to (re)start the lighting service's LaunchAgent; load it first if it isn't loaded."""
+    """Ask launchd to start the lighting service if it isn't running (never -k: killing a service that is still
+    starting would interrupt a USB write); load its LaunchAgent first if it isn't loaded."""
     target = f"gui/{os.getuid()}/{LIGHTING_LABEL}"
-    r = subprocess.run(["launchctl", "kickstart", "-k", target], capture_output=True, text=True, timeout=10)
+    r = subprocess.run(["launchctl", "kickstart", target], capture_output=True, text=True, timeout=10)
     if r.returncode == 0:
         return
     plist = os.path.expanduser(f"~/Library/LaunchAgents/{LIGHTING_LABEL}.plist")
     if not os.path.exists(plist):
         raise RuntimeError("its login item isn't installed")
     subprocess.run(["launchctl", "bootstrap", f"gui/{os.getuid()}", plist], capture_output=True, text=True, timeout=10)
-    r = subprocess.run(["launchctl", "kickstart", "-k", target], capture_output=True, text=True, timeout=10)
+    r = subprocess.run(["launchctl", "kickstart", target], capture_output=True, text=True, timeout=10)
     if r.returncode != 0:
         raise RuntimeError((r.stderr or "launchctl kickstart failed").strip())
 

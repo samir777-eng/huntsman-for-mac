@@ -400,12 +400,19 @@ def main(argv=None):
     svc = LightingService()
     server = ipc.Server(socket_path(), svc.handle, svc.subscribe)
     stopped = threading.Lock()
+    finished = threading.Event()
 
     def stop():
+        # A second caller (e.g. launchd's SIGTERM arriving during the logout quit) must wait for the first
+        # one's lighting restore instead of returning straight into os._exit.
         if not stopped.acquire(blocking=False):
+            finished.wait(depth_stream.SHUTDOWN_LIMIT if hasattr(depth_stream, "SHUTDOWN_LIMIT") else 3.0)
             return
-        server.close()
-        svc.shutdown()
+        try:
+            server.close()
+            svc.shutdown()
+        finally:
+            finished.set()
 
     class Delegate(NSObject):
         def applicationShouldTerminate_(self, sender):   # logout, restart, shut down
@@ -426,8 +433,8 @@ def main(argv=None):
             AppHelper.callAfter(lambda: nsapp.terminate_(None))   # exits 0: launchd leaves it quit
         _in_background(work)
 
+    server.start()   # answer the app's requests while starting, so it never thinks the service is down
     svc.start()
-    server.start()
     svc.run_reaper()
     menu = make_menu(svc, StatusMenu, on_open=open_app, on_quit=quit_service, quit_title=QUIT_TITLE)
 

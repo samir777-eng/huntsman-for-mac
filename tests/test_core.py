@@ -663,3 +663,17 @@ def test_recover_typing_never_raises():
         def refuse(self, r):
             return True
     assert ds.recover_typing(hc.Keyboard(Refuse())) is False
+
+
+def test_fire_effect_is_not_offered():
+    # Firmware 1.03 of the Huntsman V3 Pro refuses effect 09 (fire) with status 03; checked on hardware.
+    assert "fire" not in hc.EFFECTS
+    with pytest.raises(ValueError):
+        hc.encode_effect("fire")
+
+
+def test_not_supported_status_gets_a_plain_message():
+    req = hc.build_report(0x0F, 0x02, [1, 5, 9, 0, 0, 0])
+    resp = bytearray(req); resp[0] = 0x03; resp[88] = hc.crc(resp)
+    with pytest.raises(hc.DeviceError, match="doesn't support"):
+        hc.check_reply(req, bytes(resp))

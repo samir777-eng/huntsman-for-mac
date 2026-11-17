@@ -674,7 +674,8 @@ async function load() {
 async function start() {
   api = window.pywebview.api;
   layout = await api.layout(); effects = await api.effects();
-  for (const n of Object.keys(EFFECT_NAMES)) { const o = document.createElement("option"); o.value = n; o.textContent = EFFECT_NAMES[n]; $("#effect").appendChild(o); }
+  // only list effects the keyboard code supports (firmware 1.03 refuses some that other models have)
+  for (const n of Object.keys(EFFECT_NAMES).filter(n => effects[n])) { const o = document.createElement("option"); o.value = n; o.textContent = EFFECT_NAMES[n]; $("#effect").appendChild(o); }
   fillSnap(); drawBoard(); effectUi(); depthUi(); rtUi(); testerUi(); wellsUi(); show(view);
   try { const done = await call("startup"); if (done.length) toast("Sent again: " + done.join(", ")); } catch (e) {}
   await load();

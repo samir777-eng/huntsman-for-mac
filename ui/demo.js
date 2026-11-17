@@ -19,7 +19,7 @@
     const fx = {
       off: "", static: "{rgb1}", breathing_one: "{rgb1}", breathing_two: "{rgb1} {rgb2}", breathing_random: "",
       spectrum: "", wave: "{dir} {speed}", reactive_key_one: "{rgb1}", reactive_key_random: "", reactive_ripple_one: "{rgb1}",
-      reactive_ripple_random: "", starlight_random: "{speed}", starlight_one: "{speed} {rgb1}", starlight_two: "{speed} {rgb1} {rgb2}", fire: "",
+      reactive_ripple_random: "", starlight_random: "{speed}", starlight_one: "{speed} {rgb1}", starlight_two: "{speed} {rgb1} {rgb2}",
     };
     const speed = n => n === "wave" ? [1, 255] : n.startsWith("starlight") ? [1, 3] : null;
     let timer = null;

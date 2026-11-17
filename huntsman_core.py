@@ -29,6 +29,7 @@ RELEASE_GAP = 6               # Synapse default: 1.2 mm press (76) / 1.1 mm rele
 MIN_THR = RELEASE_GAP + 1     # 0.1 mm; 7 rather than 6 so the release point below it is at least 1, never 0
 FACTORY_THR, FACTORY_REL = 76, 70   # Synapse's defaults: 1.2 mm press, 1.1 mm release
 STATUS_NEW, STATUS_BUSY, STATUS_OK = 0x00, 0x01, 0x02
+STATUS_NOT_SUPPORTED = 0x03
 FRAME_ROWS, FRAME_COLS = 6, 22   # verified: rows 6-7 and column 22 are refused (status 05)
 FRAME_SIZE = 0x47
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -48,7 +49,7 @@ EFFECTS = {
     "starlight_random": ("07 00 {speed} 00", (1, 3)),
     "starlight_one": ("07 00 {speed} 01 {rgb1}", (1, 3)),
     "starlight_two": ("07 00 {speed} 02 {rgb1} {rgb2}", (1, 3)),
-    "fire": ("09 00 00 00", None),
+    # "fire" (09) is listed by easyrazer for this model, but firmware 1.03 refuses it (status 03), checked on hardware.
 }
 CUSTOM_EFFECT = (0x0C, [0, 0, 0x08])  # OpenRazer form: size 0x0C, store 0, led 0, effect 08
 WAVE_DIRS = {"left": 2, "right": 1}
@@ -90,6 +91,8 @@ def check_reply(req, resp):
     if resp[88] != crc(resp):
         raise DeviceError(f"reply to {req[6]:02X}:{req[7]:02X} failed its checksum")
     if resp[0] != STATUS_OK:
+        if resp[0] == STATUS_NOT_SUPPORTED:
+            raise DeviceError(f"The keyboard doesn't support this (command {req[6]:02X}:{req[7]:02X}).")
         raise DeviceError(f"keyboard refused {req[6]:02X}:{req[7]:02X} (status {resp[0]:02X})")
 
 

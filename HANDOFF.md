@@ -6,8 +6,10 @@ Current state of Huntsman for Mac, updated 2026-11-18.
 - **Released:** v0.3.0 "More models" (https://github.com/samir777-eng/huntsman-for-mac/releases/tag/v0.3.0).
   v0.1.0 and v0.2.0 are also tagged. `master` = v0.3.0 (merge of branch `v3-models`, kept for history).
 - **Repo:** public, GitHub `samir777-eng/huntsman-for-mac`, default branch `master`, SEO description + 18 topics.
-- **Tests:** 1225 passing (branch `windows`): `python -m pytest -q tests` (simulated keyboard, fake transports, headless Chromium UI
-  tests in demo mode). Dev env: `requirements.txt` + `requirements-dev.txt`, then `playwright install chromium`.
+- **Tests:** 1245 passing on the Mac (branch `windows`): `python -m pytest -q tests` (simulated keyboard, fake transports,
+  headless Chromium UI tests in demo mode). Dev env: `requirements.txt` + `requirements-dev.txt`, then
+  `playwright install chromium`. GitHub Actions `CI` (.github/workflows/ci.yml) runs it on macos-latest and
+  windows-latest (Windows: `requirements-win.txt`; 37 `mac_only` tests skipped, see tests/conftest.py).
 - **Installed on the maintainer's Mac** from `master` via `./install.sh`; app + lighting service running.
 
 ## What the product is
@@ -39,7 +41,12 @@ venv into the bundle and signs it ad hoc; unsigned apps can't read ~/Downloads):
   (`menubar.MenuState`, pystray `platforms/win_tray.py`), start at login via HKCU Run (`win_autostart.py`; the app
   starts the service itself), Raw Input typing reactions (`win_keys.py`), smart-lighting adapters
   (`win_smart.py`), Synapse guard + Dynamic Lighting notice (`win_guard.py`, `hc.SynapseRunning`), random pipe
-  name + key in %LOCALAPPDATA%. Depth stream deliberately not implemented on Windows. Next: W3 packaging/CI.
+  name + key in %LOCALAPPDATA%. Depth stream deliberately not implemented on Windows.
+- 0.4.0 (unreleased, branch `windows`): step W3 "packaging + CI" done (same plan, "W3" section):
+  `packaging/windows/huntsman.spec` (PyInstaller one-folder `Huntsman.exe`, manifest `platforms/bundle.py`),
+  `Huntsman.exe --version` / `--self-test`, workflow `Windows build` (dispatch, packaging pushes, release published →
+  `Huntsman-for-Windows-<version>.zip` attached). Frozen self-test passes on windows-latest; nothing run on a real
+  Windows PC with a keyboard. Next: W4 docs (README/landing Windows section, SmartScreen, CHANGELOG).
 - Layouts: `layout.json` (02A6) + `layouts/<PID>.json`; LED positions for experimental models are guesses
   (reasoning in the models.py docstring) until testers send LED check results.
 - Gate (`huntsman_core.gate`, `Keyboard.check_write`, `_check_command`): experimental models get reads only until

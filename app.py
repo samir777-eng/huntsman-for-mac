@@ -590,7 +590,11 @@ class Api:
 
     def _refused(self, feature):
         """Before a write that first turns Studio off: the plain refusal if the connected model won't take it, so
-        nothing changes. None when it may go ahead (or no keyboard is connected yet: the write itself checks)."""
+        nothing changes. None when it may go ahead (or no keyboard is connected yet: the write itself checks).
+        Windows: while Razer Synapse runs no handle is open, so the guard is asked here."""
+        reason = hc.synapse_block()
+        if reason:
+            return refused(hc.SynapseRunning(reason))
         kb = self._kb
         try:
             if kb is not None:
@@ -872,13 +876,15 @@ class Api:
         return self._studio("studio_state")
 
     def studio_enable(self, on):
-        """Turning Studio on from the window also brings start at login back on Windows, if the user removed it."""
-        if on is True and platforms.is_windows():
+        """Turning Studio on from the window also brings start at login back on Windows, if the user removed it
+        (only once the service has taken the switch: a refused one changes nothing)."""
+        r = self._studio("studio_enable", on=on)
+        if on is True and r.get("ok") and platforms.is_windows():
             try:
                 ensure_autostart(force=True)
             except Exception as e:
                 print(f"huntsman: couldn't turn on start at login: {e}", file=sys.stderr)
-        return self._studio("studio_enable", on=on)
+        return r
 
     def set_active_preset(self, name):
         return self._studio("set_active_preset", name=name)

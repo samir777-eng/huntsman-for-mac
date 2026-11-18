@@ -75,6 +75,7 @@ class MessageWindow:
         self._tid = None
         self._thread = None
         self._stopping = threading.Event()
+        self._state = threading.Lock()   # the stop flag against hwnd/_tid: a late thread never publishes its own
 
     def start(self, timeout=5.0):
         """Each start has its own stop flag: a thread from a start that timed out keeps the flag stop() set, so
@@ -91,8 +92,9 @@ class MessageWindow:
             raise OSError(failure[0] if failure else f"the {self.name} window didn't start")
 
     def stop(self, timeout=2.0):
-        self._stopping.set()
-        t, tid = self._thread, self._tid
+        with self._state:
+            self._stopping.set()
+            t, tid = self._thread, self._tid
         if tid is not None:
             try:
                 api().user32.PostThreadMessageW(tid, WM_QUIT, 0, 0)
@@ -138,14 +140,15 @@ class MessageWindow:
             ready.set()
             return
         tid = k.GetCurrentThreadId()
-        if stopping.is_set():   # start() gave up (timed out) before the window existed: leave nothing behind
+        with self._state:   # stop() sets the flag and reads _tid under the same lock
+            late = stopping.is_set()
+            if not late:
+                self.hwnd, self._tid = hwnd, tid
+        if late:   # start() gave up (timed out) before the window existed: leave nothing behind
             u.DestroyWindow(hwnd)
             u.UnregisterClassW(cls, hinst)
             ready.set()
             return
-        # tid first; a stop() from now on either sees it (and posts WM_QUIT) or has set the flag, which the loop
-        # checks before its first GetMessageW
-        self.hwnd, self._tid = hwnd, tid
         try:
             if self.on_create is not None:
                 self.on_create(hwnd)
@@ -165,5 +168,6 @@ class MessageWindow:
                 traceback.print_exc()
             u.DestroyWindow(hwnd)
             u.UnregisterClassW(cls, hinst)
-            if self._tid == tid:   # a newer start's window keeps its own
-                self.hwnd = self._tid = None
+            with self._state:
+                if self._tid == tid:   # a newer start's window keeps its own
+                    self.hwnd = self._tid = None

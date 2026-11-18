@@ -346,3 +346,39 @@ def test_a_connected_lighting_service_lets_go_of_the_keyboard(windows, monkeypat
     with pytest.raises(hc.SynapseRunning):
         svc._keyboard()
     assert svc._kb is None and t.sent == []
+
+
+def test_a_refused_write_leaves_studio_alone_while_synapse_runs(windows, monkeypatch):
+    """No handle is open while Synapse runs, so the pre-check asks the guard itself: Studio isn't switched off for
+    a write that is refused anyway."""
+    from test_models_wiring import FakeService, make_api
+    import app as appmod
+    procs, _ = windows
+    monkeypatch.setattr(appmod, "STATE_FILE", os.path.join(hc.data_dir(), "state.json"))
+    hc.set_experimental(True)
+    procs.names = ["RazerAppEngine.exe"]
+    _fake_hid(monkeypatch)
+    svc = FakeService()
+    api = make_api(appmod, svc)
+    r = api.set_effect("static", {"rgb1": [1, 2, 3]})
+    assert r["ok"] is False and r["reason"] == "synapse"
+    assert "studio_enable" not in svc.cmds()
+
+
+def test_turning_studio_on_while_synapse_runs_does_not_re_add_start_at_login(windows, monkeypatch):
+    from test_models_wiring import FakeService, make_api
+    import app as appmod
+    procs, _ = windows
+    calls = []
+    monkeypatch.setattr(appmod, "ensure_autostart", lambda force=False: calls.append(force))
+
+    class Refusing(FakeService):
+        def request(self, cmd, args=None):
+            if cmd == "studio_enable":
+                self.calls.append((cmd, dict(args or {})))
+                return {"ok": False, "error": "Razer Synapse is running"}
+            return super().request(cmd, args)
+    api = make_api(appmod, Refusing())
+    assert api.studio_enable(True)["ok"] is False and calls == []
+    api = make_api(appmod, FakeService())
+    assert api.studio_enable(True)["ok"] is True and calls == [True]

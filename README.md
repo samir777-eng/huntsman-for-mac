@@ -88,7 +88,8 @@ Version 0.4.0 adds a Windows build: the same app, as `Huntsman.exe`, with no Pyt
 What's different on Windows:
 
 - **Every model is experimental**, the Huntsman V3 Pro too: nothing that changes the keyboard is sent until you turn
-  on **Keyboard → Experimental support** (see [Experimental support](#experimental-support)). Reads always work.
+  on **Keyboard → Experimental support** (see [Experimental support](#experimental-support)). Reads always work,
+  except while Razer Synapse runs (below).
 - **No key tester.** It puts the keyboard into a mode where it stops typing, so it stays off on an untested platform.
 - **Hands off while Razer Synapse runs.** Synapse overwrites the keyboard's live settings, and two programs talking
   to it at once mix up the replies. While Synapse (`RazerAppEngine.exe`, or Synapse 3 or 2) is running, the app and the

@@ -75,7 +75,11 @@ function setConn(ok, text) { $("#led").className = "led " + (ok ? "on" : "err");
 async function call(name, ...args) {
   const r = await api[name](...args);
   // r.reason: the model refused it before anything was sent (experimental or missing feature), still connected
-  if (!r.ok) { toast(r.error, true); if (!r.reason) setConn(false, "Not connected"); throw new Error(r.error); }
+  if (!r.ok) {
+    toast(r.error, true); if (!r.reason) setConn(false, "Not connected");
+    if (r.reason === "synapse" && !platform.blocked) { await readPlatform(); platformUi(); lockUi(); }   // Synapse started since
+    throw new Error(r.error);
+  }
   setConn(true); return r.data;
 }
 async function busy(btn, fn) { btn.disabled = true; try { await fn(); } catch (e) { /* toast shown */ } finally { btn.disabled = false; refreshButtons(); } }
@@ -258,10 +262,13 @@ function platformUi() {
   notes.forEach(t => { const p = document.createElement("p"); p.textContent = t; box.appendChild(p); });
   box.hidden = !notes.length;
   if (model?.platform === "windows") $("#expBadge").title = "Windows support is experimental: it hasn't been tested on a Windows PC";
-  if (platform.blocked && !guardTimer) guardTimer = setTimeout(async () => {
+  if ((platform.blocked || model?.blocked) && !guardTimer) guardTimer = setTimeout(async () => {
     guardTimer = null;
     await readPlatform();
-    if (platform.blocked) platformUi(); else { await load(); refreshButtons(); }
+    if (platform.blocked) { platformUi(); return; }
+    await load();
+    if (model) try { const done = await call("startup"); if (done.length) toast("Sent again: " + done.join(", ")); } catch (e) {}
+    refreshButtons();
   }, 5000);
 }
 function applyModel() {

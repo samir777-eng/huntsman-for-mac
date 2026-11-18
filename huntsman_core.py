@@ -85,7 +85,8 @@ class ExperimentalLocked(DeviceError):
 
 
 class SynapseRunning(ExperimentalLocked):
-    """Windows: Razer Synapse is running, so every write is refused (platforms/win_guard.py). Raised before anything
+    """Windows: Razer Synapse is running, so every write is refused (platforms/win_guard.py), and the hidapi transport
+    won't open the keyboard or exchange a report at all, reads included (platforms/win_hid.py). Raised before anything
     is sent. A kind of ExperimentalLocked so every path that handles "refused, still connected" handles it too."""
 
 
@@ -198,7 +199,8 @@ def gate(model, feature):
     """Raise unless a write for feature may go to model. The verified model is never restricted on the Mac (and the
     switch isn't even read for it). Experimental models, and on Windows every model: features they lack and the key
     tester always raise FeatureUnavailable; everything else raises ExperimentalLocked until Experimental support is
-    on. On Windows, while Razer Synapse runs, every write raises SynapseRunning (platforms/win_guard.py)."""
+    on. On Windows, while Razer Synapse runs, every write raises SynapseRunning (platforms/win_guard.py); reads are
+    stopped too, by the transport (platforms/win_hid.py)."""
     windows = platforms.is_windows()
     if model.verified and model.has(feature) and not windows:
         return

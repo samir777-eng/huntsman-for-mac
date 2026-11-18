@@ -345,6 +345,8 @@ class LightingService:
         self._do_restore()
 
     def _do_restore(self):
+        if hc.synapse_block():   # Windows: Razer Synapse owns the lights; nothing to put back, nothing is sent
+            return
         with self._dev, self.studio.engine.paused():
             try:
                 appmod.restore_lighting(self._keyboard())

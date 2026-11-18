@@ -268,3 +268,27 @@ def test_a_windowed_exe_logs_to_the_log_file(windows, tmp_path, monkeypatch):
     with open(platforms.log_path(), encoding="utf-8") as f:
         assert "hello from the service" in f.read()
     sys.stderr.close()
+
+
+def test_studio_switched_off_while_synapse_runs_stays_off(app, fake, hooks, windows):
+    """The restore after switching off finds Synapse: nothing to put back (Synapse owns the lights), and the
+    user's off is not undone when Synapse quits."""
+    import service
+    procs, clock = windows
+    hc.set_experimental(True)
+    s = service.LightingService(engine_cls=FakeEngine, inputs=hooks["inputs"], clock=clock)
+    s.start()
+    try:
+        s.set_studio_enabled(True)
+        procs.names = ["RazerAppEngine.exe"]
+        clock.t += win_guard.CHECK_EVERY
+        s.check_guard()
+        s.set_studio_enabled(False)
+        s._restore_lighting()            # what the engine's restore callback does; must not raise
+        assert s._guard_wants_on is False
+        procs.names = []
+        clock.t += win_guard.CHECK_EVERY
+        s.check_guard()
+        assert not s.studio.engine.running
+    finally:
+        s.shutdown()

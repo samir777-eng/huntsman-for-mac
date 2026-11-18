@@ -8,7 +8,9 @@ All notable changes to this project are listed here. Versions follow [Semantic V
 - Windows: while Razer Synapse runs, nothing at all reaches the keyboard, reads included (two programs on the same
   HID interface swap each other's replies). The hidapi transport refuses to open the keyboard or send a report, the
   app and the lighting service let go of an open handle, the window shows the last model it saw (locked) and polls
-  only the Synapse check, not the keyboard. The connection line says "Paused: Razer Synapse is running".
+  only the Synapse check, not the keyboard. The connection line says "Paused: Razer Synapse is running". A write
+  refused because of Synapse no longer switches Studio off first, and Studio switched off while Synapse runs stays
+  off when Synapse quits. If Synapse starts while the window is open, the first refused change shows the notice.
 - V2 Analog: without a reset point (the window's *Just above*, `huntsman.py depth`) the reset point now always follows
   0.1 mm above the new actuation point, in the saved and the live profile alike. 0.4.0 kept the stored reset byte
   when it still fitted, so saved and live could end up different and the reset point didn't match the window. Keys

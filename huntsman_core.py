@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Huntsman for Mac contributors
-"""Razer Huntsman protocol on macOS, no Synapse. Verified on the Huntsman V3 Pro (1532:02A6); the other models in
+"""Razer Huntsman protocol on macOS (and, experimental, Windows), no Synapse. Verified on the Huntsman V3 Pro (1532:02A6); the other models in
 models.py get the same commands, behind the experimental-support switch (gate()).
 
 Sources: OpenRazer (packet, lighting), janeblower/easyrazer (analog, Rapid Trigger, Snap Tap,
@@ -12,15 +12,18 @@ Each key has an actuation point (thr_l, byte 3) and a release point (thr_h, byte
 must sit below the actuation, and by default it follows it RELEASE_GAP units below, like Synapse.
 Each model maps these bytes to mm on its own scale (models.Scale): the constants below are the V3 Pro's; the
 V2 Analog's (experimental) is models.V2_ANALOG_SCALE.
+
+Windows (experimental, untested on a Windows PC): the same protocol over hidapi (platforms/win_hid.py, chosen by
+open_transport), and the gate treats every model as experimental there and never runs the key tester (platforms.py).
 """
 import contextlib
-import fcntl
 import json
 import os
 import threading
 import time
 
 import models
+import platforms
 
 __version__ = "0.3.0"
 
@@ -152,8 +155,7 @@ def experimental_enabled():
 def set_experimental(on):
     """Remember the switch in state.json, keeping everything else there (same lock as app.update_state)."""
     path = _state_path()
-    with open(os.path.join(os.path.dirname(path), "state.lock"), "a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    with platforms.file_lock(os.path.join(os.path.dirname(path), "state.lock")):
         try:
             with open(path) as f:
                 raw = json.load(f)
@@ -188,18 +190,37 @@ READ_COMMANDS = {(0x00, 0x81): None, (0x05, 0x84): None, (0x0F, 0x82): None, (0x
 
 
 def gate(model, feature):
-    """Raise unless a write for feature may go to model. The verified model is never restricted (and the switch
-    isn't even read for it). Experimental models: features they lack and the key tester always raise
-    FeatureUnavailable; everything else raises ExperimentalLocked until Experimental support is on."""
-    if model.verified and model.has(feature):
+    """Raise unless a write for feature may go to model. The verified model is never restricted on the Mac (and the
+    switch isn't even read for it). Experimental models, and on Windows every model: features they lack and the key
+    tester always raise FeatureUnavailable; everything else raises ExperimentalLocked until Experimental support is
+    on."""
+    windows = platforms.is_windows()
+    if model.verified and model.has(feature) and not windows:
         return
     if not model.has(feature):
         raise FeatureUnavailable(f"{FEATURE_NAMES[feature]} isn't available on the {model.name}.")
     if feature == "key_tester":
+        if windows:
+            raise FeatureUnavailable("The key tester isn't offered on Windows: Windows support is experimental.")
         raise FeatureUnavailable(f"The key tester isn't offered on the {model.name}: its support is experimental.")
     if not experimental_enabled():
+        if windows:
+            raise ExperimentalLocked(f"Windows support is experimental (not yet tested on a Windows PC). Turn on "
+                                     f"Keyboard, Experimental support to change the {model.name}'s settings.")
         raise ExperimentalLocked(f"Support for the {model.name} is experimental. Turn on Keyboard, Experimental "
                                  "support to change its settings.")
+
+
+def model_info(model):
+    """model.info() as the window should see it on this platform, plus "platform", "platform_experimental" and
+    "model_status" (the table's own status). On Windows every model reports "experimental" and no key tester."""
+    d = model.info()
+    d["model_status"] = model.status
+    if platforms.is_windows():
+        d["status"] = models.EXPERIMENTAL
+        d["features"] = {**d["features"], "key_tester": False}
+    d.update(platforms.info())
+    return d
 
 
 # ---------- pure encoding (unit-tested) ----------
@@ -346,9 +367,17 @@ _USB_LOCK = threading.RLock()
 def usb_lock():
     """The process lock, plus a file lock so the app, the login agent and the CLI never interleave."""
     with _USB_LOCK:
-        with open(os.path.join(data_dir(), "usb.lock"), "a") as f:
-            fcntl.flock(f, fcntl.LOCK_EX)
-            yield  # closing the file releases the flock
+        with platforms.file_lock(os.path.join(data_dir(), "usb.lock")):
+            yield
+
+
+def open_transport():
+    """The keyboard transport for this platform: pyusb/libusb on the Mac, hidapi on Windows (experimental)."""
+    if platforms.is_windows():
+        from platforms import win_hid
+        return win_hid.HidTransport()
+    return UsbTransport()
+
 
 class UsbTransport:
     def __init__(self):
@@ -424,7 +453,7 @@ class UsbTransport:
 
 class Keyboard:
     def __init__(self, transport=None, model=None):
-        self.t = transport or UsbTransport()
+        self.t = transport or open_transport()
         detected = getattr(self.t, "model", None)
         self.model = model or (detected if isinstance(detected, models.Model) else None) or active_model()
 
@@ -445,7 +474,9 @@ class Keyboard:
             feature = READ_COMMANDS[(cls, cid)]
             if feature and not self.model.has(feature):
                 raise FeatureUnavailable(f"{FEATURE_NAMES[feature]} isn't available on the {self.model.name}.")
-        elif not self.model.verified:
+            if feature == "key_tester" and platforms.is_windows():   # driver mode is never used on Windows
+                gate(self.model, feature)
+        elif not self.model.verified or platforms.is_windows():
             raise FeatureUnavailable(f"command {cls:02X}:{cid:02X} is not sent to the {self.model.name}.")
 
     def cmd(self, cls, cid, args=(), size=None):
@@ -677,8 +708,9 @@ class Keyboard:
 
 
 def data_dir():
-    """Per-user settings live outside the code folder."""
-    d = os.path.expanduser("~/Library/Application Support/Huntsman for Mac")
+    """Per-user settings live outside the code folder (platforms.data_dir: Application Support on the Mac,
+    %APPDATA% on Windows)."""
+    d = platforms.data_dir()
     os.makedirs(d, exist_ok=True)
     return d
 

@@ -8,16 +8,15 @@ app's window quits, so Studio effects keep running (like Razer Synapse's service
 
 - the Studio controller (studio.py): lighting engine, typing and sound listeners, smart lighting;
 - the menu bar icon: Lighting on/off, presets, Open Huntsman for Mac, Quit lighting service;
-- a UNIX socket at data_dir()/service.sock (ipc.py) for the app: the Studio commands in SPECS, an event stream,
+- a UNIX socket at data_dir()/service.sock (ipc.py; a named pipe on Windows) for the app: the Studio commands in SPECS, an event stream,
   and pause leases. The app takes a lease around every keyboard operation; a lease ends on resume or when it
   isn't renewed in time (a crashed app), and on expiry the service first switches a keyboard left in driver
   mode (key tester) back to typing, then resumes the engine.
 
-One instance per user (flock on data_dir()/service.lock). At start it re-sends what the keyboard keeps only in
+One instance per user (a lock on data_dir()/service.lock: flock, or msvcrt.locking on Windows). At start it re-sends what the keyboard keeps only in
 RAM (per-key colours, Rapid Trigger, Snap Tap: the old apply-saved login item's job) and turns Studio back on if
 it was on. Quitting (menu, logout, SIGTERM) stops the engine and restores the keyboard's own lighting to RAM.
 """
-import fcntl
 import os
 import secrets
 import subprocess
@@ -33,6 +32,7 @@ import app as appmod  # noqa: E402  (shared state.json and keyboard helpers; no 
 import depth_stream  # noqa: E402
 import huntsman_core as hc  # noqa: E402
 import ipc  # noqa: E402
+import platforms  # noqa: E402
 import studio as studio_mod  # noqa: E402
 
 LABEL = "io.github.huntsman-for-mac.lighting"
@@ -68,16 +68,19 @@ def socket_path():
     return os.path.join(hc.data_dir(), "service.sock")
 
 
+def service_endpoint():
+    """The UNIX socket socket_path() on the Mac; on Windows a named pipe with an authkey file (ipc.PipeEndpoint)."""
+    return ipc.service_endpoint(hc.data_dir())
+
+
 def lock_path():
     return os.path.join(hc.data_dir(), "service.lock")
 
 
 def acquire_instance_lock(path):
-    """An fd holding an exclusive flock on path, or None if another service holds it."""
+    """An fd holding the exclusive lock on path, or None if another service holds it."""
     fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
+    if not platforms.try_lock_fd(fd):
         os.close(fd)
         return None
     return fd
@@ -466,7 +469,7 @@ def main(argv=None):
     nsapp = NSApplication.sharedApplication()
     nsapp.setActivationPolicy_(1)   # accessory: menu bar icon, no Dock icon, no app menu
     svc = LightingService()
-    server = ipc.Server(socket_path(), svc.handle, svc.subscribe)
+    server = ipc.Server(service_endpoint(), svc.handle, svc.subscribe)
     stopped = threading.Lock()
     finished = threading.Event()
 

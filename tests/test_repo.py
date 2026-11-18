@@ -110,3 +110,17 @@ def test_install_copies_the_model_table_and_layouts():
     sh = _install_sh()
     assert '"$DIR"/models.py' in sh
     assert '"$DIR/layouts"' in sh
+
+
+def test_install_copies_the_platform_layer():
+    # huntsman_core, app, service and ipc import platforms/ on the Mac too
+    assert '"$DIR/platforms"' in _install_sh()
+
+
+def test_windows_requirements_are_pinned():
+    lines = [ln.strip() for ln in (ROOT / "requirements-win.txt").read_text().splitlines()
+             if ln.strip() and not ln.startswith("#")]
+    names = {ln.split("==")[0].lower() for ln in lines}
+    assert all("==" in ln for ln in lines), "pin every Windows dependency exactly"
+    assert {"hidapi", "pywebview", "pythonnet", "pystray", "pillow", "sounddevice", "numpy"} <= names
+    assert not names & {"pyusb", "pyobjc-core"}   # Mac-only

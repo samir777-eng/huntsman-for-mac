@@ -7,7 +7,6 @@ background lighting service (service.py), reached through ServiceLink. Every key
 lease on the service so its frames never interleave with them."""
 import contextlib
 import copy
-import fcntl
 import json
 import os
 import re
@@ -23,6 +22,7 @@ sys.path.insert(0, HERE)
 import depth_stream  # noqa: E402
 import huntsman_core as hc  # noqa: E402
 import ipc  # noqa: E402
+import platforms  # noqa: E402
 import studio as studio_mod  # noqa: E402
 
 STATE_FILE = os.path.join(hc.data_dir(), "state.json")
@@ -166,8 +166,7 @@ def save_state(state):
 def update_state():
     """Read-modify-write state.json under a file lock: the app, the login agent and the CLI can run
     at once, and without it one would silently undo the other's change. Saved only if the body succeeds."""
-    with open(os.path.join(os.path.dirname(STATE_FILE), "state.lock"), "a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    with platforms.file_lock(os.path.join(os.path.dirname(STATE_FILE), "state.lock")):
         st = load_state()
         yield st
         save_state(st)
@@ -334,6 +333,11 @@ def service_socket():
     return os.path.join(hc.data_dir(), "service.sock")
 
 
+def service_endpoint():
+    """Where the lighting service listens: the UNIX socket service_socket() on the Mac, a named pipe on Windows."""
+    return ipc.service_endpoint(hc.data_dir())
+
+
 def start_service():
     """Ask launchd to start the lighting service if it isn't running (never -k: killing a service that is still
     starting would interrupt a USB write); load its LaunchAgent first if it isn't loaded."""
@@ -411,7 +415,7 @@ class ServiceLink:
 
     def _default_client(self):
         if self._client is None:
-            self._client = ipc.Client(service_socket())
+            self._client = ipc.Client(service_endpoint())
         return self._client
 
     def _request(self, cmd, args):
@@ -447,7 +451,7 @@ class ServiceLink:
         return Lease(self, self._lease_seconds, self._renew_every)
 
     def subscribe(self, on_event):
-        return ipc.Subscription(service_socket(), on_event, frames=True)
+        return ipc.Subscription(service_endpoint(), on_event, frames=True)
 
 
 class Api:
@@ -560,7 +564,7 @@ class Api:
         """The connected model (connecting first): name, PID, status, matrix, effects, features, whether
         Experimental support is on and whether writes are locked until it is."""
         def f(kb):
-            return {**kb.model.info(), "experimental_on": hc.experimental_enabled(), "locked": not kb.allowed("lighting")}
+            return {**hc.model_info(kb.model), "experimental_on": hc.experimental_enabled(), "locked": not kb.allowed("lighting")}
         return self._run(f)
 
     def layout(self):
@@ -594,7 +598,7 @@ class Api:
 
     def info(self):
         def f(kb):
-            return {"version": hc.__version__, "model": kb.model.info(), "firmware": kb.firmware(), "profile": kb.saved,
+            return {"version": hc.__version__, "model": hc.model_info(kb.model), "firmware": kb.firmware(), "profile": kb.saved,
                     "brightness": kb.brightness(), "effect": kb.get_effect_raw().hex(),
                     "state": load_state()}
         return self._run(f)

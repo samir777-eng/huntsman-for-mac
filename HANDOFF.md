@@ -6,7 +6,7 @@ Current state of Huntsman for Mac, updated 2026-11-18.
 - **Released:** v0.3.0 "More models" (https://github.com/samir777-eng/huntsman-for-mac/releases/tag/v0.3.0).
   v0.1.0 and v0.2.0 are also tagged. `master` = v0.3.0 (merge of branch `v3-models`, kept for history).
 - **Repo:** public, GitHub `samir777-eng/huntsman-for-mac`, default branch `master`, SEO description + 18 topics.
-- **Tests:** 972 passing: `python -m pytest -q tests` (simulated keyboard, fake transports, headless Chromium UI
+- **Tests:** 1086 passing: `python -m pytest -q tests` (simulated keyboard, fake transports, headless Chromium UI
   tests in demo mode). Dev env: `requirements.txt` + `requirements-dev.txt`, then `playwright install chromium`.
 - **Installed on the maintainer's Mac** from `master` via `./install.sh`; app + lighting service running.
 
@@ -31,6 +31,11 @@ venv into the bundle and signs it ad hoc; unsigned apps can't read ~/Downloads):
   V3 models use `V3_SCALE` (the old constants; golden bytes unchanged). `Model.info()["actuation"]` drives the UI
   slider/presets/reset/restore button. No Rapid Trigger/Snap Tap on the V2 Analog (host-side in Synapse).
   Tests: tests/test_v2_analog.py, UI in tests/test_ui_models.py. Plan: docs/plans/2026-11-18-v2-analog-actuation.md.
+- 0.4.0 (unreleased, branch `windows`): Windows build, step W1 "core" done (docs/plans/2026-11-18-windows.md):
+  `platforms/` (selector, %APPDATA%/%LOCALAPPDATA% folders, fcntl/msvcrt locks, hidapi `HidTransport`), IPC
+  endpoints (UNIX socket on the Mac, named pipe + authkey file on Windows), Windows gate (every model experimental,
+  no key tester), `requirements-win.txt`. Nothing run on a Windows PC. Next: tray, autostart, raw input, depth
+  stream, Synapse guard, packaging.
 - Layouts: `layout.json` (02A6) + `layouts/<PID>.json`; LED positions for experimental models are guesses
   (reasoning in the models.py docstring) until testers send LED check results.
 - Gate (`huntsman_core.gate`, `Keyboard.check_write`, `_check_command`): experimental models get reads only until

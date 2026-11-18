@@ -1,0 +1,18 @@
+# Windows build (experimental, untested on a Windows PC), 2026-11-18, Python 3.13 64-bit.
+# hidapi (HID feature reports, platforms/win_hid.py), pywebview + pythonnet (EdgeChromium/WebView2 window),
+# pystray + Pillow (tray icon), sounddevice + numpy (Studio sound input) are the direct dependencies; the rest are what
+# they pull in on Windows. Versions match the Mac's requirements.txt where both use a package.
+bottle==0.13.4
+cffi==2.1.1
+clr_loader==0.3.1
+hidapi==0.15.0
+numpy==2.5.5
+Pillow==13.0.0
+proxy_tools==0.1.0
+pycparser==3.12
+pystray==0.19.5
+pythonnet==3.2.1
+pywebview==6.2.1
+six==1.17.0
+sounddevice==0.5.6
+typing_extensions==4.16.0

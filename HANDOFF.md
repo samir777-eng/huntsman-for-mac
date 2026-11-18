@@ -84,7 +84,8 @@ Studio layers/params/presets/Sound/Typing/Smart panels, effects continuing after
 
 ## Next (pick with the owner)
 1. (Done 2026-11-18) GitHub social preview set to `docs/social-preview.png` (1280×640, from the README banner).
-2. Optional GitHub Pages landing page for search visibility.
+2. (Done 2026-11-18) Landing page live at https://samir777-eng.github.io/huntsman-for-mac/ (GitHub Pages, master
+   /docs, `docs/index.html`; tests in tests/test_site.py). Keep its facts in step with the README.
 3. Collect tester reports for the experimental models (issue template new_model.md); promote a model to `verified`
    in models.py only after a tester confirms it, and fix its LED map from the LED check.
 4. Work through "Not yet verified".
@@ -93,3 +94,4 @@ Studio layers/params/presets/Sound/Typing/Smart panels, effects continuing after
 - docs/plans/2026-11-17-open-source-release.md (v0.1.0)
 - docs/plans/2026-11-17-v2-lighting-studio.md (v0.2.0)
 - docs/plans/2026-11-17-v3-more-models.md (v0.3.0)
+- docs/plans/2026-11-18-landing-page.md (GitHub Pages)

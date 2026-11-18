@@ -274,7 +274,7 @@ Checked on 2026-11-17 with a Huntsman V3 Pro (1532:02A6), firmware 1.03, wired, 
 | Actuation and reset points: written, read back, still there after unplugging | The six models with [experimental support](#experimental-support) |
 | Rapid Trigger and Snap Tap turned on | Intel Macs |
 | Keyboard lighting effects, per-key colours and brightness | macOS versions before 26 |
-| Colour correction (the keyboard matches the picker) | The key tester's new place in Actuation (see below) |
+| Colour correction (the keyboard matches the picker) | |
 | Key tester readings, and switching the keyboard back to typing afterwards | A hard kill (SIGKILL) during a key test; this relies on the recovery on the next connect, which is checked |
 | Quitting the app with SIGTERM during a key test: the keyboard types again | The name macOS shows in the lighting service's permission prompts |
 | A keyboard left in test mode is put back to typing the next time the app or the command line connects | Keyboard lighting coming back at logout or shutdown |
@@ -285,9 +285,8 @@ Checked on 2026-11-17 with a Huntsman V3 Pro (1532:02A6), firmware 1.03, wired, 
 
 **Version 0.3.0** was checked again on the same keyboard: the window, actuation, Rapid Trigger and Snap Tap, keyboard
 effects, per-key colours and brightness, Studio typing and ambient presets (also after quitting the app), and
-starting and stopping the key tester with typing coming back. All passed. After that check, the key tester moved from
-its own tab into Actuation. It sends the same commands (tests pin the bytes), but the new layout hasn't been tried on
-a real keyboard yet.
+starting and stopping the key tester with typing coming back. All passed. The key tester's new place in Actuation was
+then checked too (2026-11-18): the meter and readings update, and typing comes back after stopping.
 
 ## Install
 

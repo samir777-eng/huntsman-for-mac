@@ -82,3 +82,7 @@ the last key's types at / resets at / deepest press. Anything the Key tester tab
 stays available while testing in Actuation. Models without the key tester: button hidden, as now.
 Tests first: UI tests that the tab is gone, the button starts/stops one session, readings rows update, stop on tab
 change/close as before; no change in bytes (golden key tester scenario passes unchanged).
+
+## Closeout (2026-11-18)
+README restyled (banner, demo GIFs, feature grid; facts unchanged, reviewed twice). Key tester in Actuation checked on
+the 02A6 by the owner (build 1ba2191): meter and readings update, typing back after stop. Released as v0.3.0.

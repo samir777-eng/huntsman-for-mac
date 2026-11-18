@@ -33,8 +33,10 @@ All notable changes to this project are listed here. Versions follow [Semantic V
 - Every experimental model: nothing in this release has been seen working on them. Their LED positions are a guess
   (the V2 Analog's come from easyrazer's map) until a tester confirms them with the LED check.
 - Whether the V3 Pro 8KHz reports its active profile the same way as the V3 Pro.
-- The V3 Pro (02A6) with this release, before it's tagged. The golden-byte tests check that it gets the same packets
-  as in 0.2.0.
+
+Checked on the V3 Pro (02A6) before release: the window, actuation, Rapid Trigger and Snap Tap, keyboard effects,
+per-key colours and brightness, Studio (typing, ambient, after quitting the app), and the key tester in Actuation with
+typing coming back.
 
 ## 0.2.0 – 2026-11-17
 

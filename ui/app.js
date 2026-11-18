@@ -230,7 +230,9 @@ function refreshButtons() {
 /* ---------- models: experimental support, features, LED check ---------- */
 const FEATURE_TABS = { actuation: "actuation", rapid: "rapid", snap: "snap_tap" };
 const experimentalModel = () => !!model && model.status === "experimental";
-const writesLocked = () => experimentalModel() && !model.experimental_on;
+const switchLocked = () => experimentalModel() && !model.experimental_on;
+// Windows: while Razer Synapse runs (model.blocked) every write is refused too
+const writesLocked = () => switchLocked() || !!model?.blocked;
 // No keyboard answered (model null): claim no feature, so only Lighting and Studio show until one connects
 const hasFeature = f => !!model && !!model.features[f];
 const viewShown = v => !FEATURE_TABS[v] || hasFeature(FEATURE_TABS[v]);
@@ -240,13 +242,28 @@ let lockShown = false;
 function lockUi() {
   const lk = writesLocked();
   $$("[data-write]").forEach(e => { if (lk) e.disabled = true; else if (lockShown) e.disabled = false; });
-  $$(".lock-note").forEach(n => n.hidden = !lk);
+  $$(".lock-note").forEach(n => n.hidden = !switchLocked());
   const was = lockShown; lockShown = lk;
   if (was && !lk) refreshButtons();
+}
+// Windows notices: why writes are off (Razer Synapse) and settings that get in the way (Dynamic Lighting). While
+// Synapse runs the model is read again every few seconds, so the controls come back once it quits.
+let guardTimer = null;
+function platformUi() {
+  const notes = model ? [model.blocked, ...(model.notices || [])].filter(Boolean) : [];
+  const box = $("#platformNotice"); box.innerHTML = "";
+  notes.forEach(t => { const p = document.createElement("p"); p.textContent = t; box.appendChild(p); });
+  box.hidden = !notes.length;
+  if (model?.platform === "windows") $("#expBadge").title = "Windows support is experimental: it hasn't been tested on a Windows PC";
+  if (model?.blocked && !guardTimer) guardTimer = setTimeout(async () => {
+    guardTimer = null;
+    try { const r = await api.model(); if (r.ok) { model = r.data; applyModel(); refreshButtons(); } } catch (e) {}
+  }, 5000);
 }
 function applyModel() {
   if (model) $(".device-name").textContent = model.name;
   $("#expBadge").hidden = !experimentalModel();
+  platformUi();
   Object.keys(FEATURE_TABS).forEach(v => { $(`#sources button[data-view="${v}"]`).hidden = !viewShown(v); });
   $("#actTest").hidden = $("#actReadings").hidden = !hasFeature("key_tester");
   if (testing && !hasFeature("key_tester")) stopTest();

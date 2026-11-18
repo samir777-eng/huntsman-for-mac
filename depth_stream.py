@@ -9,6 +9,11 @@ SIGTERM/SIGHUP (install_signal_stop, which then runs the app's add_shutdown_hook
 can't be caught, so every (re)connect also calls recover_typing(), which switches a keyboard left in driver
 mode back.
 Reading the stream needs macOS Input Monitoring permission for the app.
+
+Windows: not implemented, by decision (W2). The key tester needs driver mode (00:04), which the Windows gate never
+sends (huntsman_core.gate), so there is nothing to read; and the stream's HID collection there (MI_01 col07, report
+0x0B, per easyrazer) is unconfirmed on the 02A6 by anyone. DepthSession.start() raises FeatureUnavailable on
+Windows; a hidapi reader can be added behind this interface once a Windows tester can check it.
 """
 import atexit
 import ctypes
@@ -21,6 +26,7 @@ import time
 import traceback
 
 import huntsman_core as hc
+import platforms
 
 REPORT_ID = 0x0B
 UNITS_PER_MM = 16380.0
@@ -89,6 +95,17 @@ def install_signal_stop():
     Must be called on the main thread. The work runs on a watcher thread woken by set_wakeup_fd:
     under the Cocoa run loop the main thread may not run Python signal handlers for a long time,
     and a handler that never runs would leave SIGTERM swallowed and the app hanging."""
+    if platforms.is_windows():
+        # No SIGHUP, and set_wakeup_fd needs a socket there. A windowed Windows program rarely gets signals at all
+        # (logoff/shutdown arrive as WM_ENDSESSION, see service.py); SIGTERM/SIGBREAK, when they come, run the
+        # same stop on a thread.
+        def handler(signum, _frame):
+            threading.Thread(target=_on_signal, args=(signum,), name="huntsman-signal", daemon=True).start()
+        for name in ("SIGTERM", "SIGBREAK"):
+            sig = getattr(signal, name, None)
+            if sig is not None:
+                signal.signal(sig, handler)
+        return
     r, w = os.pipe()
     os.set_blocking(w, False)
     for sig in (signal.SIGTERM, signal.SIGHUP):
@@ -198,6 +215,8 @@ class DepthSession:
     def start(self):
         """Returns True once streaming, False if stop() cancelled it first. Raises on failure."""
         self.kb.check_write("key_tester")  # never on an experimental model; checked before anything else
+        if platforms.is_windows():   # the gate refuses it above; this stays a stub (see the module docstring)
+            raise hc.FeatureUnavailable("The key tester isn't offered on Windows: Windows support is experimental.")
         io = _IOKit()
         if not io.iokit.IOHIDRequestAccess(1):  # kIOHIDRequestTypeListenEvent: Input Monitoring
             raise hc.DeviceError("Allow Input Monitoring for this app in System Settings, Privacy & Security, "

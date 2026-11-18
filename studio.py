@@ -174,6 +174,10 @@ def preset_needs(preset):
 # ---------- default platform hooks (imported lazily: pyobjc, IOKit, PortAudio) ----------
 
 def _key_listener(callback):
+    import platforms
+    if platforms.is_windows():   # Raw Input (experimental)
+        from platforms.win_keys import RawKeyListener
+        return RawKeyListener(callback)
     from inputs.keys import KeyListener
     return KeyListener(callback)
 

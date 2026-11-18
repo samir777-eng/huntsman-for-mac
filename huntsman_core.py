@@ -84,6 +84,11 @@ class ExperimentalLocked(DeviceError):
     """A write to an experimental model while Experimental support is off. Raised before anything is sent."""
 
 
+class SynapseRunning(ExperimentalLocked):
+    """Windows: Razer Synapse is running, so every write is refused (platforms/win_guard.py). Raised before anything
+    is sent. A kind of ExperimentalLocked so every path that handles "refused, still connected" handles it too."""
+
+
 # ---------- models, detection and the experimental-support gate ----------
 
 _active = models.DEFAULT
@@ -193,7 +198,7 @@ def gate(model, feature):
     """Raise unless a write for feature may go to model. The verified model is never restricted on the Mac (and the
     switch isn't even read for it). Experimental models, and on Windows every model: features they lack and the key
     tester always raise FeatureUnavailable; everything else raises ExperimentalLocked until Experimental support is
-    on."""
+    on. On Windows, while Razer Synapse runs, every write raises SynapseRunning (platforms/win_guard.py)."""
     windows = platforms.is_windows()
     if model.verified and model.has(feature) and not windows:
         return
@@ -203,6 +208,11 @@ def gate(model, feature):
         if windows:
             raise FeatureUnavailable("The key tester isn't offered on Windows: Windows support is experimental.")
         raise FeatureUnavailable(f"The key tester isn't offered on the {model.name}: its support is experimental.")
+    if windows:
+        from platforms import win_guard
+        reason = win_guard.write_block_reason()
+        if reason:
+            raise SynapseRunning(reason)
     if not experimental_enabled():
         if windows:
             raise ExperimentalLocked(f"Windows support is experimental (not yet tested on a Windows PC). Turn on "

@@ -525,15 +525,27 @@ function rulesUi() {
     ul.appendChild(li);
   });
 }
+// On Windows an app is its program name ("steam.exe"), in place of the Mac's bundle ID; the lighting keeps running
+// from the tray icon instead of the menu bar icon.
+const onWindows = () => typeof model !== "undefined" && model?.platform === "windows";
+function appRuleUi() {
+  const w = onWindows();
+  $("#smBundle").placeholder = w ? "or program name, e.g. steam.exe" : "or bundle ID, e.g. com.valvesoftware.steam";
+  $("label[for=smBundle]").textContent = w ? "App program name" : "App bundle ID";
+  $("#stCloseHint").textContent = `While Studio is on, closing the window keeps the lighting running from the ${w ? "tray" : "menu bar"} icon. Quit from there.`;
+}
 async function loadApps() {
+  appRuleUi();
   try { ST.apps = await scall("running_apps"); } catch (e) { ST.apps = []; }
   const s = $("#smPick"); s.length = 1;
   ST.apps.forEach(a => { const o = document.createElement("option"); o.value = a.bundle_id; o.textContent = a.name; s.appendChild(o); });
   rulesUi();
 }
 $("#smAdd").onclick = () => {
-  const bundle = ($("#smPick").value || $("#smBundle").value).trim();
-  if (!/^[A-Za-z0-9][\w.-]*$/.test(bundle)) { toast("Pick an open app, or type its bundle ID (like com.apple.Safari).", true); $("#smBundle").focus(); return; }
+  const typed = $("#smBundle").value.trim(), w = onWindows();
+  const bundle = $("#smPick").value || (w ? typed.toLowerCase() : typed);
+  const valid = w ? /^[^\\/:*?"<>|]+\.exe$/i.test(bundle) : /^[A-Za-z0-9][\w.-]*$/.test(bundle);
+  if (!valid) { toast(w ? "Pick an open app, or type its program name (like steam.exe)." : "Pick an open app, or type its bundle ID (like com.apple.Safari).", true); $("#smBundle").focus(); return; }
   const rules = ST.data.smart.app_rules;
   if (rules.some(r => r.bundle_id === bundle)) { toast(`${appName(bundle)} already has a rule.`, true); return; }
   rules.push({ bundle_id: bundle, preset: ST.data.active });
@@ -542,5 +554,5 @@ $("#smAdd").onclick = () => {
 };
 
 /* ---------- hooks used by app.js ---------- */
-window.studioShown = v => { if (v === "studio" && ST.data) { $("#stageNote").textContent = studioNote(); keysUi(); } };
+window.studioShown = v => { if (v === "studio") appRuleUi(); if (v === "studio" && ST.data) { $("#stageNote").textContent = studioNote(); keysUi(); } };
 window.studioStart = async () => { await studioRefresh(); };

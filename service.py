@@ -16,6 +16,14 @@ app's window quits, so Studio effects keep running (like Razer Synapse's service
 One instance per user (a lock on data_dir()/service.lock: flock, or msvcrt.locking on Windows). At start it re-sends what the keyboard keeps only in
 RAM (per-key colours, Rapid Trigger, Snap Tap: the old apply-saved login item's job) and turns Studio back on if
 it was on. Quitting (menu, logout, SIGTERM) stops the engine and restores the keyboard's own lighting to RAM.
+
+Windows (experimental, untested on a Windows PC): the same service runs as `Huntsman.exe --service` (or
+service.py from source), started at login by the HKCU Run value (platforms/win_autostart.py) and by the app when
+it isn't answering; a pystray tray icon (platforms/win_tray.py) shows the same menu; logoff/shutdown arrive as
+WM_ENDSESSION on a hidden window. Quitting leaves start at login on, so, as on the Mac, it stays off until the next
+login or until Studio is used. While Razer Synapse runs every write is refused (platforms/win_guard.py): Studio
+stays off, the tray says why, and check_guard() (every few seconds) turns Studio back on once Synapse quits if it
+was on before.
 """
 import os
 import secrets
@@ -41,6 +49,11 @@ LEASE_MIN, LEASE_MAX = 0.5, 30.0
 MAX_LEASES = 16
 REAP_EVERY = 0.25
 QUIT_TITLE = "Quit lighting service"
+# What "Quit lighting service" does, on both platforms: start at login is left as it is (the Mac's LaunchAgent stays
+# loaded and exit 0 keeps launchd from restarting it; the Windows Run value stays), so the service is back at the
+# next login or when the app needs it.
+QUIT_STEPS = ("stop the server", "stop Studio and restore the keyboard's lighting", "exit")
+GUARD_EVERY = 5.0
 
 SPECS = {
     "ping": {}, "summary": {}, "studio_state": {}, "reset_heat": {}, "running_apps": {},
@@ -87,7 +100,11 @@ def acquire_instance_lock(path):
 
 
 def list_running_apps():
-    """Open apps with a Dock icon, for per-app rules: [{"name", "bundle_id"}]."""
+    """Open apps with a Dock icon, for per-app rules: [{"name", "bundle_id"}]. On Windows: programs with a window,
+    by program name."""
+    if platforms.is_windows():
+        from platforms import win_smart
+        return win_smart.list_running_apps()
     from AppKit import NSWorkspace
     apps = NSWorkspace.sharedWorkspace().runningApplications()
     out = sorted({(str(a.localizedName() or a.bundleIdentifier()), str(a.bundleIdentifier()))
@@ -114,6 +131,9 @@ class LightingService:
         self._subs, self._subs_lock = {}, threading.Lock()
         self.reapplied, self.restored = [], []
         self._keymap_pid = None                  # model whose layout Studio and the engine use
+        self._guard_reason = None                # Windows: why writes are refused (Razer Synapse), as last told
+        self._guard_wants_on = False             # Studio was on (or meant to be) when Synapse took the keyboard
+        self._guard_listeners = []
 
     # ---------- start and stop ----------
 
@@ -142,6 +162,7 @@ class LightingService:
             if reason:
                 s.settings["enabled"] = False   # shown off; state.json keeps the choice until it's changed
                 log(f"Studio stays off: {reason}")
+                self._guard_wants_on = platforms.is_windows() and self._synapse_blocks()
             else:
                 s.set_enabled(True)
 
@@ -221,7 +242,54 @@ class LightingService:
             reason = self.studio_blocked()
             if reason:
                 raise ValueError(reason)
+        self._guard_wants_on = False   # the user's own choice from now on
         self.studio.set_enabled(on, restore=restore)
+
+    # ---------- Windows: Razer Synapse ----------
+
+    def _synapse_blocks(self):
+        from platforms import win_guard
+        return win_guard.write_block_reason() is not None
+
+    def on_guard(self, fn):
+        """fn(reason or None) whenever the reason writes are refused changes (the tray's notice)."""
+        self._guard_listeners.append(fn)
+
+    def check_guard(self):
+        """Windows: re-check Razer Synapse; tell the listeners when that changed, and once Synapse is gone turn
+        Studio back on if Synapse was what turned it off. Returns the current reason (None on the Mac)."""
+        if not platforms.is_windows():
+            return None
+        from platforms import win_guard
+        reason = win_guard.write_block_reason()
+        if reason == self._guard_reason:
+            return reason
+        self._guard_reason = reason
+        if reason:
+            log(f"read only: {reason}")
+        else:
+            log("Razer Synapse quit; writes allowed again")
+        for fn in list(self._guard_listeners):
+            try:
+                fn(reason)
+            except Exception:
+                traceback.print_exc()
+        if reason is None and self._guard_wants_on and self.studio is not None:
+            try:
+                self.set_studio_enabled(True)
+            except ValueError as e:   # e.g. Experimental support went off meanwhile
+                log(f"Studio stays off: {e}")
+        return reason
+
+    def run_guard(self, every=GUARD_EVERY):
+        def loop():
+            while not self._shut:
+                try:
+                    self.check_guard()
+                except Exception:
+                    traceback.print_exc()
+                time.sleep(every)
+        threading.Thread(target=loop, name="huntsman-guard", daemon=True).start()
 
     def _drop(self):
         if self._kb is not None and hasattr(self._kb.t, "close"):
@@ -244,6 +312,8 @@ class LightingService:
             # The keyboard refused frames (e.g. Experimental support was turned off from the command line): not a
             # lost connection, so no reconnect loop. Studio goes off, from another thread (this is the engine's).
             log(f"Studio off: {e}")
+            if isinstance(e, hc.SynapseRunning):   # back on once Synapse quits (check_guard)
+                self._guard_wants_on, self._guard_reason = True, str(e)
             self._emit("onStudioStatus", {"engine": str(e)})
             self.studio._spawn(self._studio_off_refused)
             return
@@ -253,7 +323,7 @@ class LightingService:
 
     def _studio_off_refused(self):
         try:
-            self.studio.set_enabled(False)
+            self.studio.set_enabled(False)   # not set_studio_enabled: the Synapse flag stays
         except Exception:
             traceback.print_exc()
 
@@ -439,8 +509,28 @@ def make_menu(svc, menu_cls, on_open, on_quit, run=_in_background, **menu_kw):
     return menu
 
 
+def ensure_autostart():
+    """Windows: turn start at login on (first run, and the value follows a moved Huntsman.exe). Never raises."""
+    if not platforms.is_windows():
+        return
+    try:
+        from platforms import win_autostart
+        if win_autostart.enable():
+            log("start at login turned on")
+    except Exception as e:
+        log(f"couldn't turn on start at login: {e}")
+
+
 def open_app():
-    """Open the window app: the bundle this service sits in, else by bundle id."""
+    """Open the window app: the bundle this service sits in, else by bundle id. Windows: Huntsman.exe (or app.py)
+    without a console window."""
+    if platforms.is_windows():
+        from platforms import win_autostart
+        try:
+            win_autostart.spawn(win_autostart.app_argv(), popen=subprocess.Popen)
+        except OSError:
+            traceback.print_exc()
+        return
     outer = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
     cmd = ["/usr/bin/open", outer] if outer.endswith(".app") else ["/usr/bin/open", "-b", APP_BUNDLE_ID]
     try:
@@ -459,6 +549,8 @@ def main(argv=None):
         log("already running")
         return 0
     _KEEP["lock"] = fd
+    if platforms.is_windows():
+        return _main_windows()
 
     from AppKit import NSApplication
     from Foundation import NSObject
@@ -516,6 +608,75 @@ def main(argv=None):
     log("started")
     AppHelper.runEventLoop(installInterrupt=False)
     stop()
+    return 0
+
+
+WM_QUERYENDSESSION, WM_ENDSESSION = 0x0011, 0x0016
+
+
+def _main_windows():
+    """The service on Windows: tray icon on the main thread, a hidden window for logoff/shutdown, the Synapse
+    re-check, start at login turned on. Same LightingService and IPC as on the Mac."""
+    platforms.redirect_output()
+    from platforms.win_tray import TrayMenu
+    from platforms.win_window import MessageWindow
+
+    svc = LightingService()
+    server = ipc.Server(service_endpoint(), svc.handle, svc.subscribe)
+    stopped = threading.Lock()
+    finished = threading.Event()
+    holder = {}
+
+    def stop():
+        if not stopped.acquire(blocking=False):
+            finished.wait(depth_stream.SHUTDOWN_LIMIT)
+            return
+        try:
+            server.close()
+            svc.shutdown()
+        finally:
+            finished.set()
+
+    def end_session(_hwnd, wparam, _lparam):
+        if wparam:   # the session really ends: restore the lighting before Windows ends the process
+            try:
+                stop()
+            except Exception:
+                traceback.print_exc()
+        return 0
+
+    session = MessageWindow("session", {WM_QUERYENDSESSION: lambda h, w, l: 1, WM_ENDSESSION: end_session},
+                            message_only=False)
+    depth_stream.add_shutdown_hook(stop)
+    depth_stream.install_signal_stop()
+
+    def quit_service():
+        def work():
+            stop()
+            menu = holder.get("menu")
+            if menu is not None:
+                menu.remove()   # ends the tray loop: main() returns 0; start at login stays on
+        _in_background(work)
+
+    server.start()
+    ensure_autostart()
+    svc.start()
+    svc.run_reaper()
+    try:
+        session.start()
+    except OSError as e:
+        log(f"no logoff/shutdown notice: {e}")
+    menu = make_menu(svc, TrayMenu, on_open=open_app, on_quit=quit_service, quit_title=QUIT_TITLE)
+    holder["menu"] = menu
+    svc.on_guard(lambda reason: menu.set_state(notice="Read only: Razer Synapse is running" if reason else None))
+    svc.run_guard()
+    log("started")
+
+    def ready():
+        svc.gui_ready()
+    menu.run(on_ready=ready)   # blocks until the tray is removed
+    stop()
+    session.stop()
     return 0
 
 

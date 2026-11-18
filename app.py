@@ -327,6 +327,14 @@ LEASE_SECONDS = 5.0
 SERVICE_EVENTS = ("onStudioFrame", "onStudioChanged", "onStudioStatus", "onStudioAction", "onStudioLevel")
 NOT_RUNNING = ("The lighting service isn't running and couldn't be started ({}). "
                "Reinstall with ./install.sh, or check ~/Library/Logs/Huntsman for Mac.log.")
+NOT_RUNNING_WINDOWS = ("The lighting service isn't running and couldn't be started ({}). "
+                       "Start Huntsman for Mac again, or check the log in {}.")
+
+
+def not_running_message(detail):
+    if platforms.is_windows():
+        return NOT_RUNNING_WINDOWS.format(detail, platforms.log_path())
+    return NOT_RUNNING.format(detail)
 
 
 def service_socket():
@@ -340,7 +348,12 @@ def service_endpoint():
 
 def start_service():
     """Ask launchd to start the lighting service if it isn't running (never -k: killing a service that is still
-    starting would interrupt a USB write); load its LaunchAgent first if it isn't loaded."""
+    starting would interrupt a USB write); load its LaunchAgent first if it isn't loaded. On Windows (no launchd):
+    turn start at login on and start the service process (platforms/win_autostart.py)."""
+    if platforms.is_windows():
+        from platforms import win_autostart
+        win_autostart.start_service()
+        return
     target = f"gui/{os.getuid()}/{LIGHTING_LABEL}"
     r = subprocess.run(["launchctl", "kickstart", target], capture_output=True, text=True, timeout=10)
     if r.returncode == 0:
@@ -428,7 +441,7 @@ class ServiceLink:
             return self._request(cmd, args or {})
         except ipc.ServiceUnavailable as e:
             if not start:
-                return {"ok": False, "error": NOT_RUNNING.format(e), "unavailable": True}
+                return {"ok": False, "error": not_running_message(e), "unavailable": True}
         with self._lock:   # one start at a time
             try:
                 return self._request(cmd, args or {})
@@ -437,14 +450,14 @@ class ServiceLink:
             try:
                 self._starter()
             except Exception as e:
-                return {"ok": False, "error": NOT_RUNNING.format(e), "unavailable": True}
+                return {"ok": False, "error": not_running_message(e), "unavailable": True}
             deadline = time.monotonic() + self._wait
             while True:
                 try:
                     return self._request(cmd, args or {})
                 except ipc.ServiceUnavailable as e:
                     if time.monotonic() >= deadline:
-                        return {"ok": False, "error": NOT_RUNNING.format(f"no answer: {e}"), "unavailable": True}
+                        return {"ok": False, "error": not_running_message(f"no answer: {e}"), "unavailable": True}
                     time.sleep(0.1)
 
     def lease(self):
@@ -564,7 +577,12 @@ class Api:
         """The connected model (connecting first): name, PID, status, matrix, effects, features, whether
         Experimental support is on and whether writes are locked until it is."""
         def f(kb):
-            return {**hc.model_info(kb.model), "experimental_on": hc.experimental_enabled(), "locked": not kb.allowed("lighting")}
+            d = {**hc.model_info(kb.model), "experimental_on": hc.experimental_enabled(),
+                 "locked": not kb.allowed("lighting")}
+            if platforms.is_windows():   # Razer Synapse running (writes refused), Dynamic Lighting on
+                from platforms import win_guard
+                d["blocked"], d["notices"] = win_guard.write_block_reason(), win_guard.notices()
+            return d
         return self._run(f)
 
     def layout(self):
@@ -884,9 +902,13 @@ def studio_off_before_lock(svc):
 
 def refused(e):
     """A write the connected model doesn't take, for the window: the plain message, and why (so it isn't shown as
-    a lost connection): "experimental" (turn on Experimental support) or "unavailable" (the model lacks it)."""
-    return {"ok": False, "error": str(e),
-            "reason": "experimental" if isinstance(e, hc.ExperimentalLocked) else "unavailable"}
+    a lost connection): "experimental" (turn on Experimental support), "synapse" (Windows: quit Razer Synapse) or
+    "unavailable" (the model lacks it)."""
+    if isinstance(e, hc.SynapseRunning):
+        reason = "synapse"
+    else:
+        reason = "experimental" if isinstance(e, hc.ExperimentalLocked) else "unavailable"
+    return {"ok": False, "error": str(e), "reason": reason}
 
 
 def in_background(fn):
@@ -920,5 +942,16 @@ def main(argv=None):
     api.shutdown()
 
 
+def entry(argv=None):
+    """The program's entry point. The packaged Windows build is one Huntsman.exe: with --service it runs the
+    lighting service (its start-at-login command), without it the window."""
+    argv = sys.argv if argv is None else argv
+    platforms.redirect_output()
+    if "--service" in argv[1:]:
+        import service
+        return service.main()
+    return main()
+
+
 if __name__ == "__main__":
-    main()
+    sys.exit(entry())

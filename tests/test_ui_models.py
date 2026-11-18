@@ -305,3 +305,40 @@ def test_switching_to_the_v2_analog_rescales_the_slider(unplugged):
     expect(page.locator("#depth")).to_have_attribute("min", "1.62")
     expect(page.locator(".scale span").first).to_have_text("1.62 mm, lightest")
     assert page.errors == []
+
+
+# ---------- the Windows build (W2): Synapse and Dynamic Lighting notices ----------
+
+def test_windows_with_synapse_running_says_why_and_locks_writes(browser):  # noqa: F811
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.add_init_script(RECORDER)
+    try:
+        page.goto(BASE + "&windows=synapse,dynamic")
+        expect(page.locator("#conn")).to_have_text("Connected, firmware 1.03")
+        note = page.locator("#platformNotice")
+        expect(note).to_be_visible()
+        expect(note).to_contain_text("Razer Synapse is running")
+        expect(note).to_contain_text("Dynamic Lighting")
+        assert page.locator("#expBadge").get_attribute("title").startswith("Windows support is experimental")
+        page.click('button[data-view="device"]')
+        page.check("#expOn")                                   # the switch on: Synapse still blocks writes
+        page.click('#sources button[data-view="lighting"]')
+        expect(page.locator(".lock-note:visible")).to_have_count(0)
+        assert page.locator("[data-write]:visible").count() > 0
+        assert all(page.locator("[data-write]:visible").nth(i).is_disabled()
+                   for i in range(page.locator("[data-write]:visible").count()))
+        page.click('#sources button[data-view="studio"]')
+        assert page.locator("#smBundle").get_attribute("placeholder") == "or program name, e.g. steam.exe"
+        expect(page.locator("#stCloseHint")).to_contain_text("tray icon")
+        assert errors == []
+    finally:
+        page.close()
+
+
+def test_the_mac_shows_no_platform_notice(open_model):
+    page = open_model()
+    expect(page.locator("#platformNotice")).to_be_hidden()
+    page.click('#sources button[data-view="studio"]')
+    assert page.locator("#smBundle").get_attribute("placeholder") == "or bundle ID, e.g. com.valvesoftware.steam"

@@ -51,6 +51,14 @@ def data_dir():
     return os.path.join(os.path.expanduser("~"), "Library", "Application Support", APP_NAME)
 
 
+def local_dir():
+    """Per-user folder that stays on this computer: %LOCALAPPDATA%\\Huntsman for Mac on Windows (the service's
+    pipe key lives there, not in the roaming settings); the settings folder on the Mac."""
+    if is_windows():
+        return os.path.join(_win_folder("LOCALAPPDATA", "AppData", "Local"), APP_NAME)
+    return data_dir()
+
+
 def log_dir():
     if is_windows():
         return os.path.join(_win_folder("LOCALAPPDATA", "AppData", "Local"), APP_NAME, "Logs")
@@ -123,3 +131,19 @@ def file_lock(path):
                 unlock_fd(f)
             except OSError:
                 pass   # closing the file releases it anyway
+
+
+def redirect_output():
+    """A windowed program on Windows (Huntsman.exe, pythonw) has no stdout/stderr: send them to the log file, so
+    the app's and the service's messages land in log_path(). Does nothing when both exist (the Mac, a terminal)."""
+    if sys.stderr is not None and sys.stdout is not None:
+        return
+    try:
+        os.makedirs(log_dir(), exist_ok=True)
+        f = open(log_path(), "a", buffering=1, encoding="utf-8")
+    except OSError:
+        f = open(os.devnull, "w")
+    if sys.stdout is None:
+        sys.stdout = f
+    if sys.stderr is None:
+        sys.stderr = f

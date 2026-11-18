@@ -8,8 +8,9 @@ Events   after {"cmd": "subscribe", "args": {"frames": bool}} the connection onl
          {"event": str, "args": [...]} lines (newest per event name; a slow reader misses old frames).
 
 Endpoints: UnixEndpoint (the Mac: a 0600 socket file, peers must run as the same user) and PipeEndpoint (Windows,
-experimental: multiprocessing.connection Listener/Client on a per-user named pipe, each side proving it knows the
-authkey the service writes at every start into a file in the user's data folder; one message per line). Server,
+experimental: multiprocessing.connection Listener/Client on a per-user named pipe with a random name, each side
+proving it knows the authkey the service writes, with the pipe's name, at every start into a file in the user's
+local data folder; one message per line). Server,
 Client and Subscription take either (a plain path means a UnixEndpoint); service_endpoint() picks the platform's.
 Input is untrusted either way: lines are size-limited, NaN/Infinity are refused, and every command's arguments are
 type-checked (check_args) before the service sees them.
@@ -321,13 +322,19 @@ class _UnixListener:
             pass
 
 
-def write_authkey(path):
-    """A new random authkey in a file only this user can read (0600; on Windows the user's own AppData folder)."""
-    key = secrets.token_bytes(32)
+KEY_BYTES = 32
+
+
+def write_authkey(path, address=None):
+    """A new random authkey, with the pipe address it belongs to, in a file only this user can read (0600; on
+    Windows the user's own non-roaming %LOCALAPPDATA% folder). The folder is created if needed. Returns the key."""
+    key = secrets.token_bytes(KEY_BYTES)
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    data = json.dumps({"key": key.hex(), "address": address}).encode()
     tmp = f"{path}.{os.getpid()}.tmp"
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_BINARY", 0), 0o600)
     try:
-        os.write(fd, key)
+        os.write(fd, data)
     finally:
         os.close(fd)
     try:
@@ -344,28 +351,67 @@ def write_authkey(path):
             os.remove(tmp)
 
 
-class PipeEndpoint:
-    """Windows' (experimental): multiprocessing.connection at address (family "AF_PIPE" on Windows; tests use
-    "AF_UNIX"), authenticated with the key in key_path, which listen() renews at every service start."""
+def read_authkey(path):
+    """(key bytes, address or None) from a file write_authkey wrote. OSError if missing, ValueError if damaged."""
+    with open(path, "rb") as f:
+        raw = f.read(4096)
+    try:
+        d = json.loads(raw)
+        key = bytes.fromhex(d["key"])
+        address = d.get("address")
+    except (ValueError, TypeError, KeyError, AttributeError) as e:
+        raise ValueError(f"the service key file is damaged: {e}") from None
+    if len(key) != KEY_BYTES or not (address is None or isinstance(address, str)):
+        raise ValueError("the service key file is damaged")
+    return key, address
 
-    def __init__(self, address, key_path, family=None):
-        self.address, self.key_path, self.family = address, key_path, family
+
+class PipeEndpoint:
+    """Windows' (experimental): multiprocessing.connection at a pipe address (family "AF_PIPE" on Windows; tests use
+    "AF_UNIX"), authenticated with the key in key_path, which listen() renews at every service start.
+
+    address None (Windows): listen() picks a new random name, prefix + "-" + 32 hex digits, and stores it with the
+    key, so the name can't be guessed or taken first by another program; clients read both from key_path. A fixed
+    address (tests) is used as given.
+    Pipe security: CPython's pipe listener (multiprocessing.connection, _winapi.CreateNamedPipe) always uses the
+    default security descriptor (the creator and administrators have full access, Everyone may open it to read) and
+    can't be given another from Python without re-implementing the pipe server; it does create the first instance
+    with FILE_FLAG_FIRST_PIPE_INSTANCE. A reader that isn't this user can't learn the key (the file is in the
+    user's own folder) and so fails the handshake both ways: at most it ties up a connection slot until TIMEOUT."""
+
+    def __init__(self, address, key_path, family=None, prefix=None):
+        self.address, self.key_path, self.family, self.prefix = address, key_path, family, prefix
+        self.listening = None   # the address listen() used
+
+    def _new_address(self):
+        if self.address is not None:
+            return self.address
+        return f"{self.prefix}-{secrets.token_hex(16)}"
 
     def listen(self):
         from multiprocessing.connection import Listener
-        key = write_authkey(self.key_path)
-        return _PipeListener(Listener(self.address, family=self.family, backlog=8), key)
+        address = self._new_address()
+        listener = Listener(address, family=self.family, backlog=8)
+        try:
+            key = write_authkey(self.key_path, address)   # written once the pipe exists, so clients find it
+        except BaseException:
+            listener.close()
+            raise
+        self.listening = address
+        return _PipeListener(listener, key)
 
     def connect(self, timeout):
         from multiprocessing import AuthenticationError
         from multiprocessing.connection import Client
         try:
-            with open(self.key_path, "rb") as f:
-                key = f.read()
-        except OSError as e:
+            key, stored = read_authkey(self.key_path)
+        except (OSError, ValueError) as e:
             raise ServiceUnavailable(f"no service key: {e}") from e
+        address = self.address or stored
+        if not address:
+            raise ServiceUnavailable("no service key: the key file names no pipe")
         try:
-            conn = Client(self.address, family=self.family)   # no authkey here: its handshake has no timeout
+            conn = Client(address, family=self.family)   # no authkey here: its handshake has no timeout
         except (OSError, EOFError) as e:
             raise ServiceUnavailable(str(e) or type(e).__name__) from e
         try:
@@ -400,10 +446,12 @@ def _pipe_name():
 
 
 def service_endpoint(data_dir):
-    """The lighting service's endpoint on this platform: data_dir/service.sock on the Mac; on Windows the named
-    pipe \\\\.\\pipe\\huntsman-for-mac-<user> with its authkey in data_dir/service.key."""
+    """The lighting service's endpoint on this platform: data_dir/service.sock on the Mac; on Windows a named
+    pipe \\\\.\\pipe\\huntsman-for-mac-<user>-<random>, its name and authkey in %LOCALAPPDATA%\\Huntsman for
+    Mac\\service.key (platforms.local_dir(): not roaming, so never copied to other PCs)."""
     if platforms.is_windows():
-        return PipeEndpoint("\\\\.\\pipe\\" + _pipe_name(), os.path.join(data_dir, "service.key"), family="AF_PIPE")
+        return PipeEndpoint(None, os.path.join(platforms.local_dir(), "service.key"), family="AF_PIPE",
+                            prefix="\\\\.\\pipe\\" + _pipe_name())
     return UnixEndpoint(os.path.join(data_dir, "service.sock"))
 
 

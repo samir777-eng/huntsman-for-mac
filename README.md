@@ -242,7 +242,9 @@ The key tester is only offered on the Huntsman V3 Pro (1532:02A6), the one model
 
 Experimental and untested with this app. The Huntsman V2 Analog (1532:0266) measures travel differently: its keyboard
 acts between **1.62 mm** and **3.56 mm**, so that's the slider's range, in 0.01 mm steps, with presets at 1.62, 2.0,
-2.5, 3.0 and 3.56. In the window the reset point follows 0.1 mm above, no shallower than 1.54 mm; a custom one stays
+2.5, 3.0 and 3.56. Unless you set one (the window's *Just above*, and the command line), the reset point follows
+0.1 mm above the new actuation point, the same in the saved and the live profile, no shallower than 1.54 mm; a
+custom one stays
 at least 0.1 mm above (the firmware rule is 10 bytes, about 0.08 mm). The 0.01 mm steps are this app's choice
 (easyrazer uses 0.1 mm). The scale and limits come from easyrazer, which checked the 3.56 mm end on this
 keyboard; the 1.62 mm end and the reset point rules come from its reading of the firmware and haven't been seen

@@ -352,15 +352,17 @@ def test_cli_factory_is_refused(plugged):
     assert writes(plugged.t) == []
 
 
-def test_a_stored_release_that_still_fits_is_kept():
-    """Like easyrazer: without a reset point only the actuation byte changes, when the stored release still fits."""
+def test_just_above_always_follows_the_actuation_point():
+    """Without a reset point the reset point follows 0.1 mm above the new actuation point, as the window's "Just
+    above" says, even when the stored release byte would still fit; the saved and live copies end up the same."""
     hc.set_experimental(True)
     t = FakeTransport()
-    for p in (0, 1):
-        t.keys[(p, A)] = bytearray([p, A, 0, 200, 20, 0x02, 0x02, 0x00, 0x04])
+    t.keys[(0, A)] = bytearray([0, A, 0, 200, 20, 0x02, 0x02, 0x00, 0x04])
+    t.keys[(1, A)] = bytearray([1, A, 0, 200, 60, 0x02, 0x02, 0x00, 0x04])
+    thr = scale().threshold(2.0)
     analog(t).set_actuation([A], 2.0)
     for p in (0, 1):
-        assert tuple(t.keys[(p, A)][3:5]) == (scale().threshold(2.0), 20)
+        assert tuple(t.keys[(p, A)][3:5]) == (thr, scale().release(thr))
 
 
 def test_keys_already_at_the_target_are_not_written_again():

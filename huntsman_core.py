@@ -545,9 +545,8 @@ class Keyboard:
         Read-modify-write: only the two threshold bytes change; the layer and the key's function (fnId, size,
         data) are written back as read (easyrazer actuation.rs update). A key whose saved write doesn't read back
         is reported and its live copy is left alone.
-        rel=None (models other than the V3 family, no reset point given): keep the stored release byte when it
-        still fits the new actuation byte, as easyrazer does. Keys already at the target are not written again
-        there, to spare flash. The V3 family keeps its verified behaviour (always written)."""
+        Models other than the V3 family: keys already at the target are not written again, to spare flash. The V3
+        family keeps its verified behaviour (always written)."""
         self.check_write("actuation")
         sc = self.model.scale
         v3 = sc is models.V3_SCALE
@@ -556,25 +555,20 @@ class Keyboard:
         for k in keys:
             for p in (saved, LIVE):
                 a = self.read_key(p, k)
-                want = rel
-                if want is None:
-                    want = a[4] if sc.min_rel <= a[4] <= thr - sc.min_gap else sc.release(thr)
-                if not v3 and (a[3], a[4]) == (thr, want):
+                if not v3 and (a[3], a[4]) == (thr, rel):
                     continue
-                a[3], a[4] = thr, want
+                a[3], a[4] = thr, rel
                 self.cmd(0x02, 0x12, a, 80)
-                if tuple(self.read_key(p, k)[3:5]) != (thr, want):
+                if tuple(self.read_key(p, k)[3:5]) != (thr, rel):
                     failed.append(k)
                     break
         return sorted(set(failed))
 
     def set_actuation(self, keys, mm, release_mm=None):
-        """mm (and release_mm) on the model's scale and range; out of range raises before anything is sent."""
+        """mm (and release_mm) on the model's scale and range; out of range raises before anything is sent.
+        Without release_mm the reset point follows the scale's default just above (the same in saved and live)."""
         sc = self.model.scale
         thr = sc.threshold(mm)
-        if release_mm is None and sc is not models.V3_SCALE:
-            sc.release(thr)   # range check only; the stored release byte is kept when it still fits
-            return self._write_points(keys, thr, None)
         return self._write_points(keys, thr, sc.release(thr, release_mm))
 
     def restore_snapshot(self, snap):

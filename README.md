@@ -14,10 +14,12 @@
   <a href="#supported-hardware"><img src="https://img.shields.io/badge/tested%20on-Apple%20silicon-6ad7ff?style=for-the-badge&logo=apple&logoColor=white&labelColor=0a0a0b" alt="Tested on Apple silicon"></a>
   <a href="#install"><img src="https://img.shields.io/badge/python-3.11%2B-6ad7ff?style=for-the-badge&logo=python&logoColor=white&labelColor=0a0a0b" alt="Python 3.11+"></a>
   <a href="#synapse-for-mac-vs-huntsman-for-mac"><img src="https://img.shields.io/badge/Synapse-not%20needed-6ad7ff?style=for-the-badge&labelColor=0a0a0b" alt="No Synapse needed"></a>
+  <a href="#windows-experimental"><img src="https://img.shields.io/badge/Windows-experimental%2C%20untested-ffc66b?style=for-the-badge&labelColor=0a0a0b" alt="Windows build: experimental, untested"></a>
 </p>
 
 <p align="center">
   <a href="#quick-start"><b>Quick start</b></a> ·
+  <a href="#windows-experimental"><b>Windows</b></a> ·
   <a href="#features"><b>Features</b></a> ·
   <a href="#supported-hardware"><b>Supported models</b></a> ·
   <a href="#safety"><b>Safety</b></a> ·
@@ -65,9 +67,93 @@ Three steps and you're tuning:
 
 You need Python 3.11 or newer, and Homebrew if libusb isn't installed yet. Details in [Install](#install).
 
+On Windows? There's an experimental, untested build: see [Windows (experimental)](#windows-experimental).
+
 > [!NOTE]
 > Unofficial. Not made, endorsed or supported by Razer. "Razer" and "Huntsman" are Razer Inc. trademarks, used here
 > only to say which keyboard this works with. Use at your own risk; see [Safety](#safety).
+
+## Windows (experimental)
+
+Version 0.4.0 adds a Windows build: the same app, as `Huntsman.exe`, with no Python or installer needed.
+
+> [!WARNING]
+> **Untested.** The Windows build has never run on a Windows PC with a keyboard. All that has run is the test suite
+> (simulated keyboard) on GitHub's `windows-latest` runners, and a smoke test there of the built `Huntsman.exe`
+> (`--version` and `--self-test`: it loads its code and data files, without opening a keyboard or a window). The
+> window, the tray icon, start at login, typing reactions, smart lighting, the Synapse check and every exchange with a
+> keyboard have not been seen working. A report either way helps: see
+> [CONTRIBUTING.md](CONTRIBUTING.md#testing-on-windows).
+
+What's different on Windows:
+
+- **Every model is experimental**, the Huntsman V3 Pro too: nothing that changes the keyboard is sent until you turn
+  on **Keyboard → Experimental support** (see [Experimental support](#experimental-support)). Reads always work.
+- **No key tester.** It puts the keyboard into a mode where it stops typing, so it stays off on an untested platform.
+- **Read only while Razer Synapse runs.** Synapse overwrites the keyboard's live settings, and two programs talking
+  to it at once mix up the replies. While Synapse (`RazerAppEngine.exe`, or Synapse 3 or 2) is running, the app and the
+  lighting service only read, and the window says why. Quit Synapse, including its icon in the notification area,
+  and the controls come back within a few seconds.
+- **Windows Dynamic Lighting** can take over the keyboard's lights, so lighting changes may not show. When it's on,
+  the window says so. To give the lights to this app: **Settings → Personalization → Dynamic Lighting**, choose the
+  Razer Huntsman and turn Dynamic Lighting off for it (or turn off *Use Dynamic Lighting on my devices*). The app never
+  changes this setting.
+- The lighting service has a **tray icon** (notification area) instead of the menu bar icon. Smart lighting's app
+  rules use the program name (like `steam.exe`).
+- The download has **no command line** (`huntsman.py`). There's no USB driver to install: the app uses the
+  keyboard's normal Windows driver (hidapi).
+
+### Install on Windows
+
+1. **Download** `Huntsman-for-Windows-<version>.zip` from the
+   [latest release](https://github.com/samir777-eng/huntsman-for-mac/releases/latest).
+2. **Unzip it** (right-click → *Extract All*) somewhere you'll keep it, for example `Documents`. You get a `Huntsman`
+   folder; keep everything in it together.
+3. **Close Razer Synapse**, including its icon in the notification area, or the app stays read only.
+4. **Run `Huntsman.exe`.** It isn't code-signed, so Windows SmartScreen may say *Windows protected your PC*: click
+   **More info**, then **Run anyway**.
+5. Turn on **Keyboard → Experimental support** and read its warning.
+
+The window uses the **Microsoft Edge WebView2 Runtime**. It's built into Windows 11; on Windows 10 it may be missing,
+and then the window can't open. Install the *Evergreen* runtime from
+[Microsoft's WebView2 page](https://developer.microsoft.com/microsoft-edge/webview2/) and run `Huntsman.exe` again.
+
+### Start at login, tray icon and files
+
+- Opening the app starts the **lighting service** (the tray icon; it may be hidden under the **^** arrow) and turns
+  on **start at login** for the current user, no administrator rights needed: the registry value
+  `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run` → `Huntsman for Mac lighting`, set to
+  `"<your folder>\Huntsman\Huntsman.exe" --service`. If you move the folder, open the app once from its new place.
+- The tray icon turns Studio on or off, switches presets, opens the app, and has **Quit lighting service**, which
+  stops Studio and puts the keyboard's own lighting back. The service stays off until the next sign-in or the next
+  time you open the app. Closing the window just closes it.
+- Settings: `%APPDATA%\Huntsman for Mac\` (`state.json`, `presets.json`, `heatmap.json`,
+  `first-launch-snapshot.json` and lock files).
+- The service's pipe name and key: `%LOCALAPPDATA%\Huntsman for Mac\service.key`.
+- Log: `%LOCALAPPDATA%\Huntsman for Mac\Logs\Huntsman for Mac.log`. The windowed app has no console, so everything
+  it prints goes there.
+
+### Uninstall on Windows
+
+<details>
+<summary>Quit, remove start at login, delete the folders</summary>
+
+1. Tray icon → **Quit lighting service**, and close the window.
+2. Remove start at login. In a Command Prompt:
+
+   ```bat
+   reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "Huntsman for Mac lighting" /f
+   ```
+
+   Or delete that value in Registry Editor. Switching it off in **Task Manager → Startup apps** (or **Settings → Apps
+   → Startup**) only disables it; there it's probably listed by the program's description, *Huntsman for Mac (Windows
+   build)* (not checked).
+3. Delete the unzipped `Huntsman` folder.
+4. To remove your settings and the log too, delete `%APPDATA%\Huntsman for Mac` and `%LOCALAPPDATA%\Huntsman for Mac`.
+
+Settings stored on the keyboard (actuation, keyboard effects) stay on it.
+
+</details>
 
 ## What it does
 
@@ -81,6 +167,7 @@ You need Python 3.11 or newer, and Homebrew if libusb isn't installed yet. Detai
 | 🎨 | [Per-key colours](#keyboard-lighting) | No, kept until unplugged and sent again |
 | 🌈 | [Lighting Studio](#lighting-studio): layers, typing and sound effects, presets, smart lighting | No, drawn live by the app |
 | 🧪 | [Six more Huntsman models](#supported-hardware), experimental and looking for testers | – |
+| 🪟 | [A Windows build](#windows-experimental), experimental and untested | – |
 
 "Sent again" means the lighting service puts it back when it starts, at login and after the installer runs.
 
@@ -252,6 +339,9 @@ the app uses the first one it finds in the order of this table.
 Macs: tested on Apple silicon with macOS 26. Intel Macs and earlier macOS versions are untested; they will probably
 work, and a report either way helps.
 
+Windows: untested on a PC, and every model, the V3 Pro too, is experimental there, with no key tester. See
+[Windows (experimental)](#windows-experimental).
+
 ### Experimental support
 
 On an experimental model the app connects and reads the model, firmware, profile, effect and brightness, but changes
@@ -287,7 +377,7 @@ Checked on 2026-11-17 with a Huntsman V3 Pro (1532:02A6), firmware 1.03, wired, 
 
 | ✅ Checked on hardware | ⏳ Not checked yet |
 |---|---|
-| Actuation and reset points: written, read back, still there after unplugging | The six models with [experimental support](#experimental-support) |
+| Actuation and reset points: written, read back, still there after unplugging | The six models with [experimental support](#experimental-support), including actuation on the V2 Analog |
 | Rapid Trigger and Snap Tap turned on | Intel Macs |
 | Keyboard lighting effects, per-key colours and brightness | macOS versions before 26 |
 | Colour correction (the keyboard matches the picker) | |
@@ -298,11 +388,17 @@ Checked on 2026-11-17 with a Huntsman V3 Pro (1532:02A6), firmware 1.03, wired, 
 | Lighting Studio: built-in presets, layers, settings, saving presets, Sound, Typing and Smart panels, music through the microphone | Smart lighting over a long session (real sleep and screen lock) |
 | Studio effects keep running after the app quits | System sound through a loopback device such as BlackHole |
 | | install.sh putting the previous app back after a failed build |
+| | Anything on [Windows](#windows-experimental): the build has never run on a PC with a keyboard |
 
 **Version 0.3.0** was checked again on the same keyboard: the window, actuation, Rapid Trigger and Snap Tap, keyboard
 effects, per-key colours and brightness, Studio typing and ambient presets (also after quitting the app), and
 starting and stopping the key tester with typing coming back. All passed. The key tester's new place in Actuation was
 then checked too (2026-11-18): the meter and readings update, and typing comes back after stopping.
+
+**Version 0.4.0** hasn't been checked on the keyboard yet. On the Mac it changes little: text and JSON files are read
+and written as UTF-8, and the actuation slider takes its range from the model (on the V3 Pro still 0.1 to 4.0 mm, and
+the golden tests show every byte sent to the V3 Pro is unchanged). The Windows build and the V2 Analog's actuation are
+untested.
 
 ## Install
 
@@ -471,6 +567,8 @@ Razer documentation. So it's careful:
   since test mode isn't stored.
 - **Experimental models** get only commands already checked on the Huntsman V3 Pro, and nothing that changes them is
   sent until Experimental support is on. The key tester is never offered on them.
+- **On Windows** every model counts as experimental, the key tester is never offered, and nothing is written while
+  Razer Synapse is running. See [Windows (experimental)](#windows-experimental).
 - **If everything else fails,** connecting the keyboard to Windows with Razer Synapse should reset it. This hasn't
   been needed or tried.
 
@@ -593,6 +691,16 @@ No. It talks to the keyboard directly over USB from macOS.
 </details>
 
 <details>
+<summary><b>Does it work on Windows?</b></summary>
+
+There's an experimental Windows build (`Huntsman-for-Windows-<version>.zip` on the releases page), but it has never
+been run on a Windows PC with a keyboard, so nobody knows yet. On Windows every model needs Experimental support
+switched on, there's no key tester, and the app only reads while Razer Synapse is running. See
+[Windows (experimental)](#windows-experimental).
+
+</details>
+
+<details>
 <summary><b>Is it free?</b></summary>
 
 Yes. It's open source under GPL-3.0-or-later, with no account, no telemetry and no paid tier.
@@ -629,7 +737,8 @@ tested, so an untested keyboard can't be left unable to type. The V2 and V2 TKL 
 The app talks to the keyboard's control interface with USB control transfers through libusb, which avoids Razer's
 macOS driver (it keeps that interface to itself). Settings go to two places: the copy the keyboard is using right now,
 and the saved onboard profile. The key tester puts the keyboard into "driver mode" and reads its travel reports
-(report `0x0B`) through IOKit.
+(report `0x0B`) through IOKit. On Windows the same commands go through hidapi as feature reports on the same
+interface (no driver swap), the app and the lighting service talk over a named pipe, and driver mode is never used.
 
 <details>
 <summary>Code map, and where your settings live</summary>
@@ -645,6 +754,8 @@ and the saved onboard profile. The key tester puts the keyboard into "driver mod
   presets and the engine that streams per-key frames
 - `inputs/`: key presses (IOKit), sound levels (sounddevice) and smart-lighting signals (idle, sleep, lock, front app)
 - `huntsman.py`: the command line
+- `platforms/`: which OS this is, folders and file locks, and the Windows pieces (hidapi transport, tray icon, start
+  at login, Raw Input typing, smart-lighting events, the Synapse check, the build manifest)
 
 Your settings and logs live in:
 
@@ -658,7 +769,7 @@ Your settings and logs live in:
 
 ## Contributing
 
-🙌 Hardware reports are the most useful thing right now: experimental models, Intel Macs and older macOS. See
+🙌 Hardware reports are the most useful thing right now: experimental models, Windows, Intel Macs and older macOS. See
 [CONTRIBUTING.md](CONTRIBUTING.md) for the steps, the safety rule for new commands, and how to run the tests:
 
 ```bash
@@ -668,7 +779,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requiremen
 ```
 
 The tests use a simulated keyboard and never touch USB. The interface tests open `ui/index.html?demo` in a headless
-browser; they're skipped if Playwright isn't installed. Security problems: see [SECURITY.md](SECURITY.md).
+browser; they're skipped if Playwright isn't installed. GitHub Actions runs them on macOS and Windows for every push
+and pull request. Security problems: see [SECURITY.md](SECURITY.md).
 
 ## Credits
 

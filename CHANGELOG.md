@@ -2,9 +2,27 @@
 
 All notable changes to this project are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
-## 0.4.0 – Unreleased
+## 0.4.0 – 2026-11-18
 
 ### Added
+- A Windows build, experimental and untested: `Huntsman-for-Windows-<version>.zip` on the release, a one-folder
+  PyInstaller build with one `Huntsman.exe` (the window; `Huntsman.exe --service` runs the lighting service). Unsigned,
+  so SmartScreen asks first. Everything the Mac app does, except the key tester, through a small platform layer
+  (`platforms/`): hidapi feature reports on interface 3 (the keyboard's normal driver), a tray icon instead of the menu
+  bar icon, start at login through the per-user Run key (value "Huntsman for Mac lighting", no admin rights), a named
+  pipe between the app and the service (random name and key at every start, mutual HMAC handshake), Raw Input for
+  typing reactions, and idle, sleep, lock and front-program events for smart lighting (app rules use program names
+  such as `steam.exe`). Settings in `%APPDATA%\Huntsman for Mac`, the log in
+  `%LOCALAPPDATA%\Huntsman for Mac\Logs`.
+- On Windows every model is experimental (writes need the Experimental support switch, the V3 Pro too) and the key
+  tester is never offered; pointing at the header's Experimental badge says Windows support is experimental.
+- Windows: while Razer Synapse runs (RazerAppEngine.exe, Synapse 3 or 2), the app and the lighting service only read,
+  and the window and the tray menu say why; writes come back within a few seconds after Synapse quits. When Windows
+  Dynamic Lighting is on, the window says how to turn it off for the keyboard (the app never changes it).
+- `Huntsman.exe --version` and `--self-test` (imports every module and reads every data file and layout the build
+  needs, without opening the keyboard or a window; it writes to the log, since a windowed exe has no console).
+- CI: GitHub Actions runs the test suite on macOS and Windows for every push and pull request, and builds,
+  smoke-tests and zips the Windows app (attached to a release when it's published).
 - Huntsman V2 Analog (1532:0266): actuation, experimental and untested, behind Experimental support like every other
   write to it. Its own scale from easyrazer (mm = byte / 255 × 2.1 + 1.5): 1.62 to 3.56 mm (bytes 15 to 250, the
   range its firmware keeps to), in 0.01 mm steps, with its own presets. The reset point follows 0.1 mm above, at least
@@ -17,6 +35,9 @@ All notable changes to this project are listed here. Versions follow [Semantic V
 - The V2 Analog gets the first-launch snapshot, and `huntsman.py restore-snapshot` works on it.
 
 ### Changed
+- Every JSON and text file the app reads or writes is opened as UTF-8 (found by CI on Windows, where the locale
+  encoding broke layouts with non-ASCII names). On the Mac this was already the default.
+- The macOS app bundles say 0.4.0 (build 4).
 - The actuation slider, its labels, the presets and the custom reset point follow the connected model's range and
   step (the window gets them with the model). The V3 Pro family is unchanged: 0.1 to 4.0 mm in 0.1 mm steps, and every
   byte sent to the V3 Pro is the same (golden tests).
@@ -26,6 +47,16 @@ All notable changes to this project are listed here. Versions follow [Semantic V
 - Rapid Trigger and Snap Tap (Razer's software runs them on the computer; the keyboard has no command for them), the
   key tester, and *Restore factory depth* / `huntsman.py factory` (its factory depth isn't known; they refuse before
   anything is sent).
+
+### Not checked on hardware
+- Everything on Windows: the build has never run on a Windows PC with a keyboard. Only the test suite (simulated
+  keyboard) and the built exe's `--version` and `--self-test` have run, on GitHub's windows-latest runners. Not seen
+  yet: the window (WebView2), the tray icon, start at login, typing reactions, smart lighting, the Synapse check, the
+  Dynamic Lighting notice, SmartScreen, and every exchange with a keyboard.
+- Actuation on the V2 Analog: the 3.56 mm end was checked on this keyboard by easyrazer; the 1.62 mm end and the reset
+  point rules come from its reading of the firmware.
+- The Mac app on the V3 Pro (02A6) hasn't been re-checked for this release yet; the golden tests show every byte sent
+  to it is unchanged.
 
 ## 0.3.0 – 2026-11-17
 

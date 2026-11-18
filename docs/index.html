@@ -32,7 +32,7 @@
   "description": "Free, open-source macOS app for the Razer Huntsman V3 Pro: per-key actuation from 0.1 to 4.0 mm, Rapid Trigger, Snap Tap, per-key RGB and a lighting studio. No Synapse needed.",
   "operatingSystem": "macOS",
   "applicationCategory": "UtilitiesApplication",
-  "softwareVersion": "0.3.0",
+  "softwareVersion": "0.4.0",
   "license": "https://spdx.org/licenses/GPL-3.0-or-later.html",
   "url": "https://samir777-eng.github.io/huntsman-for-mac/",
   "downloadUrl": "https://github.com/samir777-eng/huntsman-for-mac/releases/latest",
@@ -58,6 +58,8 @@
      "acceptedAnswer": {"@type": "Answer", "text": "Yes. Use Lighting → Per key to colour individual keys, or Effect for spectrum, wave, breathing, reactive and starlight. Ripple and other typing effects are in Studio."}},
     {"@type": "Question", "name": "Do I need Windows, Boot Camp or a virtual machine?",
      "acceptedAnswer": {"@type": "Answer", "text": "No. It talks to the keyboard directly over USB from macOS."}},
+    {"@type": "Question", "name": "Does it work on Windows?",
+     "acceptedAnswer": {"@type": "Answer", "text": "There's an experimental Windows build (Huntsman-for-Windows-<version>.zip on the releases page), but it has never been run on a Windows PC with a keyboard, so nobody knows yet. On Windows every model needs Experimental support switched on, there's no key tester, and the app only reads while Razer Synapse is running."}},
     {"@type": "Question", "name": "Is it free?",
      "acceptedAnswer": {"@type": "Answer", "text": "Yes. It's open source under GPL-3.0-or-later, with no account, no telemetry and no paid tier."}},
     {"@type": "Question", "name": "Which keyboards are supported?",
@@ -205,6 +207,11 @@ table{width:100%;border-collapse:collapse}
 .copy{font:600 .78rem var(--font);color:var(--muted);background:var(--card-2);border:1px solid var(--line-2);border-radius:8px;padding:5px 9px;cursor:pointer}
 .copy:hover{color:var(--text);border-color:var(--ice)}
 .req{margin-top:22px;color:var(--muted)}
+.steps.four{grid-template-columns:repeat(4,minmax(0,1fr))}
+.callout{border:1px solid rgba(255,198,107,.4);background:rgba(255,198,107,.06);border-radius:var(--radius);padding:20px 24px;margin-bottom:24px;color:var(--text)}
+.callout strong{color:var(--warn)}
+.win-notes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 32px;margin:28px 0 0;padding-inline-start:1.2em;color:var(--muted)}
+.win-notes li::marker{color:var(--warn)}
 
 /* testers */
 .testers{position:relative;border-radius:24px;padding:clamp(28px,5vw,56px);overflow:hidden;isolation:isolate;border:1px solid rgba(106,215,255,.3);
@@ -238,7 +245,8 @@ footer p{margin:0 0 12px}
 
 @media (max-width:960px){
   .compare-wrap,.testers-grid,.wide{grid-template-columns:minmax(0,1fr)}
-  .steps{grid-template-columns:minmax(0,1fr)}
+  .steps,.steps.four{grid-template-columns:minmax(0,1fr)}
+  .win-notes{grid-template-columns:minmax(0,1fr)}
   .safe{grid-template-columns:repeat(2,minmax(0,1fr))}
   .span-2,.span-3,.span-4{grid-column:span 3}
   .foot{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
@@ -287,6 +295,7 @@ footer p{margin:0 0 12px}
       <a href="#features">Features</a>
       <a href="#models">Models</a>
       <a href="#install">Install</a>
+      <a href="#windows">Windows</a>
       <a href="#faq">FAQ</a>
     </nav>
     <a class="btn btn-ghost btn-sm" href="https://github.com/samir777-eng/huntsman-for-mac">
@@ -299,7 +308,7 @@ footer p{margin:0 0 12px}
 <main id="main">
   <section class="hero" id="top" aria-labelledby="hero-title">
     <div class="wrap">
-      <p class="pill"><b>v0.3.0</b> · Free &amp; open source · macOS</p>
+      <p class="pill"><b>v0.4.0</b> · Free &amp; open source · macOS · Windows build (experimental)</p>
       <h1 id="hero-title">Huntsman <span class="grad" style="display:inline-block">for Mac</span></h1>
       <p class="sub">Tune your Razer Huntsman V3 Pro on a Mac. No Synapse, no Windows, no virtual machine.</p>
       <p class="lead">Per-key actuation from 0.1 to 4.0 mm, Rapid Trigger, Snap Tap, per-key RGB, and a lighting studio that reacts to your typing and your music.</p>
@@ -309,6 +318,7 @@ footer p{margin:0 0 12px}
           Get it on GitHub
         </a>
         <a class="btn btn-ghost" href="#install">Quick start <span aria-hidden="true">→</span></a>
+        <a class="btn btn-ghost" href="#windows">On Windows? <span aria-hidden="true">→</span></a>
       </div>
 
       <figure class="hero-shot">
@@ -451,7 +461,7 @@ footer p{margin:0 0 12px}
           </tbody>
         </table>
       </div>
-      <p class="fine">On the experimental models none of this has been seen working yet, and nothing that changes them is sent until you turn on <strong>Keyboard → Experimental support</strong>. Macs: tested on Apple silicon with macOS 26. Intel Macs and earlier macOS versions are untested; they will probably work, and a report either way helps.</p>
+      <p class="fine">On the experimental models none of this has been seen working yet, and nothing that changes them is sent until you turn on <strong>Keyboard → Experimental support</strong>. Macs: tested on Apple silicon with macOS 26. Intel Macs and earlier macOS versions are untested; they will probably work, and a report either way helps. On <a href="#windows">Windows</a> every model, the V3 Pro too, is experimental and untested, with no key tester.</p>
     </div>
   </section>
 
@@ -481,6 +491,46 @@ cd huntsman-for-mac</code></pre></div>
     </div>
   </section>
 
+  <section class="section" id="windows" aria-labelledby="windows-title" style="padding-top:0">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Windows build · experimental</p>
+        <h2 id="windows-title">On Windows? <span class="grad">Help us test it.</span></h2>
+        <p class="lead">Version 0.4.0 adds a Windows build: the same app as one <code>Huntsman.exe</code>, no Python or installer needed.</p>
+      </div>
+      <div class="callout" role="note"><strong>Untested.</strong> The Windows build has never run on a Windows PC with a keyboard. Only the test suite (simulated keyboard) and a smoke test of the built exe, which loads its code and data without opening a keyboard or a window, have run on GitHub's Windows runners. Treat everything on Windows as experimental, and please report what happens.</div>
+      <ol class="steps four" style="list-style:none;margin:0;padding:0">
+        <li class="step">
+          <h3>Download</h3>
+          <p><code>Huntsman-for-Windows-&lt;version&gt;.zip</code> from the <a href="https://github.com/samir777-eng/huntsman-for-mac/releases/latest">latest release</a>.</p>
+        </li>
+        <li class="step">
+          <h3>Unzip</h3>
+          <p>Right-click, <em>Extract All</em>, somewhere you'll keep it. Keep the <code>Huntsman</code> folder together.</p>
+        </li>
+        <li class="step">
+          <h3>Close Synapse</h3>
+          <p>Quit Razer Synapse, including its tray icon. While it runs, the app only reads.</p>
+        </li>
+        <li class="step">
+          <h3>Run Huntsman.exe</h3>
+          <p>It's unsigned, so SmartScreen may ask: <strong>More info</strong>, then <strong>Run anyway</strong>. Then turn on <strong>Keyboard → Experimental support</strong>.</p>
+        </li>
+      </ol>
+      <ul class="win-notes">
+        <li>Every model is experimental on Windows, the V3 Pro too: nothing is changed until Experimental support is on.</li>
+        <li>No key tester on Windows.</li>
+        <li>Windows Dynamic Lighting can take over the lights; the window says how to turn it off for the keyboard.</li>
+        <li>The window needs the Microsoft Edge WebView2 Runtime: built into Windows 11, may need installing on Windows 10.</li>
+        <li>The lighting service lives in the tray and starts at sign-in (per-user, no admin rights).</li>
+        <li>Uninstall: quit the lighting service, remove its start-at-login entry, delete the folder. Steps in the <a href="https://github.com/samir777-eng/huntsman-for-mac#windows-experimental">README</a>.</li>
+      </ul>
+      <div class="cta" style="justify-content:flex-start">
+        <a class="btn btn-ghost" href="https://github.com/samir777-eng/huntsman-for-mac/blob/master/CONTRIBUTING.md#testing-on-windows">How to test on Windows</a>
+      </div>
+    </div>
+  </section>
+
   <section class="section" id="testers" aria-labelledby="testers-title" style="padding-top:0">
     <div class="wrap">
       <div class="testers">
@@ -488,7 +538,7 @@ cd huntsman-for-mac</code></pre></div>
           <div>
             <p class="eyebrow">Testers wanted</p>
             <h2 id="testers-title">Own a TKL, 8KHz, Mini or V2? <span class="grad">Turn our guess into a fact.</span></h2>
-            <p class="lead" style="margin-top:16px">Nobody has tried the six experimental models with this app yet. Hardware reports are the most useful thing right now: experimental models, Intel Macs and older macOS.</p>
+            <p class="lead" style="margin-top:16px">Nobody has tried the six experimental models with this app yet. Hardware reports are the most useful thing right now: experimental models, Windows, Intel Macs and older macOS.</p>
             <div class="cta" style="justify-content:flex-start">
               <a class="btn btn-primary" href="https://github.com/samir777-eng/huntsman-for-mac/blob/master/CONTRIBUTING.md#testing-an-experimental-model">How to test a model</a>
               <a class="btn btn-ghost" href="https://github.com/samir777-eng/huntsman-for-mac/issues/new?template=new_model.md">Open a new model issue</a>
@@ -533,6 +583,7 @@ cd huntsman-for-mac</code></pre></div>
         <details><summary>Can I use Rapid Trigger or Snap Tap on a Mac?</summary><p>Yes, from the Rapid Trigger and Snap Tap tabs. Both have been confirmed on a Huntsman V3 Pro; please report how they work on other models.</p></details>
         <details><summary>Can I set per-key RGB lighting without Synapse?</summary><p>Yes. Use Lighting → Per key to colour individual keys, or Effect for spectrum, wave, breathing, reactive and starlight. Ripple and other typing effects are in Studio.</p></details>
         <details><summary>Do I need Windows, Boot Camp or a virtual machine?</summary><p>No. It talks to the keyboard directly over USB from macOS.</p></details>
+        <details><summary>Does it work on Windows?</summary><p>There's an experimental Windows build (<code>Huntsman-for-Windows-&lt;version&gt;.zip</code> on the <a href="https://github.com/samir777-eng/huntsman-for-mac/releases/latest">releases page</a>), but it has never been run on a Windows PC with a keyboard, so nobody knows yet. On Windows every model needs Experimental support switched on, there's no key tester, and the app only reads while Razer Synapse is running. See <a href="#windows">Windows</a>.</p></details>
         <details><summary>Is it free?</summary><p>Yes. It's open source under GPL-3.0-or-later, with no account, no telemetry and no paid tier.</p></details>
         <details><summary>Which keyboards are supported?</summary><p>The Razer Huntsman V3 Pro (full size, USB ID 1532:02A6) is tested. The V3 Pro TKL, V3 Pro 8KHz, V3 Pro Mini, V2, V2 TKL and V2 Analog have experimental support: untested, and off until you turn on Experimental support. See <a href="#models">Supported hardware</a>.</p></details>
         <details><summary>I have one of the experimental models. How can I help?</summary><p>Turn on Experimental support, run the LED check, and report what worked and what didn't. The steps are in <a href="https://github.com/samir777-eng/huntsman-for-mac/blob/master/CONTRIBUTING.md#testing-an-experimental-model">CONTRIBUTING.md</a>.</p></details>

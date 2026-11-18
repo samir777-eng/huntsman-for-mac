@@ -179,3 +179,15 @@ def test_robots_and_sitemap_point_at_the_site():
 
 def test_nojekyll_is_present():
     assert (DOCS / ".nojekyll").is_file()
+
+
+def test_page_says_the_windows_build_is_experimental_and_untested():
+    text = _html()
+    win = text[text.index('id="windows"'):]
+    win = win[:win.index("</section>")]
+    assert "experimental" in win.lower() and "Untested" in win
+    assert "never run on a Windows PC" in win
+    assert "Huntsman-for-Windows-&lt;version&gt;.zip" in win
+    assert "SmartScreen" in win and "Synapse" in win and "Dynamic Lighting" in win
+    assert 'href="#windows"' in text
+    assert "Does it work on Windows?" in text

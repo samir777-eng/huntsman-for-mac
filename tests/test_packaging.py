@@ -202,15 +202,31 @@ def test_windows_build_workflow():
     wf, text = _workflow("windows-build.yml")
     assert "workflow_dispatch" in wf["on"]
     assert wf["on"]["release"]["types"] == ["published"]
-    assert wf["permissions"]["contents"] == "write"
-    (job,) = wf["jobs"].values()
-    assert job["runs-on"] == "windows-latest"
+    assert wf["permissions"] == {"contents": "read"}            # least privilege; only the release job writes
+    build, release = wf["jobs"]["build"], wf["jobs"]["release"]
+    assert build["runs-on"] == "windows-latest" and "permissions" not in build
     assert "pyinstaller" in text.lower() and "packaging/windows/huntsman.spec" in text
     assert "--self-test" in text
     assert "Huntsman-for-Windows-" in text and "Compress-Archive" in text
     assert "actions/upload-artifact" in text
-    assert "gh release upload" in text and "github.event_name == 'release'" in text
-    assert "GITHUB_TOKEN" in text
+    assert "gh release upload" not in str(build)
+    assert release["needs"] == "build" and release["if"] == "github.event_name == 'release'"
+    assert release["permissions"] == {"contents": "write"}
+    steps = release["steps"]
+    assert any(st.get("uses", "").startswith("actions/download-artifact@") for st in steps)
+    (upload,) = [st for st in steps if "gh release upload" in st.get("run", "")]
+    assert "GITHUB_TOKEN" in upload["env"]["GH_TOKEN"]
+    assert upload["env"]["TAG"] == "${{ github.event.release.tag_name }}"
+    assert "${{" not in upload["run"]                            # values reach the script only through env
+    assert '"${TAG#v}" != "$VERSION"' in upload["run"] and "exit 1" in upload["run"]
+
+
+def test_workflow_scripts_take_event_values_through_env():
+    """No ${{ }} expression inside a run script of the build workflow (script injection): env only."""
+    wf, _text = _workflow("windows-build.yml")
+    for job in wf["jobs"].values():
+        for st in job["steps"]:
+            assert "${{" not in st.get("run", ""), st.get("name")
 
 
 def test_pyinstaller_is_pinned_in_the_build():

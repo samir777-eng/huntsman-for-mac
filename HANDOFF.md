@@ -10,7 +10,17 @@ Current state of Huntsman for Mac, updated 2026-11-18.
   headless Chromium UI tests in demo mode). Dev env: `requirements.txt` + `requirements-dev.txt`, then
   `playwright install chromium`. GitHub Actions `CI` (.github/workflows/ci.yml) runs it on macos-latest and
   windows-latest (Windows: `requirements-win.txt`; 37 `mac_only` tests skipped, see tests/conftest.py).
-- **Installed on the maintainer's Mac** from `master` via `./install.sh`; app + lighting service running.
+- **Installed on the maintainer's Mac:** branch `windows` at 0.4.0 pre-UX-fixes (owner checked window, menu bar,
+  actuation, lighting, Studio after quit, key tester: all passed, 2026-11-18).
+- **PAUSED 2026-11-18 (owner moving), resume here:** branch `windows` (pushed, CI green at 4399325) holds 0.4.0:
+  Windows build (experimental, untested on a PC), V2 Analog actuation, 6 new Studio presets, all UX-audit fixes,
+  all reviews done (no Critical/Important open). Remaining, in order:
+  1. Owner quits the app → `./install.sh` → hardware check one at a time: actuation with the new Mixed readout +
+     Apply confirmation, Snap Tap switch/board picking, Studio preview while off, the 6 new presets, key tester
+     (ask first: it stops typing).
+  2. Record results in README/CHANGELOG/HANDOFF (verified only), open PR `windows` → master, merge (no migration).
+  3. Tag v0.4.0 and publish the release; `.github/workflows/windows-build.yml` then builds and attaches
+     `Huntsman-for-Windows-0.4.0.zip` (release job checks tag == __version__). Confirm the asset appears.
 
 ## What the product is
 Unofficial macOS control app for the Razer Huntsman V3 Pro (USB 1532:02A6), which Razer Synapse for Mac doesn't

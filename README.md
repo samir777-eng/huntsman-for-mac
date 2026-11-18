@@ -150,6 +150,19 @@ you stop, close the window or quit. Meanwhile, use your Mac's built-in keyboard.
 
 The key tester is only offered on the Huntsman V3 Pro (1532:02A6), the one model tested with this app.
 
+#### Actuation on the V2 Analog
+
+Experimental and untested with this app. The Huntsman V2 Analog (1532:0266) measures travel differently: its keyboard
+acts between **1.62 mm** and **3.56 mm**, so that's the slider's range, in 0.01 mm steps, with presets at 1.62, 2.0,
+2.5, 3.0 and 3.56. The reset point follows 0.1 mm above, never above 1.54 mm, and a custom one must sit at least
+0.08 mm above the actuation point. The scale and limits come from easyrazer, which checked the 3.56 mm end on this
+keyboard; the 1.62 mm end and the reset point rules come from its reading of the firmware and haven't been seen
+working. Only the two depth bytes of each key change: the key's assignment (what it types, or a macro) is written
+back as read, and every write is read back. A key set by Razer Synapse reads 0/0, which the keyboard treats as
+1.62 mm, so the app shows it that way. Only the normal layer is changed; a Hypershift (Fn) depth is left alone.
+There's no *Restore factory depth* on this model, because its factory depth isn't known; the first-launch snapshot
+(`huntsman.py restore-snapshot`) puts every key back as it was.
+
 ### Rapid Trigger and Snap Tap
 
 **Rapid Trigger** fires a key again as soon as it moves down by the press distance after rising by the release
@@ -227,11 +240,13 @@ them with the [LED check](#led-check).
 | Huntsman V3 Pro Mini | 1532:02B0 | 🧪 Experimental, untested | Lighting, per-key colours, Studio, actuation, Rapid Trigger, Snap Tap. No key tester |
 | Huntsman V2 | 1532:026C | 🧪 Experimental, untested | Lighting, per-key colours and Studio only |
 | Huntsman V2 TKL | 1532:026B | 🧪 Experimental, untested | Lighting, per-key colours and Studio only |
-| Huntsman V2 Analog | 1532:0266 | 🧪 Experimental, untested | Lighting, per-key colours and Studio only. No starlight effects; its analog features aren't supported |
+| Huntsman V2 Analog | 1532:0266 | 🧪 Experimental, untested | Lighting, per-key colours, Studio, actuation (1.62 to 3.56 mm). No Rapid Trigger, Snap Tap, key tester, factory depth reset or starlight effects |
 
-On the experimental models none of this has been seen working yet. The V2 family has no actuation, Rapid Trigger or
-Snap Tap tabs and no key tester. If more than one supported keyboard is plugged in, the app uses the first one it
-finds in the order of this table.
+On the experimental models none of this has been seen working yet. The V2 and V2 TKL have no actuation, Rapid
+Trigger or Snap Tap tabs and no key tester. The V2 Analog has actuation only, on its own scale (see
+[Actuation on the V2 Analog](#actuation-on-the-v2-analog)); its Rapid Trigger and Snap Tap run in Razer's software on
+the computer, not on the keyboard, so the app doesn't offer them. If more than one supported keyboard is plugged in,
+the app uses the first one it finds in the order of this table.
 
 Macs: tested on Apple silicon with macOS 26. Intel Macs and earlier macOS versions are untested; they will probably
 work, and a report either way helps.
@@ -418,13 +433,13 @@ APP=~/Applications/"Huntsman for Mac.app"/Contents/Resources
 |---|---|
 | `status` | Model, USB ID and status, the Experimental support switch (experimental models), firmware, saved profile, brightness, and the A key's actuation and reset points (models with adjustable actuation) |
 | `experimental on`, `experimental off` | Turn Experimental support on or off. Doesn't need a keyboard |
-| `depth 2.0` | Every key types at 2.0 mm (0.1 to 4.0); the reset point follows 0.1 mm above |
+| `depth 2.0` | Every key types at 2.0 mm (0.1 to 4.0; on the V2 Analog 1.62 to 3.56, in 0.01 mm steps); the reset point follows 0.1 mm above |
 | `depth 0.5 W A S D` | Only those keys |
 | `color 255 255 255` | Solid colour, saved on the keyboard |
 | `spectrum`, `wave`, `off` | Built-in effects, saved on the keyboard |
 | `brightness 80` | Brightness, 0 to 100 |
 | `apply-saved` | Send per-key colours, Rapid Trigger and Snap Tap again (the lighting service does this when it starts) |
-| `factory` | Every key back to 1.2 mm; Rapid Trigger and Snap Tap off |
+| `factory` | Every key back to 1.2 mm; Rapid Trigger and Snap Tap off. Refused on the V2 Analog (factory depth unknown) |
 | `restore-snapshot` | Put every key back exactly as it was on the app's first launch |
 | `--version` | Print the version |
 | `help` | Print this list |
@@ -446,9 +461,9 @@ Razer documentation. So it's careful:
 - **Your original settings are saved.** On first launch the app copies every key's settings to
   `~/Library/Application Support/Huntsman for Mac/first-launch-snapshot.json`; `huntsman.py restore-snapshot` puts
   them back. The snapshot records its model and is never written to another one. There is one snapshot per Mac user:
-  a second model plugged in later gets none. The V2 family has no actuation settings, so it gets none either.
+  a second model plugged in later gets none. The V2 and V2 TKL have no actuation settings, so they get none either.
 - **Factory reset.** *Restore factory depth* (in the app, or `huntsman.py factory`) puts every key back to 1.2 mm and
-  turns off Rapid Trigger and Snap Tap.
+  turns off Rapid Trigger and Snap Tap. Not on the V2 Analog, whose factory depth isn't known: use the snapshot.
 - **The key tester always lets go.** The keyboard goes back to typing when you stop, after 60 seconds, when you close
   the window, when the app quits, and when macOS ends it (SIGTERM). If the app is killed outright, the next time the
   app or the command line connects it puts the keyboard back to typing. Unplugging and replugging should also work,
@@ -604,7 +619,7 @@ Turn on Experimental support, run the LED check, and report what worked and what
 <summary><b>Why is there no key tester on my model?</b></summary>
 
 The key tester switches the keyboard into a mode where it stops typing. It's only offered on a model that has been
-tested, so an untested keyboard can't be left unable to type. The V2 family also has no analog keys to test.
+tested, so an untested keyboard can't be left unable to type. The V2 and V2 TKL also have no analog keys to test.
 
 </details>
 

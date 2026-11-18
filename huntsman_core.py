@@ -10,6 +10,8 @@ Profile 0 is the live copy the keyboard types with (RAM). The saved slot is the 
 profile (flash). Actuation and lighting go to both, so they apply now and survive a replug.
 Each key has an actuation point (thr_l, byte 3) and a release point (thr_h, byte 4); the release
 must sit below the actuation, and by default it follows it RELEASE_GAP units below, like Synapse.
+Each model maps these bytes to mm on its own scale (models.Scale): the constants below are the V3 Pro's; the
+V2 Analog's (experimental) is models.V2_ANALOG_SCALE.
 """
 import contextlib
 import fcntl
@@ -236,31 +238,20 @@ def check_reply(req, resp):
         raise DeviceError(f"keyboard refused {req[6]:02X}:{req[7]:02X} (status {resp[0]:02X})")
 
 
-def mm_to_threshold(mm):
-    mm = round(float(mm), 1)
-    if not 0.1 <= mm <= 4.0:
-        raise ValueError(f"{mm} mm is outside 0.1-4.0")
-    if mm == 1.2:  # the scale gives 77, but Synapse's factory default is 76: keep the preset and "factory" identical
-        return FACTORY_THR
-    return max(MIN_THR, min(255, round(mm / FULL_MM * 255)))
+def mm_to_threshold(mm, scale=None):
+    """Actuation byte for mm on scale (a models.Scale), default the V3 Pro's: 0.1-4.0 mm, and 1.2 mm gives
+    Synapse's factory 76 (the scale gives 77) so the preset and "factory" are identical."""
+    return (scale or models.V3_SCALE).threshold(mm)
 
 
-def threshold_to_mm(t):
-    return round(t * FULL_MM / 255, 1)
+def threshold_to_mm(t, scale=None):
+    return (scale or models.V3_SCALE).mm(t)
 
 
-def release_for(thr, release_mm=None):
-    """Release threshold for an actuation threshold: explicit, or RELEASE_GAP below. Never 0."""
-    if thr < MIN_THR:
-        raise ValueError(f"actuation threshold {thr} is below the minimum {MIN_THR}")
-    if release_mm is None:
-        return thr - RELEASE_GAP
-    rel = max(1, min(255, round(float(release_mm) / FULL_MM * 255)))
-    if thr - RELEASE_GAP < rel < thr:  # within one 0.1 mm step of the limit (e.g. 3.9 at 4.0): clamp
-        rel = thr - RELEASE_GAP
-    if rel > thr - RELEASE_GAP:
-        raise ValueError("release point must sit at least 0.1 mm above the actuation point")
-    return rel
+def release_for(thr, release_mm=None, scale=None):
+    """Release byte for an actuation byte: explicit, or by default just above (RELEASE_GAP below on the V3 Pro).
+    Never 0."""
+    return (scale or models.V3_SCALE).release(thr, release_mm)
 
 
 def rt_distance(mm):
@@ -493,12 +484,17 @@ class Keyboard:
         return parse_key_assignment(self.cmd(0x02, 0x92, [profile, key, 0], 80), profile, key)
 
     def read_points(self, key, profile=LIVE):
+        """(actuation mm, release mm) the key acts on: on the V2 Analog the firmware clamps the stored bytes."""
+        sc = self.model.scale
         a = self.read_key(profile, key)
-        return threshold_to_mm(a[3]), threshold_to_mm(a[4])
+        thr, rel = sc.effective(a[3], a[4])
+        return sc.mm(thr), sc.mm(rel)
 
     def _write_points(self, keys, thr, rel):
         """Per key: saved (flash) first, then live (RAM), so a failure never leaves flash behind RAM.
-        A key whose saved write doesn't read back is reported and its live copy is left alone."""
+        Read-modify-write: only the two threshold bytes change; the layer and the key's function (fnId, size,
+        data) are written back as read (easyrazer actuation.rs update). A key whose saved write doesn't read back
+        is reported and its live copy is left alone."""
         self.check_write("actuation")
         saved = self.saved
         failed = []
@@ -513,8 +509,10 @@ class Keyboard:
         return sorted(set(failed))
 
     def set_actuation(self, keys, mm, release_mm=None):
-        thr = mm_to_threshold(mm)
-        return self._write_points(keys, thr, release_for(thr, release_mm))
+        """mm (and release_mm) on the model's scale and range; out of range raises before anything is sent."""
+        sc = self.model.scale
+        thr = sc.threshold(mm)
+        return self._write_points(keys, thr, sc.release(thr, release_mm))
 
     def restore_snapshot(self, snap):
         """Write back a snapshot() taken earlier. Refuses a snapshot of another model (one without a PID was taken
@@ -650,8 +648,17 @@ class Keyboard:
 
 
     def restore_factory(self, keys):
-        """Synapse's defaults: actuation 1.2 mm (76), release 1.1 mm (70)."""
-        return self._write_points(keys, FACTORY_THR, FACTORY_REL)
+        """Synapse's defaults: actuation 1.2 mm (76), release 1.1 mm (70). Refused on a model whose factory point
+        isn't known (the V2 Analog), before anything is sent."""
+        self.check_factory()
+        return self._write_points(keys, *self.model.scale.factory)
+
+    def check_factory(self):
+        self._need("actuation")
+        if self.model.scale.factory is None:
+            raise FeatureUnavailable(f"The {self.model.name}'s factory depth isn't known, so it can't be restored. "
+                                     "The first-launch snapshot (huntsman.py restore-snapshot) puts every key back "
+                                     "as it was.")
 
     def snapshot(self, keys):
         """Every key's raw assignment in the live and saved profiles, for manual recovery.

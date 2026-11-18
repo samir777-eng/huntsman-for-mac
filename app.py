@@ -235,7 +235,7 @@ def set_effect(kb, name, opts):
 def ensure_snapshot(kb):
     """On first launch, keep a copy of every key's settings so they can be put back by hand.
     Written once, never overwritten; keys the firmware refuses are listed as skipped. Models without
-    adjustable actuation (the V2 family) have nothing to keep."""
+    adjustable actuation (the V2 and V2 TKL) have nothing to keep."""
     if os.path.exists(SNAPSHOT_FILE) or not kb.model.has("actuation"):
         return
     snap = kb.snapshot(hc.every_key_id())
@@ -253,7 +253,10 @@ def ensure_snapshot(kb):
 
 def restore_factory(kb):
     """Every step is tried, and Rapid Trigger / Snap Tap are cleared from state.json even if the
-    keyboard refuses one, so the app never re-sends them at the next login. Then any failure is raised."""
+    keyboard refuses one, so the app never re-sends them at the next login. Then any failure is raised.
+    A model whose factory depth isn't known (the V2 Analog) is refused first, with nothing sent or cleared."""
+    if kb.model.has("actuation"):
+        kb.check_factory()
     failed, errors = [], []
     steps = [lambda: failed.extend(kb.restore_factory(hc.all_key_ids())),
              lambda: kb.set_rapid([(k, None) for k in hc.every_key_id()]),
@@ -603,7 +606,7 @@ class Api:
     def read_depths(self):
         def f(kb):
             if not kb.model.has("actuation"):
-                return {}   # the V2 family: no adjustable depth to read
+                return {}   # the V2 and V2 TKL: no adjustable depth to read
             ids = hc.all_key_ids()
             out = {}
             for i, k in enumerate(ids):

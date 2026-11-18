@@ -2,6 +2,29 @@
 
 All notable changes to this project are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 0.4.0 – Unreleased
+
+### Added
+- Huntsman V2 Analog (1532:0266): actuation, experimental and untested, behind Experimental support like every other
+  write to it. Its own scale from easyrazer (mm = byte / 255 × 2.1 + 1.5): 1.62 to 3.56 mm (bytes 15 to 250, the
+  range its firmware keeps to), in 0.01 mm steps, with its own presets. The reset point follows 0.1 mm above, at least
+  1.54 mm (byte 5); a custom one must sit at least 0.08 mm (10 bytes) above the actuation point (the release rules are
+  unverified). Each write changes only the two depth bytes of the normal layer, keeps the key's assignment, goes to the
+  active saved profile first and then the live one, and is read back. Reads show the depth the keyboard acts on, so a
+  key Synapse left at 0/0 shows as 1.62 mm. Key ids are easyrazer's 0266 key map; all 104 keys of the layout match.
+- The V2 Analog gets the first-launch snapshot, and `huntsman.py restore-snapshot` works on it.
+
+### Changed
+- The actuation slider, its labels, the presets and the custom reset point follow the connected model's range and
+  step (the window gets them with the model). The V3 Pro family is unchanged: 0.1 to 4.0 mm in 0.1 mm steps, and every
+  byte sent to the V3 Pro is the same (golden tests).
+- `huntsman.py depth` checks the connected model's range.
+
+### Not offered on the V2 Analog
+- Rapid Trigger and Snap Tap (Razer's software runs them on the computer; the keyboard has no command for them), the
+  key tester, and *Restore factory depth* / `huntsman.py factory` (its factory depth isn't known; they refuse before
+  anything is sent).
+
 ## 0.3.0 – 2026-11-17
 
 ### Added

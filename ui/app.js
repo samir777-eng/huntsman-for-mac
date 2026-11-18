@@ -31,11 +31,16 @@ let fxShown = null;         // the built-in effect the keyboard runs: {name, c1,
 let testing = false;
 let focusId = null;         // roving tabindex on the board
 let zoom = 1;
+// The connected model's actuation scale (models.Scale.info): slider range and step, lowest reset point, the
+// "Just above" gap, the factory depth (null: not offered) and the presets. The V3 Pro's until a model says otherwise.
+const V3_ACT = { min: 0.1, max: 4, step: 0.1, decimals: 1, release_min: 0, reset_gap: 0.1, factory: 1.2,
+  presets: [["Light", 0.5], ["Gaming", 1.0], ["Factory", 1.2], ["Balanced", 1.5], ["Typing", 2.0], ["Firm", 3.0]] };
+let act = V3_ACT;
 
 /* ---------- helpers ---------- */
 const hex2rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
 const rgb2hex = a => "#" + a.map(v => (+v).toString(16).padStart(2, "0")).join("");
-const mm = v => (+v).toFixed(1) + " mm";
+const mm = v => (+v).toFixed(act.decimals) + " mm";
 const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
 const keyIds = () => layout.filter(k => k.name !== "RIGHT_GUI").map(k => k.id);
 const byName = n => layout.find(k => k.name === n)?.id;
@@ -172,7 +177,7 @@ function paint() {
     c.classList.toggle("unlit", dark);
     c.tabIndex = id === focusId ? 0 : -1;
     if (view === "actuation") {
-      if (!(testing && c.classList.contains("pressed"))) front.textContent = p ? p[0].toFixed(1) : "";   // a pressed key shows its travel
+      if (!(testing && c.classList.contains("pressed"))) front.textContent = p ? p[0].toFixed(act.decimals) : "";   // a pressed key shows its travel
       c.title = p ? `Types at ${mm(p[0])}, resets at ${mm(p[1])}` : "";
     } else { front.textContent = ""; if (!c.classList.contains("off")) c.title = ""; }
     c.setAttribute("aria-label", capName(id));
@@ -245,7 +250,8 @@ function applyModel() {
   Object.keys(FEATURE_TABS).forEach(v => { $(`#sources button[data-view="${v}"]`).hidden = !viewShown(v); });
   $("#actTest").hidden = $("#actReadings").hidden = !hasFeature("key_tester");
   if (testing && !hasFeature("key_tester")) stopTest();
-  $("#restore").hidden = $("#restoreHint").hidden = !hasFeature("actuation");
+  setAct(hasFeature("actuation") && model.actuation || V3_ACT);
+  $("#restore").hidden = $("#restoreHint").hidden = !hasFeature("actuation") || act.factory == null;
   $("#expBox").hidden = !experimentalModel();
   $("#expOn").checked = !!model?.experimental_on;
   $("#ledBox").hidden = !experimentalModel() || !model.experimental_on;
@@ -399,12 +405,13 @@ function fillAll() { $$('input[type="range"]').forEach(fillRange); }
 const valueText = (id, t) => { $("#" + id).setAttribute("aria-valuetext", t); };
 
 /* ---------- actuation ---------- */
-const depth = () => +(+$("#depth").value).toFixed(1);
-const relValue = () => $("#relMode").value === "custom" ? +(+$("#rel").value).toFixed(1) : +Math.max(0, depth() - 0.1).toFixed(1);
+const depth = () => +(+$("#depth").value).toFixed(act.decimals);
+const relTop = () => Math.max(act.release_min, depth() - act.reset_gap);   // "Just above", and the custom maximum
+const relValue = () => +($("#relMode").value === "custom" ? +$("#rel").value : relTop()).toFixed(act.decimals);
 function depthUi() {
-  $("#depthNum").textContent = depth().toFixed(1);
+  $("#depthNum").textContent = depth().toFixed(act.decimals);
   valueText("depth", mm(depth()));
-  const rel = $("#rel"); rel.max = Math.max(0, depth() - 0.1).toFixed(1);
+  const rel = $("#rel"); rel.max = relTop().toFixed(act.decimals);
   if (+rel.value > +rel.max) rel.value = rel.max;
   $("#relOut").textContent = mm(rel.value); valueText("rel", mm(rel.value));
   $$("#presets button").forEach(b => b.setAttribute("aria-pressed", +b.dataset.v === depth()));
@@ -412,12 +419,27 @@ function depthUi() {
 }
 $("#depth").oninput = depthUi; $("#rel").oninput = depthUi;
 $("#relMode").onchange = () => { $("#relRow").hidden = $("#relMode").value !== "custom"; depthUi(); };
-[["Light", 0.5], ["Gaming", 1.0], ["Factory", 1.2], ["Balanced", 1.5], ["Typing", 2.0], ["Firm", 3.0]].forEach(([n, v]) => {
-  const b = document.createElement("button"); b.dataset.v = v;
-  b.innerHTML = "<b></b><span></span>"; b.children[0].textContent = v.toFixed(1); b.children[1].textContent = n;
-  b.setAttribute("aria-label", `${n}, ${mm(v)}`);
-  b.onclick = () => { $("#depth").value = v; depthUi(); }; $("#presets").appendChild(b);
-});
+function fillPresets() {
+  $("#presets").innerHTML = "";
+  act.presets.forEach(([n, v]) => {
+    const b = document.createElement("button"); b.dataset.v = v;
+    b.innerHTML = "<b></b><span></span>"; b.children[0].textContent = v.toFixed(act.decimals); b.children[1].textContent = n;
+    b.setAttribute("aria-label", `${n}, ${mm(v)}`);
+    b.onclick = () => { $("#depth").value = v; depthUi(); }; $("#presets").appendChild(b);
+  });
+}
+fillPresets();
+// a model with another scale: the sliders, their labels and the presets follow it
+function setAct(next) {
+  if (JSON.stringify(next) === JSON.stringify(act)) return;
+  act = next;
+  const d = $("#depth"), rel = $("#rel");
+  d.min = act.min; d.max = act.max; d.step = act.step;
+  rel.min = act.release_min; rel.step = act.step;
+  const [lo, hi] = $$(".scale span");
+  lo.textContent = `${act.min.toFixed(act.decimals)} mm, lightest`; hi.textContent = `${act.max.toFixed(act.decimals)} mm, deepest`;
+  fillPresets(); depthUi(); paint();
+}
 $("#applyDepth").onclick = e => busy(e.target, async () => {
   const rel = $("#relMode").value === "custom" ? relValue() : null;
   const r = await call("set_depth", [...selected], depth(), rel);
@@ -640,8 +662,8 @@ function drawTrace() {
     g.beginPath(); g.moveTo(L, y(p[0])); g.lineTo(R, y(p[0])); g.stroke();
     g.globalAlpha = .5; g.beginPath(); g.moveTo(L, y(p[1])); g.lineTo(R, y(p[1])); g.stroke(); g.globalAlpha = 1;
     g.setLineDash([]); g.fillStyle = accent;
-    g.fillText(`types at ${p[0].toFixed(1)}`, L + 6, y(p[0]) + 14);
-    g.globalAlpha = .7; g.fillText(`resets at ${p[1].toFixed(1)}`, L + 6, y(p[1]) - 5); g.globalAlpha = 1;
+    g.fillText(`types at ${p[0].toFixed(act.decimals)}`, L + 6, y(p[0]) + 14);
+    g.globalAlpha = .7; g.fillText(`resets at ${p[1].toFixed(act.decimals)}`, L + 6, y(p[1]) - 5); g.globalAlpha = 1;
   }
   const s = trace.samples; if (s.length < 2) return;
   const now = s[s.length - 1][0], x = t => R - (now - t) / WINDOW_MS * (R - L);

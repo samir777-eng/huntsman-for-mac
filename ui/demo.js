@@ -63,7 +63,8 @@
       read_depths: plugged(() => ok(pts)),
       set_depth: gated("actuation", (keys, mm, rel) => {
         const done = {};
-        (keys.length ? keys : Object.keys(pts)).forEach(k => { done[k] = pts[k] = [mm, rel ?? +(mm - 0.1).toFixed(1)]; });
+        const A = M.actuation;   // the model's scale, as huntsman_core: "Just above" is reset_gap above, never below release_min
+        (keys.length ? keys : Object.keys(pts)).forEach(k => { done[k] = pts[k] = [mm, rel ?? +Math.max(A.release_min, mm - A.reset_gap).toFixed(A.decimals)]; });
         return ok({ failed: [], done, count: Object.keys(done).length });
       }),
       set_rapid: gated("rapid", () => ok(true)), set_snap: gated("snap_tap", () => ok(true)), set_prefs: () => ok(true),
@@ -72,7 +73,8 @@
       set_custom: gated("per_key", () => { studio.studio_enable(false); return ok(true); }),
       set_brightness: gated("lighting", () => ok(null)),   // live only
       save_brightness: gated("lighting", () => ok(null)),  // written to the keyboard's memory
-      restore_original: gated("actuation", () => ok(state)),
+      restore_original: gated("actuation", () => M.actuation.factory == null
+        ? Promise.resolve({ ok: false, reason: "unavailable", error: `The ${M.name}'s factory depth isn't known, so it can't be restored.` }) : ok(state)),
       start_test: gated("key_tester", () => {
         const seq = ["W", "A", "S", "D"].map(id);
         let t = 0;

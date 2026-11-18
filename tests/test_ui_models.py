@@ -244,3 +244,64 @@ def test_reconnect_to_the_same_model_keeps_the_layout(open_model):
     expect(page.locator("#conn")).to_have_text("Connected, firmware 1.03")
     assert len(calls(page, "layout")) == 1 and len(calls(page, "effects")) == 1
     assert page.locator(".cap").count() == 104 and page.errors == []
+
+
+# ---------- actuation follows the model's scale ----------
+
+def presets(page):
+    return page.locator("#presets button").evaluate_all(
+        "bs => bs.map(b => [b.children[1].textContent, b.children[0].textContent, b.dataset.v])")
+
+
+def test_v3_actuation_controls_are_unchanged(open_model):
+    page = open_model()
+    d = page.locator("#depth")
+    assert [d.get_attribute(a) for a in ("min", "max", "step")] == ["0.1", "4", "0.1"]
+    assert page.locator(".scale span").all_text_contents() == ["0.1 mm, lightest", "4.0 mm, deepest"]
+    assert presets(page) == [["Light", "0.5", "0.5"], ["Gaming", "1.0", "1"], ["Factory", "1.2", "1.2"],
+                             ["Balanced", "1.5", "1.5"], ["Typing", "2.0", "2"], ["Firm", "3.0", "3"]]
+    r = page.locator("#rel")
+    assert [r.get_attribute(a) for a in ("min", "step")] == ["0", "0.1"]
+    expect(page.locator("#depthNum")).to_have_text("2.0")
+    page.click('button[data-view="device"]')
+    expect(page.locator("#restore")).to_be_visible()
+    assert page.errors == []
+
+
+def test_v2_analog_offers_actuation_on_its_own_scale(open_model):
+    page = open_model("0266")
+    assert visible_tabs(page) == ["actuation", "lighting", "studio"]   # no Rapid Trigger or Snap Tap
+    expect(page.locator("#actTest")).to_be_hidden()
+    d = page.locator("#depth")
+    assert [d.get_attribute(a) for a in ("min", "max", "step")] == ["1.62", "3.56", "0.01"]
+    assert page.locator(".scale span").all_text_contents() == ["1.62 mm, lightest", "3.56 mm, deepest"]
+    p = presets(page)
+    assert "Factory" not in [n for n, _, _ in p] and all(1.62 <= float(v) <= 3.56 for _, _, v in p)
+    assert all(len(t.split(".")[1]) == 2 for _, t, _ in p)
+    expect(page.locator("#depthNum")).to_have_text("2.00")
+    expect(page.locator("#applyDepth")).to_be_disabled()                # experimental: locked until the switch
+    page.click('button[data-view="device"]')
+    expect(page.locator("#restore")).to_be_hidden()                    # no known factory point
+    expect(page.locator("#restoreHint")).to_be_hidden()
+    page.check("#expOn")
+    wait_for_call(page, "set_experimental")
+    page.click('button[data-view="actuation"]')
+    page.locator("#presets button").first.click()
+    expect(page.locator("#depthNum")).to_have_text("1.62")
+    page.select_option("#relMode", "custom")
+    r = page.locator("#rel")
+    assert [r.get_attribute(a) for a in ("min", "step")] == ["1.54", "0.01"]
+    page.click("#applyDepth")
+    assert wait_for_call(page, "set_depth")[-1][1:] == [1.62, 1.54]
+    expect(page.locator('.cap[data-id="31"] .front')).to_have_text("1.62")   # A
+    expect(page.locator("#actDirty")).to_be_hidden()
+    assert page.errors == []
+
+
+def test_switching_to_the_v2_analog_rescales_the_slider(unplugged):
+    page = unplugged("0266")
+    reconnect(page)
+    expect(page.locator(".device-name")).to_have_text("Huntsman V2 Analog")
+    expect(page.locator("#depth")).to_have_attribute("min", "1.62")
+    expect(page.locator(".scale span").first).to_have_text("1.62 mm, lightest")
+    assert page.errors == []

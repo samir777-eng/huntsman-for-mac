@@ -21,6 +21,7 @@ MATRIX = {0x02A6: (6, 22), 0x02A7: (6, 22), 0x02CF: (6, 22), 0x02B0: (5, 15),
 KEY_COUNT = {0x02A6: 104, 0x02A7: 84, 0x02CF: 104, 0x02B0: 61, 0x026C: 104, 0x026B: 87, 0x0266: 104}
 V3 = [0x02A7, 0x02CF, 0x02B0]
 V2 = [0x026C, 0x026B, 0x0266]
+V2_DIGITAL = [0x026C, 0x026B]   # no adjustable actuation; the V2 Analog (0266) has it since 0.4.0
 EXPERIMENTAL = V3 + V2
 HEX = "{:04X}".format
 FIELDS = {"name", "label", "x", "y", "w", "h", "id", "led"}
@@ -76,9 +77,11 @@ def test_capabilities():
     for p in V3:
         m = models.by_pid(p)
         assert m.actuation and m.rapid and m.snap_tap and m.per_key and m.studio and not m.key_tester
-    for p in V2:
+    for p in V2_DIGITAL:
         m = models.by_pid(p)
         assert not (m.actuation or m.rapid or m.snap_tap or m.key_tester) and m.per_key and m.studio
+    m = models.by_pid(0x0266)   # actuation only: its Rapid Trigger and Snap Tap are host-side (easyrazer)
+    assert m.actuation and not (m.rapid or m.snap_tap or m.key_tester) and m.per_key and m.studio
 
 
 def test_effects_are_only_ones_verified_on_the_02a6():
@@ -298,7 +301,7 @@ def test_switch_on_allows_analog_settings_on_v3_models(pid, name):
     assert writes(t)
 
 
-@pytest.mark.parametrize("pid", V2, ids=HEX)
+@pytest.mark.parametrize("pid", V2_DIGITAL, ids=HEX)
 @pytest.mark.parametrize("name", sorted(ANALOG_WRITES))
 def test_v2_family_never_gets_analog_settings(pid, name):
     hc.set_experimental(True)
@@ -308,7 +311,7 @@ def test_v2_family_never_gets_analog_settings(pid, name):
     assert t.sent == []
 
 
-@pytest.mark.parametrize("pid", V2, ids=HEX)
+@pytest.mark.parametrize("pid", V2_DIGITAL, ids=HEX)
 def test_v2_family_has_no_key_reads_either(pid):
     t = FakeTransport()
     kb = kb_for(pid, t)

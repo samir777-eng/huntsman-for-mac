@@ -6,13 +6,15 @@ macOS, without Synapse.
 
   huntsman.py status                 model, firmware, profile, brightness
   huntsman.py experimental on|off    allow changes to a model whose support is experimental (untested)
-  huntsman.py depth 2.0              all keys (0.1-4.0 mm); the reset point follows 0.1 mm above
+  huntsman.py depth 2.0              all keys (0.1-4.0 mm; V2 Analog 1.62-3.56 in 0.01 mm steps); the reset
+                                     point follows 0.1 mm above
   huntsman.py depth 0.5 W A S D      only those keys
   huntsman.py color 255 255 255      solid colour, saved on the keyboard
   huntsman.py spectrum | wave | off
   huntsman.py brightness 0-100
   huntsman.py apply-saved            send per-key colours, Rapid Trigger and Snap Tap again (runs at login)
-  huntsman.py factory                every key back to 1.2 mm; Rapid Trigger and Snap Tap off
+  huntsman.py factory                every key back to 1.2 mm; Rapid Trigger and Snap Tap off (not on the
+                                     V2 Analog: its factory depth isn't known; use restore-snapshot)
   huntsman.py restore-snapshot       put back every key exactly as it was on the app's first launch
   huntsman.py --version              print the version
 """
@@ -59,8 +61,8 @@ def main(argv):
             print(f"A key: types at {act} mm, resets at {rel} mm")
     elif cmd == "depth":
         keys = app.check_key_ids([names[n.upper()] for n in argv[2:]])  # refuses Fn
-        failed = kb.set_actuation(keys, float(argv[1]))
-        print(f"{len(keys) - len(failed)} keys now type at {round(float(argv[1]), 1)} mm"
+        failed = kb.set_actuation(keys, float(argv[1]))   # the model's range: out of it raises, nothing sent
+        print(f"{len(keys) - len(failed)} keys now type at {float(argv[1]):.{kb.model.scale.decimals}f} mm"
               + (f"; not confirmed: {failed}" if failed else ""))
     elif cmd in ("color", "spectrum", "wave", "off"):
         opts = {"color": {"rgb1": [int(x) for x in argv[1:4]]}, "wave": {"speed": 40, "direction": "right"}}.get(cmd, {})

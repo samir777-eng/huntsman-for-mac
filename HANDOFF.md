@@ -24,7 +24,13 @@ venv into the bundle and signs it ad hoc; unsigned apps can't read ~/Downloads):
 ## Models (0.3.0)
 - `models.py`: table of 7 models (PID, name, matrix, layout file, effects, features, status). Only 02A6 is
   `verified`. Experimental: V3 Pro TKL 02A7, V3 Pro 8KHz 02CF, V3 Pro Mini 02B0 (5×15), V2 026C, V2 TKL 026B (6×18),
-  V2 Analog 0266 (8×23, frame size 74). V2 family: lighting/per-key/Studio only. Key tester only on verified models.
+  V2 Analog 0266 (8×23, frame size 74). V2/V2 TKL: lighting/per-key/Studio only. Key tester only on verified models.
+- 0.4.0 (unreleased, branch `windows`): V2 Analog gets experimental actuation on its own `models.Scale`
+  (`V2_ANALOG_SCALE`: mm = thr/255×2.1+1.5, offered 1.62–3.56 mm = thr 15–250, 0.01 mm steps, release ≥5 and
+  ≤ thr−10, reads show the firmware-clamped point; no factory point, so restore-factory refuses; snapshot works).
+  V3 models use `V3_SCALE` (the old constants; golden bytes unchanged). `Model.info()["actuation"]` drives the UI
+  slider/presets/reset/restore button. No Rapid Trigger/Snap Tap on the V2 Analog (host-side in Synapse).
+  Tests: tests/test_v2_analog.py, UI in tests/test_ui_models.py. Plan: docs/plans/2026-11-18-v2-analog-actuation.md.
 - Layouts: `layout.json` (02A6) + `layouts/<PID>.json`; LED positions for experimental models are guesses
   (reasoning in the models.py docstring) until testers send LED check results.
 - Gate (`huntsman_core.gate`, `Keyboard.check_write`, `_check_command`): experimental models get reads only until
@@ -72,6 +78,7 @@ Studio layers/params/presets/Sound/Typing/Smart panels, effects continuing after
 - Lighting restore at logout/shutdown; KeepAlive restart after a crash; install.sh rollback after a failed build.
 - Smart lighting over a long session (real sleep/lock); BlackHole/system-audio input.
 - All six experimental models (no tester reports yet), incl. LED positions and the 8KHz profile read (05:84).
+- V2 Analog actuation (0.4.0): scale, 1.62 mm end, release rule, Hypershift-layer depth left alone (from easyrazer).
 - Intel Macs, macOS < 26.
 
 ## Decisions (don't re-raise)

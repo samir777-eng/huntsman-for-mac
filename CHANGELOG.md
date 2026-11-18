@@ -13,6 +13,11 @@ All notable changes to this project are listed here. Versions follow [Semantic V
   0.1 mm above the new actuation point, in the saved and the live profile alike. 0.4.0 kept the stored reset byte
   when it still fitted, so saved and live could end up different and the reset point didn't match the window. Keys
   already at the target are still not written again.
+- Windows: start at login (the Run value) is added once and follows a moved `Huntsman.exe`, but a value you deleted
+  is no longer added back every time the service or the app starts; turning Studio on in the app adds it back.
+  `state.json` remembers that it was added (`autostart_added`).
+- Windows: the "request too large" reply on the service's pipe is documented (multiprocessing keeps the connection
+  writable after dropping an over-long message, so the reply still arrives before it closes).
 
 ## 0.4.0 – 2026-11-18
 

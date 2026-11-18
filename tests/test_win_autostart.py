@@ -123,13 +123,12 @@ def test_a_missing_run_key_is_created():
     assert reg.keys[RUN][wa.VALUE_NAME] == ("c", 1)
 
 
-def test_start_service_turns_start_at_login_on_and_starts_it_detached():
-    reg, started = FakeWinreg(), []
+def test_spawn_starts_the_service_detached_without_a_console():
+    started = []
 
     def popen(argv, **kw):
         started.append((argv, kw))
-    wa.start_service(winreg=reg, popen=popen, frozen=True, executable=FROZEN)
-    assert reg.keys[RUN][wa.VALUE_NAME][0] == f'"{FROZEN}" --service'
+    wa.spawn(wa.service_argv(frozen=True, executable=FROZEN), popen=popen)
     (argv, kw), = started
     assert argv == [FROZEN, "--service"]
     flags = kw["creationflags"]
@@ -137,14 +136,33 @@ def test_start_service_turns_start_at_login_on_and_starts_it_detached():
     assert kw["close_fds"] is True and kw["stdin"] == kw["stdout"] == kw["stderr"] == wa.subprocess.DEVNULL
 
 
-def test_start_service_still_starts_it_when_the_registry_refuses():
-    class Refusing(FakeWinreg):
-        def CreateKeyEx(self, *a, **kw):
-            raise PermissionError("policy")
-    started = []
-    wa.start_service(winreg=Refusing(), popen=lambda argv, **kw: started.append(argv), frozen=True,
-                     executable=FROZEN)
-    assert started == [[FROZEN, "--service"]]
+# ---------- ensure(): add it once, follow a moved exe, respect a removal ----------
+
+def test_ensure_adds_the_value_the_first_time():
+    reg = FakeWinreg()
+    assert wa.ensure(False, winreg=reg, command="c") == (True, True)
+    assert reg.keys[RUN][wa.VALUE_NAME] == ("c", 1)
+
+
+def test_ensure_follows_a_moved_exe_and_leaves_a_current_value_alone():
+    reg = FakeWinreg({wa.VALUE_NAME: ("old", 1)})
+    assert wa.ensure(True, winreg=reg, command="new") == (True, True)
+    assert reg.keys[RUN][wa.VALUE_NAME] == ("new", 1)
+    reg.writes.clear()
+    assert wa.ensure(True, winreg=reg, command="new") == (True, False) and reg.writes == []
+
+
+def test_ensure_respects_a_value_the_user_removed():
+    reg = FakeWinreg()
+    assert wa.ensure(True, winreg=reg, command="c") == (True, False)
+    assert reg.writes == [] and wa.VALUE_NAME not in reg.keys[RUN]
+
+
+def test_ensure_with_force_adds_it_back():
+    """Turning Studio on from the app: the user asked for lighting, so start at login comes back."""
+    reg = FakeWinreg()
+    assert wa.ensure(True, force=True, winreg=reg, command="c") == (True, True)
+    assert reg.keys[RUN][wa.VALUE_NAME] == ("c", 1)
 
 
 def test_the_app_opens_itself_the_same_way():

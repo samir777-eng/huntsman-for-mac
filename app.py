@@ -36,6 +36,7 @@ DEFAULT_STATE = {
     "studio": studio_mod.clean_studio(None),   # Lighting Studio: on/off, active preset, fps, brightness, audio, heatmap
     "smart": studio_mod.clean_smart(None),     # smart lighting: idle, sleep, lock, per-app presets
     "experimental": False,  # Keyboard -> Experimental support: writes to untested models (huntsman_core.gate)
+    "autostart_added": False,   # Windows: this app wrote the start-at-login Run value once (ensure_autostart)
 }
 
 
@@ -137,6 +138,7 @@ def _clean_state(raw):
     st["studio"] = studio_mod.clean_studio(raw.get("studio"))
     st["smart"] = studio_mod.clean_smart(raw.get("smart"))
     st["experimental"] = raw.get("experimental") is True
+    st["autostart_added"] = raw.get("autostart_added") is True
     return st
 
 
@@ -346,13 +348,30 @@ def service_endpoint():
     return ipc.service_endpoint(hc.data_dir())
 
 
+def ensure_autostart(force=False):
+    """Windows: the start-at-login Run value through win_autostart.ensure(), remembering in state.json that it was
+    added, so a value the user removed isn't added back (force: Studio turned on from the app). True when it was
+    written. The Mac: None (its LaunchAgent is the installer's). Registry errors raise."""
+    if not platforms.is_windows():
+        return None
+    from platforms import win_autostart
+    with update_state() as st:
+        st["autostart_added"], wrote = win_autostart.ensure(st["autostart_added"], force=force)
+    return wrote
+
+
 def start_service():
     """Ask launchd to start the lighting service if it isn't running (never -k: killing a service that is still
     starting would interrupt a USB write); load its LaunchAgent first if it isn't loaded. On Windows (no launchd):
-    turn start at login on and start the service process (platforms/win_autostart.py)."""
+    turn start at login on unless the user removed it (ensure_autostart) and start the service process
+    (platforms/win_autostart.py). A second copy that finds the first running exits at once (the instance lock)."""
     if platforms.is_windows():
         from platforms import win_autostart
-        win_autostart.start_service()
+        try:
+            ensure_autostart()
+        except Exception as e:   # policy or a locked registry: starting now still works
+            print(f"huntsman: couldn't turn on start at login: {e}", file=sys.stderr)
+        win_autostart.spawn(win_autostart.service_argv())
         return
     target = f"gui/{os.getuid()}/{LIGHTING_LABEL}"
     r = subprocess.run(["launchctl", "kickstart", target], capture_output=True, text=True, timeout=10)
@@ -853,6 +872,12 @@ class Api:
         return self._studio("studio_state")
 
     def studio_enable(self, on):
+        """Turning Studio on from the window also brings start at login back on Windows, if the user removed it."""
+        if on is True and platforms.is_windows():
+            try:
+                ensure_autostart(force=True)
+            except Exception as e:
+                print(f"huntsman: couldn't turn on start at login: {e}", file=sys.stderr)
         return self._studio("studio_enable", on=on)
 
     def set_active_preset(self, name):

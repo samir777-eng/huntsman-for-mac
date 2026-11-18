@@ -125,6 +125,8 @@ and then the window can't open. Install the *Evergreen* runtime from
   on **start at login** for the current user, no administrator rights needed: the registry value
   `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run` → `Huntsman for Mac lighting`, set to
   `"<your folder>\Huntsman\Huntsman.exe" --service`. If you move the folder, open the app once from its new place.
+  If you delete that value, the app leaves it deleted (it remembers in `state.json` that it added it once) until you
+  turn Studio on in the app, which adds it back.
 - The tray icon turns Studio on or off, switches presets, opens the app, and has **Quit lighting service**, which
   stops Studio and puts the keyboard's own lighting back. The service stays off until the next sign-in or the next
   time you open the app. Closing the window just closes it.

@@ -72,7 +72,7 @@ def test_good_state_survives(app):
             "smart": {"idle": {"enabled": True, "minutes": 5, "action": "off", "dim_to": 0.3},
                       "sleep_off": False, "lock_off": True,
                       "app_rules": [{"bundle_id": "com.valve.steam", "preset": "Fire"}]},
-            "experimental": True}
+            "experimental": True, "autostart_added": True}
     write_state(app, good)
     assert app.load_state() == good
 

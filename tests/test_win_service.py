@@ -32,13 +32,62 @@ def windows(monkeypatch):
     return procs, clock
 
 
-def test_the_app_starts_the_service_itself_on_windows(windows, monkeypatch):
+@pytest.fixture
+def state_dir(tmp_path, monkeypatch):
     import app as appmod
-    calls = []
-    monkeypatch.setattr(win_autostart, "start_service", lambda **kw: calls.append("start"))
+    monkeypatch.setattr(hc, "data_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(appmod, "STATE_FILE", str(tmp_path / "state.json"))
+    return tmp_path
+
+
+class Run:
+    """The Run value, as win_autostart.ensure() sees it (current() and enable() replaced)."""
+
+    def __init__(self, monkeypatch, value=None):
+        self.value, self.writes = value, []
+        monkeypatch.setattr(win_autostart, "current", lambda winreg=None: self.value)
+        monkeypatch.setattr(win_autostart, "command_line", lambda *a, **k: "cmd")
+        monkeypatch.setattr(win_autostart, "enable", self.enable)
+
+    def enable(self, winreg=None, command=None):
+        if self.value == command:
+            return False
+        self.value = command
+        self.writes.append(command)
+        return True
+
+
+def test_the_app_starts_the_service_itself_on_windows(windows, state_dir, monkeypatch):
+    import app as appmod
+    run, started = Run(monkeypatch), []
+    monkeypatch.setattr(win_autostart, "spawn", lambda argv, popen=None: started.append(argv))
     monkeypatch.setattr(appmod.subprocess, "run", lambda *a, **kw: pytest.fail("launchctl on Windows"))
     appmod.start_service()
-    assert calls == ["start"]
+    assert started == [win_autostart.service_argv()] and run.writes == ["cmd"]
+    assert appmod.load_state()["autostart_added"] is True
+
+
+def test_start_at_login_removed_by_the_user_stays_removed(windows, state_dir, monkeypatch):
+    """Added once, then deleted (by hand, or a cleanup tool): neither the service nor the app adds it back,
+    until Studio is turned on from the app."""
+    import app as appmod
+    import service
+    run = Run(monkeypatch)
+    service.ensure_autostart()
+    assert run.writes == ["cmd"]
+    run.value = None                                   # the user removed it
+    service.ensure_autostart()
+    monkeypatch.setattr(win_autostart, "spawn", lambda argv, popen=None: None)
+    appmod.start_service()
+    assert run.writes == ["cmd"]
+    from test_models_wiring import FakeService, make_api
+    api = make_api(appmod, FakeService())
+    assert api.studio_enable(True)["ok"] is True
+    assert run.writes == ["cmd", "cmd"]
+    api.studio_enable(False)
+    run.value = None
+    service.ensure_autostart()
+    assert run.writes == ["cmd", "cmd"]
 
 
 def test_the_not_running_message_fits_the_platform(windows):
@@ -53,24 +102,41 @@ def test_the_mac_message_is_unchanged():
     assert appmod.not_running_message("x") == appmod.NOT_RUNNING.format("x")
 
 
-def test_the_service_turns_start_at_login_on_only_on_windows(windows, monkeypatch):
+def test_the_service_turns_start_at_login_on_only_on_windows(windows, state_dir, monkeypatch):
     import service
-    calls = []
-    monkeypatch.setattr(win_autostart, "enable", lambda **kw: calls.append("enable") or True)
+    run = Run(monkeypatch)
     service.ensure_autostart()
-    assert calls == ["enable"]
+    assert run.writes == ["cmd"]
+    run.value = "elsewhere"                            # a moved Huntsman.exe: followed
+    service.ensure_autostart()
+    assert run.writes == ["cmd", "cmd"]
     monkeypatch.setattr(sys, "platform", "darwin")
+    run.value = None
     service.ensure_autostart()
-    assert calls == ["enable"]
+    assert run.writes == ["cmd", "cmd"]
 
 
-def test_a_refused_registry_write_never_stops_the_service(windows, monkeypatch):
+def test_a_refused_registry_write_never_stops_the_service(windows, state_dir, monkeypatch):
     import service
 
     def refuse(**kw):
         raise PermissionError("policy")
+    Run(monkeypatch)
     monkeypatch.setattr(win_autostart, "enable", refuse)
     service.ensure_autostart()   # logged, not raised
+
+
+def test_the_app_still_starts_the_service_when_the_registry_refuses(windows, state_dir, monkeypatch):
+    import app as appmod
+    started = []
+
+    def refuse(**kw):
+        raise PermissionError("policy")
+    Run(monkeypatch)
+    monkeypatch.setattr(win_autostart, "enable", refuse)
+    monkeypatch.setattr(win_autostart, "spawn", lambda argv, popen=None: started.append(argv))
+    appmod.start_service()
+    assert started == [win_autostart.service_argv()]
 
 
 def test_quitting_the_service_keeps_start_at_login(windows, monkeypatch):

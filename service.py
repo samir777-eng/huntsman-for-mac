@@ -517,12 +517,12 @@ def make_menu(svc, menu_cls, on_open, on_quit, run=_in_background, **menu_kw):
 
 
 def ensure_autostart():
-    """Windows: turn start at login on (first run, and the value follows a moved Huntsman.exe). Never raises."""
+    """Windows: turn start at login on (first run, and the value follows a moved Huntsman.exe), but not back on
+    after the user removed it (app.ensure_autostart). Never raises."""
     if not platforms.is_windows():
         return
     try:
-        from platforms import win_autostart
-        if win_autostart.enable():
+        if appmod.ensure_autostart():
             log("start at login turned on")
     except Exception as e:
         log(f"couldn't turn on start at login: {e}")

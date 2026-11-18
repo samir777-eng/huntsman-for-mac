@@ -237,6 +237,9 @@ class _ConnStream:
         except EOFError:
             return b""
         except OSError as e:
+            # An over-long message: multiprocessing drops it unread and marks this duplex connection write-only
+            # (Connection._bad_message_length), so the "request too large" reply still goes out before _serve
+            # closes it (tests/test_ipc_pipe.py checks the reply arrives, on the Mac and on Windows).
             if "message length" in str(e):
                 raise RequestTooLarge("request too large") from e
             raise

@@ -3,11 +3,12 @@
 """Start the lighting service at login on Windows (experimental, untested on a Windows PC), and start it now.
 
 The Mac uses a LaunchAgent (RunAtLoad, KeepAlive only after a crash): "Quit lighting service" exits cleanly and the
-service stays off until the next login or until the app needs it (Studio). Windows has no KeepAlive, so the same
+service stays off until the next login or until the app's window opens. Windows has no KeepAlive, so the same
 behaviour is: the per-user value HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run "Huntsman for Mac lighting"
-starts it at login (no admin rights), the service and the app turn that value on when they run (first run, Studio
-used), quitting leaves it in place, and the app starts the service itself when it isn't answering
-(start_service). disable() is for an uninstall; the user may also switch it off in Task Manager, Startup apps,
+starts it at login (no admin rights), the service and the app write that value when they run (ensure(): the first
+time, and again when Huntsman.exe moved), quitting leaves it in place, and the app starts the service itself when it
+isn't answering (spawn). If the user deletes the value after it was added, it stays deleted (state.json remembers it
+was added) until Studio is turned on from the app. disable() is for an uninstall; the user may also switch it off in Task Manager, Startup apps,
 which Windows records elsewhere and this module leaves alone.
 
 Command line: the packaged build runs "<Huntsman.exe>" --service; from source it is "<pythonw.exe>" "<service.py>"
@@ -123,11 +124,11 @@ def spawn(argv, popen=None):
                                 stderr=subprocess.DEVNULL)
 
 
-def start_service(winreg=None, popen=None, frozen=None, executable=None, script=None):
-    """The app's way to start a lighting service that isn't running (Studio used): turn start at login on, then
-    start it now. A second copy that finds the first running exits at once (the instance lock)."""
-    try:
-        enable(winreg, command_line(frozen, executable, script))
-    except OSError as e:   # policy or a locked registry: starting now still works
-        print(f"huntsman: couldn't turn on start at login: {e}", file=sys.stderr)
-    spawn(service_argv(frozen, executable, script), popen)
+def ensure(added, force=False, winreg=None, command=None):
+    """Start at login, without fighting the user. added: this app wrote the value before (state.json
+    "autostart_added"). The value is written when it is missing and was never added (first run), or points elsewhere
+    (a moved Huntsman.exe). Missing after it was added means the user removed it: left alone unless force (Studio
+    turned on from the app). Returns (added, wrote)."""
+    if current(winreg=winreg) is None and added and not force:
+        return True, False
+    return True, enable(winreg=winreg, command=command or command_line())

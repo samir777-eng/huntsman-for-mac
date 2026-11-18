@@ -404,6 +404,7 @@ def test_exchange_keeps_polling_while_status_is_new_or_busy():
     assert resp[0] == hc.STATUS_OK and dev.reads == 4 and dev.writes == 1
 
 
+@pytest.mark.mac_only   # checks the lock with fcntl
 def test_usb_lock_is_shared_and_inter_process(tmp_path, monkeypatch):
     import fcntl
     monkeypatch.setattr(hc, "data_dir", lambda: str(tmp_path))

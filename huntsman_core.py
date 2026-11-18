@@ -147,7 +147,7 @@ def experimental_enabled():
         if _switch_cache[0] == key:
             return _switch_cache[1]
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             raw = json.load(f)
     except Exception:
         return False
@@ -162,7 +162,7 @@ def set_experimental(on):
     path = _state_path()
     with platforms.file_lock(os.path.join(os.path.dirname(path), "state.lock")):
         try:
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 raw = json.load(f)
         except Exception:
             raw = None
@@ -170,7 +170,7 @@ def set_experimental(on):
         raw["experimental"] = bool(on)
         tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
         try:
-            with open(tmp, "w") as f:
+            with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(raw, f, indent=1)
                 f.flush()
                 os.fsync(f.fileno())
@@ -740,7 +740,7 @@ def data_dir():
 
 def load_layout(model=None):
     """Keys of model (default the active one): layout.json for the V3 Pro, layouts/<PID>.json for the others."""
-    with open(os.path.join(HERE, (model or _active).layout)) as f:
+    with open(os.path.join(HERE, (model or _active).layout), encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -752,5 +752,5 @@ def all_key_ids(model=None):
 def every_key_id(model=None):
     """Every key id in the firmware's key map (from easyrazer), incl. keys not on this layout,
     used to clear per-key Rapid Trigger entries everywhere."""
-    with open(os.path.join(HERE, "keymap.json")) as f:
+    with open(os.path.join(HERE, "keymap.json"), encoding="utf-8") as f:
         return sorted(set(json.load(f).values()) | set(all_key_ids(model)))

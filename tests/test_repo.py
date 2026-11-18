@@ -17,7 +17,7 @@ def _demo_layout_tool():
 
 def test_demo_layout_matches_the_models_and_layout_files():
     tool = _demo_layout_tool()
-    with open(ROOT / "ui" / "demo-layout.js") as f:
+    with open(ROOT / "ui" / "demo-layout.js", encoding="utf-8") as f:
         assert f.read() == tool.render(tool.read_models()), "ui/demo-layout.js is stale: run python tools/make_demo_layout.py"
 
 
@@ -28,7 +28,7 @@ def test_demo_has_every_model_and_starts_with_the_v3_pro():
     import models
     data = _demo_layout_tool().read_models()
     assert [d["pid"] for d in data] == [f"{p:04X}" for p in models.MODELS]
-    with open(ROOT / "layout.json") as f:
+    with open(ROOT / "layout.json", encoding="utf-8") as f:
         assert data[0]["pid"] == "02A6" and data[0]["layout"] == json.load(f)
 
 
@@ -37,7 +37,7 @@ def test_every_source_file_has_a_licence_header():
                and not any(d in SKIP_DIRS or d.endswith("_env") for d in p.relative_to(ROOT).parts)]
     assert len(sources) >= 14
     missing = [str(p.relative_to(ROOT)) for p in sources
-               if "SPDX-License-Identifier: GPL-3.0-or-later" not in p.read_text()[:400]]
+               if "SPDX-License-Identifier: GPL-3.0-or-later" not in p.read_text(encoding="utf-8")[:400]]
     assert missing == []
 
 
@@ -45,19 +45,19 @@ def test_demo_studio_matches_the_effect_library():
     spec = importlib.util.spec_from_file_location("make_demo_studio", ROOT / "tools" / "make_demo_studio.py")
     tool = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(tool)
-    with open(ROOT / "ui" / "demo-studio.js") as f:
+    with open(ROOT / "ui" / "demo-studio.js", encoding="utf-8") as f:
         assert f.read() == tool.render(tool.read_studio()), "ui/demo-studio.js is stale: run python tools/make_demo_studio.py"
 
 
 def _install_sh():
-    return (ROOT / "install.sh").read_text()
+    return (ROOT / "install.sh").read_text(encoding="utf-8")
 
 
 LABEL = "io.github.huntsman-for-mac.lighting"
 
 
 def _uninstall_sh():
-    return (ROOT / "uninstall.sh").read_text()
+    return (ROOT / "uninstall.sh").read_text(encoding="utf-8")
 
 
 def test_install_writes_and_bootstraps_the_lighting_service_agent():
@@ -118,7 +118,7 @@ def test_install_copies_the_platform_layer():
 
 
 def test_windows_requirements_are_pinned():
-    lines = [ln.strip() for ln in (ROOT / "requirements-win.txt").read_text().splitlines()
+    lines = [ln.strip() for ln in (ROOT / "requirements-win.txt").read_text(encoding="utf-8").splitlines()
              if ln.strip() and not ln.startswith("#")]
     names = {ln.split("==")[0].lower() for ln in lines}
     assert all("==" in ln for ln in lines), "pin every Windows dependency exactly"

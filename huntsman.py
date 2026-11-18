@@ -78,7 +78,7 @@ def main(argv):
         app.restore_factory(kb)
         print("every key types at 1.2 mm again; Rapid Trigger and Snap Tap are off")
     elif cmd == "restore-snapshot":
-        with open(app.SNAPSHOT_FILE) as f:
+        with open(app.SNAPSHOT_FILE, encoding="utf-8") as f:
             failed = kb.restore_snapshot(json.load(f))
         print("restored from", app.SNAPSHOT_FILE + (f"; not confirmed: {failed}" if failed else ""))
     else:

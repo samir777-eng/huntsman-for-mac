@@ -18,6 +18,7 @@ import platforms  # noqa: E402
 
 # ---------- selection ----------
 
+@pytest.mark.mac_only   # the real Mac host / fcntl
 def test_mac_is_the_platform_here():
     assert sys.platform == "darwin"
     assert platforms.current() == platforms.MAC == "mac"
@@ -75,6 +76,7 @@ def test_core_data_dir_creates_the_platform_folder(monkeypatch, tmp_path):
 
 # ---------- locks ----------
 
+@pytest.mark.mac_only   # the real Mac host / fcntl
 def test_mac_file_lock_is_an_flock(tmp_path):
     import fcntl
     path = str(tmp_path / "x.lock")

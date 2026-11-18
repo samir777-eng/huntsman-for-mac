@@ -2,8 +2,8 @@
 # Copyright (C) 2026 Huntsman for Mac contributors
 """The Windows IPC endpoint (ipc.PipeEndpoint): multiprocessing.connection Listener/Client with an authkey kept in
 a user-only file, carrying the same JSON-lines protocol as the Mac's UNIX socket. On Windows its address is a named
-pipe (AF_PIPE); here the same code path runs over an AF_UNIX address in a short temporary folder. Also: the endpoint
-the app and the service pick per platform."""
+pipe (AF_PIPE), and so it is here on a Windows host (CI); on the Mac the same code path runs over an AF_UNIX address
+in a short temporary folder. Also: the endpoint the app and the service pick per platform."""
 import json
 import os
 import shutil
@@ -18,16 +18,31 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import ipc  # noqa: E402
 
+WINDOWS = sys.platform == "win32"
+FAMILY = "AF_PIPE" if WINDOWS else "AF_UNIX"
+
+
+def addr(folder, name):
+    """A listener address for this host: a named pipe on Windows, a socket file in folder elsewhere."""
+    if WINDOWS:
+        return "\\\\.\\pipe\\hm-test-" + os.path.basename(folder) + "-" + name
+    return os.path.join(folder, name)
+
+
+def private(path):
+    """User-only: mode 600 on the Mac (Windows files have no POSIX mode; %LOCALAPPDATA% is per-user)."""
+    return WINDOWS or os.stat(path).st_mode & 0o777 == 0o600
+
 
 @pytest.fixture
 def folder():
-    d = tempfile.mkdtemp(prefix="hp", dir="/tmp")
+    d = tempfile.mkdtemp(prefix="hp", dir=None if WINDOWS else "/tmp")
     yield d
     shutil.rmtree(d, ignore_errors=True)
 
 
 def endpoint(folder, key="service.key"):
-    return ipc.PipeEndpoint(os.path.join(folder, "p.sock"), os.path.join(folder, key), family="AF_UNIX")
+    return ipc.PipeEndpoint(addr(folder, "p.sock"), os.path.join(folder, key), family=FAMILY)
 
 
 def start(ep, handle=None, **kw):
@@ -58,7 +73,7 @@ def test_the_authkey_file_is_private_and_new_at_every_start(folder):
     srv, _ = start(ep)
     key_path = os.path.join(folder, "service.key")
     first = open(key_path, "rb").read()
-    assert len(first) >= 32 and os.stat(key_path).st_mode & 0o777 == 0o600
+    assert len(first) >= 32 and private(key_path)
     srv.close()
     srv, _ = start(endpoint(folder))
     try:
@@ -74,12 +89,12 @@ def test_a_client_with_the_wrong_key_is_refused_and_others_still_served(folder):
     try:
         with open(os.path.join(folder, "wrong.key"), "wb") as f:
             f.write(b"x" * 32)
-        bad = ipc.PipeEndpoint(ep.address, os.path.join(folder, "wrong.key"), family="AF_UNIX")
+        bad = ipc.PipeEndpoint(ep.address, os.path.join(folder, "wrong.key"), family=FAMILY)
         with pytest.raises(ipc.ServiceUnavailable):
             ipc.Client(bad).request("ping")
         from multiprocessing import AuthenticationError
         with pytest.raises((AuthenticationError, EOFError, OSError)):   # a raw client without the key: no reply
-            conn = MpClient(ep.address, family="AF_UNIX", authkey=b"y" * 32)
+            conn = MpClient(ep.address, family=FAMILY, authkey=b"y" * 32)
             conn.send_bytes(b'{"id": 1, "cmd": "ping"}\n')
             conn.recv_bytes()
         assert ipc.Client(ep).request("ping")["ok"] is True
@@ -103,7 +118,7 @@ def test_malformed_and_oversized_messages(folder):
     srv, _ = start(ep, max_line=1024)
     key = ipc.read_authkey(ep.key_path)[0]
     try:
-        conn = MpClient(ep.address, family="AF_UNIX", authkey=key)
+        conn = MpClient(ep.address, family=FAMILY, authkey=key)
         conn.send_bytes(b"garbage\n")
         assert json.loads(conn.recv_bytes())["ok"] is False
         conn.send_bytes(b'{"id": 2, "cmd": "ping"}\n')
@@ -221,6 +236,7 @@ def test_app_and_service_use_the_platform_endpoint(tmp_path, monkeypatch):
     assert isinstance(service.service_endpoint(), ipc.PipeEndpoint)
 
 
+@pytest.mark.mac_only   # a raw AF_UNIX socket plays the stalled client
 def test_a_client_that_stalls_in_the_handshake_loses_its_slot(folder, monkeypatch):
     import socket
     monkeypatch.setattr(ipc, "TIMEOUT", 0.3)
@@ -245,15 +261,15 @@ def test_a_client_that_stalls_in_the_handshake_loses_its_slot(folder, monkeypatc
 
 def test_connecting_to_a_listener_that_never_answers_times_out(folder):
     from multiprocessing.connection import Listener
-    addr = os.path.join(folder, "q.sock")
-    ipc.write_authkey(os.path.join(folder, "service.key"), addr)
-    lst = Listener(addr, family="AF_UNIX")   # accepts, then sends no challenge
+    address = addr(folder, "q.sock")
+    ipc.write_authkey(os.path.join(folder, "service.key"), address)
+    lst = Listener(address, family=FAMILY)   # accepts, then sends no challenge
     held = []
     threading.Thread(target=lambda: held.append(lst.accept()), daemon=True).start()
     try:
         t0 = time.monotonic()
         with pytest.raises(ipc.ServiceUnavailable):
-            ipc.Client(ipc.PipeEndpoint(addr, os.path.join(folder, "service.key"), family="AF_UNIX"),
+            ipc.Client(ipc.PipeEndpoint(address, os.path.join(folder, "service.key"), family=FAMILY),
                        timeout=0.3).request("ping")
         assert time.monotonic() - t0 < 3
     finally:
@@ -272,15 +288,15 @@ def test_pipe_names_differ_per_domain(monkeypatch, tmp_path):
 # ---------- hardening (W2): a random pipe name stored with the key ----------
 
 def random_endpoint(folder):
-    return ipc.PipeEndpoint(None, os.path.join(folder, "service.key"), family="AF_UNIX",
-                            prefix=os.path.join(folder, "p"))
+    return ipc.PipeEndpoint(None, os.path.join(folder, "service.key"), family=FAMILY,
+                            prefix=addr(folder, "p"))
 
 
 def test_the_pipe_name_is_random_and_new_at_every_start(folder):
     ep = random_endpoint(folder)
     srv, _ = start(ep)
     key, first = ipc.read_authkey(ep.key_path)
-    assert first.startswith(os.path.join(folder, "p-")) and len(first) - len(ep.prefix) >= 1 + 32
+    assert first.startswith(ep.prefix + "-") and len(first) - len(ep.prefix) >= 1 + 32
     assert len(key) == 32
     try:
         assert ipc.Client(random_endpoint(folder)).request("ping")["ok"] is True   # found through the key file
@@ -298,7 +314,7 @@ def test_the_pipe_name_is_random_and_new_at_every_start(folder):
 def test_the_key_file_holds_the_address_and_is_private(folder):
     path = os.path.join(folder, "sub", "service.key")
     key = ipc.write_authkey(path, address="\\\\.\\pipe\\huntsman-for-mac-bob-abc")
-    assert os.stat(path).st_mode & 0o777 == 0o600            # its folder is created as needed
+    assert private(path)            # its folder is created as needed
     assert ipc.read_authkey(path) == (key, "\\\\.\\pipe\\huntsman-for-mac-bob-abc")
 
 

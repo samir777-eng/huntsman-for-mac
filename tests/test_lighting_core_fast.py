@@ -130,9 +130,9 @@ def usb(tmp_path, monkeypatch):
     monkeypatch.setattr(hc, "data_dir", lambda: str(tmp_path))
     sleeps = []
     monkeypatch.setattr(hc.time, "sleep", lambda s: sleeps.append(s))
-    import usb.util
+    usb_util = pytest.importorskip("usb.util", reason="pyusb is the Mac transport")
     released = []
-    monkeypatch.setattr(usb.util, "release_interface", lambda dev, i: released.append(i))
+    monkeypatch.setattr(usb_util, "release_interface", lambda dev, i: released.append(i))
 
     def make(**kw):
         t = hc.UsbTransport.__new__(hc.UsbTransport)

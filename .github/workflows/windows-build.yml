@@ -2,12 +2,18 @@
 # Copyright (C) 2026 Huntsman for Mac contributors
 # The Windows build (experimental, unsigned): PyInstaller one-folder build of packaging/windows/huntsman.spec,
 # a headless smoke test of the frozen Huntsman.exe (--version, --self-test: imports and data, no keyboard, no
-# window), zipped as Huntsman-for-Windows-<version>.zip. Run by hand (workflow_dispatch) for an artifact, or by
-# publishing a release, which also attaches the zip to that release.
+# window), zipped as Huntsman-for-Windows-<version>.zip. Runs by hand (workflow_dispatch) and on pushes that touch
+# the packaging, for an artifact; publishing a release also attaches the zip to that release.
 name: Windows build
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - packaging/windows/**
+      - platforms/bundle.py
+      - requirements-win.txt
+      - .github/workflows/windows-build.yml
   release:
     types: [published]
 
@@ -19,8 +25,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
           cache: pip
@@ -59,7 +65,7 @@ jobs:
           Compress-Archive -Path dist\Huntsman -DestinationPath $zip
           "zip=$zip" >> $env:GITHUB_OUTPUT
           "{0:N1} MB" -f ((Get-Item $zip).Length / 1MB)
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: Huntsman-for-Windows-${{ steps.version.outputs.version }}
           path: ${{ steps.zip.outputs.zip }}

@@ -142,7 +142,7 @@ def _clean_state(raw):
 
 def load_state():
     try:
-        with open(STATE_FILE) as f:
+        with open(STATE_FILE, encoding="utf-8") as f:
             raw = json.load(f)
     except Exception:
         raw = None
@@ -152,7 +152,7 @@ def load_state():
 def save_state(state):
     tmp = f"{STATE_FILE}.{os.getpid()}.{threading.get_ident()}.tmp"
     try:
-        with open(tmp, "w") as f:
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=1)
             f.flush()
             os.fsync(f.fileno())  # the data is on disk before the rename makes it the real file
@@ -240,7 +240,7 @@ def ensure_snapshot(kb):
     snap = kb.snapshot(hc.every_key_id())
     tmp = SNAPSHOT_FILE + ".tmp"
     try:
-        with open(tmp, "w") as f:
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(snap, f)
             f.flush()
             os.fsync(f.fileno())
@@ -883,7 +883,7 @@ class Api:
             if not path:
                 return {"ok": True, "data": {"path": None}}
             path = path[0] if isinstance(path, (list, tuple)) else path
-            with open(path, "w") as fh:
+            with open(path, "w", encoding="utf-8") as fh:
                 fh.write(text)
             return {"ok": True, "data": {"path": path}}
         except Exception as e:

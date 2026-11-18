@@ -61,14 +61,14 @@ def test_the_w2_hidden_imports_are_listed():
 
 
 def test_the_bundle_manifest_imports_nothing():
-    tree = ast.parse((ROOT / "platforms" / "bundle.py").read_text())
+    tree = ast.parse((ROOT / "platforms" / "bundle.py").read_text(encoding="utf-8"))
     assert not [n for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom))]
 
 
 # ---------- the PyInstaller spec ----------
 
 def _spec():
-    return SPEC.read_text()
+    return SPEC.read_text(encoding="utf-8")
 
 
 def test_spec_is_python_and_builds_one_windowed_folder_named_huntsman():
@@ -132,6 +132,13 @@ def test_self_test_passes_here_and_skips_the_windows_only_modules(no_device, cap
         assert "skip hid (Windows only)" in out
 
 
+@pytest.mark.windows_host
+def test_self_test_imports_the_windows_modules_on_windows(no_device, capsys):
+    assert app.entry(["Huntsman.exe", "--self-test"]) == 0
+    out = capsys.readouterr().out
+    assert "skip " not in out and "ok   webview.platforms.edgechromium" in out and "ok   hid" in out
+
+
 def test_self_test_fails_on_a_missing_module(no_device, monkeypatch, capsys):
     monkeypatch.setattr(bundle, "HIDDEN_IMPORTS", bundle.HIDDEN_IMPORTS + ["no_such_module_xyz"])
     assert app.entry(["Huntsman.exe", "--self-test"]) == 1
@@ -154,7 +161,7 @@ def test_version_flag(no_device, capsys):
 
 def _workflow(name):
     yaml = pytest.importorskip("yaml")
-    text = (WORKFLOWS / name).read_text()
+    text = (WORKFLOWS / name).read_text(encoding="utf-8")
     assert "SPDX-License-Identifier: GPL-3.0-or-later" in text[:400]
     wf = yaml.safe_load(text)
     wf["on"] = wf.get("on", wf.get(True))   # YAML 1.1 reads a bare `on` key as True

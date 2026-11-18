@@ -38,7 +38,7 @@ class _Page(html.parser.HTMLParser):
 
 
 def _html():
-    return (DOCS / "index.html").read_text()
+    return (DOCS / "index.html").read_text(encoding="utf-8")
 
 
 def _page():
@@ -48,7 +48,7 @@ def _page():
 
 
 def _version():
-    m = re.search(r'^__version__ = "([^"]+)"', (ROOT / "huntsman_core.py").read_text(), re.M)
+    m = re.search(r'^__version__ = "([^"]+)"', (ROOT / "huntsman_core.py").read_text(encoding="utf-8"), re.M)
     return m.group(1)
 
 
@@ -131,7 +131,7 @@ def test_software_application_json_ld_matches_the_code():
 
 def test_faq_json_ld_parses_and_uses_the_readme_questions():
     faq = _of_type("FAQPage")
-    readme = (ROOT / "README.md").read_text()
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
     qs = faq["mainEntity"]
     assert len(qs) >= 5
     for q in qs:
@@ -170,7 +170,7 @@ def test_page_basics_for_accessibility_and_layout():
 
 
 def test_robots_and_sitemap_point_at_the_site():
-    robots = (DOCS / "robots.txt").read_text()
+    robots = (DOCS / "robots.txt").read_text(encoding="utf-8")
     assert "User-agent: *" in robots and f"Sitemap: {SITE}sitemap.xml" in robots
     tree = ET.parse(DOCS / "sitemap.xml")
     ns = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}

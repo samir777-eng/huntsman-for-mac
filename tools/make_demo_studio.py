@@ -24,7 +24,7 @@ def render(data):
 
 
 def main():
-    with open(OUT, "w") as f:
+    with open(OUT, "w", encoding="utf-8") as f:
         f.write(render(read_studio()))
 
 

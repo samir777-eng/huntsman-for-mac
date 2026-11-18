@@ -82,6 +82,7 @@ def test_save_state_leaves_no_tmp(app, tmp_path):
     assert sorted(os.listdir(tmp_path)) in (["state.json"], ["state.json", "state.lock"])
 
 
+@pytest.mark.mac_only   # checks the lock with fcntl
 def test_update_state_holds_the_file_lock(app, tmp_path):
     import fcntl
     with app.update_state() as st:

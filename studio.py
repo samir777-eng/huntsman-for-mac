@@ -672,7 +672,7 @@ class Studio:
 
     def _load_heat(self):
         try:
-            with open(self._heat_path) as f:
+            with open(self._heat_path, encoding="utf-8") as f:
                 raw = json.load(f)
             return {int(k): int(v) for k, v in raw.items() if int(k) in self.keymap and int(v) >= 0}
         except (OSError, ValueError, AttributeError, TypeError):
@@ -684,7 +684,7 @@ class Studio:
         counts = self.engine.heat_counts()
         tmp = f"{self._heat_path}.{os.getpid()}.tmp"
         try:
-            with open(tmp, "w") as f:
+            with open(tmp, "w", encoding="utf-8") as f:
                 json.dump({str(k): v for k, v in counts.items()}, f)
             os.replace(tmp, self._heat_path)
         except OSError:

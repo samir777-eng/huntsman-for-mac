@@ -61,7 +61,7 @@ def presets_path():
 def load_presets():
     """User presets from presets.json; [] when there is no file. A damaged file raises ValueError."""
     try:
-        with open(presets_path()) as f:
+        with open(presets_path(), encoding="utf-8") as f:
             raw = json.load(f)
     except FileNotFoundError:
         return []
@@ -82,7 +82,7 @@ def save_presets(presets):
     path = presets_path()
     tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
     try:
-        with open(tmp, "w") as f:
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump({"version": FILE_VERSION, "presets": [p.to_dict() for p in presets]}, f, indent=1)
             f.flush()
             os.fsync(f.fileno())

@@ -16,6 +16,8 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import ipc  # noqa: E402
 
+pytestmark = pytest.mark.mac_only   # the Mac's UNIX socket (Windows uses the named pipe: test_ipc_pipe.py)
+
 
 @pytest.fixture
 def sock_path():

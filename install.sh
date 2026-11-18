@@ -5,7 +5,8 @@
 #   - "Huntsman for Mac.app" in ~/Applications, carrying its own copy of the code and Python environment
 #     (so it never reads from Downloads/Documents/Desktop, which macOS blocks for unsigned apps)
 #   - "Huntsman Lighting.app" inside it (Contents/Library/LoginItems), the background lighting service: menu bar
-#     icon, Lighting Studio, typing and sound reactions. macOS shows its permission prompts as "Huntsman Lighting".
+#     icon, Lighting Studio, typing and sound reactions. Its own bundle should make macOS show its permission prompts as
+#     "Huntsman Lighting" (not yet confirmed).
 #   - a LaunchAgent (io.github.huntsman-for-mac.lighting) that starts the service at login and now, and restarts
 #     it if it crashes (not after "Quit lighting service"). At start it re-sends per-key colours, Rapid Trigger
 #     and Snap Tap, and runs Lighting Studio if it was on. It replaces the old apply-saved login item.
@@ -89,10 +90,10 @@ if [ -d "$APP" ]; then
 fi
 mkdir -p "$APP/Contents/MacOS" "$CODE/ui"
 cp "$DIR"/huntsman_core.py "$DIR"/depth_stream.py "$DIR"/app.py "$DIR"/studio.py "$DIR"/menubar.py "$DIR"/huntsman.py \
-   "$DIR"/service.py "$DIR"/ipc.py \
+   "$DIR"/service.py "$DIR"/ipc.py "$DIR"/models.py \
    "$DIR"/layout.json "$DIR"/keymap.json "$CODE/"
 # whole packages, without bytecode caches (they would break the signature)
-rsync -a --exclude '__pycache__' --exclude '*.pyc' "$DIR/lighting" "$DIR/inputs" "$CODE/"
+rsync -a --exclude '__pycache__' --exclude '*.pyc' "$DIR/lighting" "$DIR/inputs" "$DIR/layouts" "$CODE/"
 cp "$DIR"/ui/index.html "$DIR"/ui/style.css "$DIR"/ui/app.js "$DIR"/ui/studio.js "$CODE/ui/"
 cp "$DIR/packaging/Info.plist" "$APP/Contents/Info.plist"
 cp "$DIR/packaging/icon.icns" "$RES/icon.icns"

@@ -35,6 +35,7 @@ DEFAULT_STATE = {
     "ui": {},           # interface preferences, e.g. accent colour
     "studio": studio_mod.clean_studio(None),   # Lighting Studio: on/off, active preset, fps, brightness, audio, heatmap
     "smart": studio_mod.clean_smart(None),     # smart lighting: idle, sleep, lock, per-app presets
+    "experimental": False,  # Keyboard -> Experimental support: writes to untested models (huntsman_core.gate)
 }
 
 
@@ -135,6 +136,7 @@ def _clean_state(raw):
             st["ui"]["accentMatch"] = u["accentMatch"]
     st["studio"] = studio_mod.clean_studio(raw.get("studio"))
     st["smart"] = studio_mod.clean_smart(raw.get("smart"))
+    st["experimental"] = raw.get("experimental") is True
     return st
 
 
@@ -173,25 +175,34 @@ def update_state():
 
 def apply_saved(kb, state=None):
     """Re-send what the keyboard keeps only in RAM: per-key colours, Rapid Trigger ON, Snap Tap ON.
-    Each item on its own: a refusal is logged and the rest still goes out. Returns what was sent."""
+    Each item on its own: a refusal is logged and the rest still goes out. Returns what was sent.
+    Items the model lacks, or that Experimental support doesn't allow yet, are skipped with one log line."""
     st = state or load_state()
     steps = []
     c = st.get("custom")
     if c:
-        steps.append(("per-key colours", lambda: kb.set_custom({int(k): v for k, v in c["keys"].items()},
-                                                               hc.load_layout(), c["base"])))
+        steps.append(("per-key colours", "per_key", lambda: kb.set_custom(
+            {int(k): v for k, v in c["keys"].items()}, hc.load_layout(kb.model), c["base"])))
     r = st.get("rapid") or {}
     if r.get("enabled"):
-        steps.append(("Rapid Trigger", lambda: rapid_apply(kb, r)))
+        steps.append(("Rapid Trigger", "rapid", lambda: rapid_apply(kb, r)))
     if st.get("snap"):
-        steps.append(("Snap Tap", lambda: kb.set_snap_tap(tuple(st["snap"]))))
-    done = []
-    for name, step in steps:
+        steps.append(("Snap Tap", "snap_tap", lambda: kb.set_snap_tap(tuple(st["snap"]))))
+    done, locked = [], []
+    for name, feature, step in steps:
+        if not kb.model.has(feature):
+            continue   # e.g. Rapid Trigger saved for a V3 Pro, now a V2 is plugged in: nothing to send
+        if not kb.allowed(feature):
+            locked.append(name)
+            continue
         try:
             step()
             done.append(name)
         except Exception:
             log(f"couldn't send {name} again")
+    if locked:
+        print(f"huntsman: not sending {', '.join(locked)} again: support for the {kb.model.name} is experimental "
+              "and Experimental support is off", file=sys.stderr)
     return done
 
 
@@ -199,10 +210,12 @@ def restore_lighting(kb, state=None):
     """Put the keyboard's own lighting back after Studio streamed frames: the saved per-key colours, else the
     saved effect, else the effect stored on the keyboard (re-sent so it shows again instead of the frame buffer).
     Effects go to RAM (store 0): flash already holds them, and this runs on every Studio stop and quit."""
+    if not kb.allowed("lighting"):
+        return   # an experimental model with Experimental support off: nothing was changed, nothing to put back
     st = state or load_state()
     c, e = st.get("custom"), st.get("effect")
     if c:
-        kb.set_custom({int(k): v for k, v in c["keys"].items()}, hc.load_layout(), c["base"])
+        kb.set_custom({int(k): v for k, v in c["keys"].items()}, hc.load_layout(kb.model), c["base"])
     elif e:
         kb.set_effect(e["name"], store=0, **{k: v for k, v in e.items() if k != "name"})
     else:
@@ -221,8 +234,9 @@ def set_effect(kb, name, opts):
 
 def ensure_snapshot(kb):
     """On first launch, keep a copy of every key's settings so they can be put back by hand.
-    Written once, never overwritten; keys the firmware refuses are listed as skipped."""
-    if os.path.exists(SNAPSHOT_FILE):
+    Written once, never overwritten; keys the firmware refuses are listed as skipped. Models without
+    adjustable actuation (the V2 family) have nothing to keep."""
+    if os.path.exists(SNAPSHOT_FILE) or not kb.model.has("actuation"):
         return
     snap = kb.snapshot(hc.every_key_id())
     tmp = SNAPSHOT_FILE + ".tmp"
@@ -442,6 +456,7 @@ class Api:
         self._test_lease = None
         self._window = None
         self._progress_open = False
+        self._led_check = False     # an LED check lit a cell and its lighting isn't back yet
         self.reapplied = []
         self._svc = service or ServiceLink()
         self._events = None
@@ -511,6 +526,8 @@ class Api:
                 return {"ok": True, "data": fn(self._keyboard())}
             except ValueError as e:  # bad input: the connection is fine, keep it
                 return {"ok": False, "error": str(e)}
+            except (hc.ExperimentalLocked, hc.FeatureUnavailable) as e:   # refused before anything was sent
+                return refused(e)
             except Exception as e:
                 traceback.print_exc()
                 self._drop()
@@ -524,12 +541,48 @@ class Api:
         self._progress_open = done < total
         self._pusher.push("onProgress", done, total)
 
+    def _refused(self, feature):
+        """Before a write that first turns Studio off: the plain refusal if the connected model won't take it, so
+        nothing changes. None when it may go ahead (or no keyboard is connected yet: the write itself checks)."""
+        kb = self._kb
+        try:
+            if kb is not None:
+                kb.check_write(feature)
+        except (hc.ExperimentalLocked, hc.FeatureUnavailable) as e:
+            return refused(e)
+        return None
+
     # ----- reads -----
+    def model(self):
+        """The connected model (connecting first): name, PID, status, matrix, effects, features, whether
+        Experimental support is on and whether writes are locked until it is."""
+        def f(kb):
+            return {**kb.model.info(), "experimental_on": hc.experimental_enabled(), "locked": not kb.allowed("lighting")}
+        return self._run(f)
+
     def layout(self):
+        """Keys of the connected model (the window asks for model() first, which connects)."""
         return hc.load_layout()
 
     def effects(self):
-        return {n: {"speed": s, "colors": t.count("{rgb"), "dir": "{dir}" in t} for n, (t, s) in hc.EFFECTS.items()}
+        return {n: {"speed": s, "colors": t.count("{rgb"), "dir": "{dir}" in t} for n, (t, s) in hc.EFFECTS.items()
+                if n in hc.active_model().effects}
+
+    def experimental(self):
+        return {"ok": True, "data": hc.experimental_enabled()}
+
+    def set_experimental(self, on):
+        """Keyboard -> Experimental support. Turning it off first stops Studio (restoring the keyboard's own
+        lighting while writes are still allowed) and ends an LED check."""
+        if not isinstance(on, bool):
+            return {"ok": False, "error": "on must be true or false"}
+        with self._lock:
+            if not on and hc.experimental_enabled():
+                if self._led_check:
+                    self.end_led_check()
+                studio_off_before_lock(self._svc)
+            hc.set_experimental(on)
+        return {"ok": True, "data": on}
 
     def reconnect(self):
         with self._lock, self._paused():
@@ -538,7 +591,7 @@ class Api:
 
     def info(self):
         def f(kb):
-            return {"version": hc.__version__, "firmware": kb.firmware(), "profile": kb.saved,
+            return {"version": hc.__version__, "model": kb.model.info(), "firmware": kb.firmware(), "profile": kb.saved,
                     "brightness": kb.brightness(), "effect": kb.get_effect_raw().hex(),
                     "state": load_state()}
         return self._run(f)
@@ -549,6 +602,8 @@ class Api:
 
     def read_depths(self):
         def f(kb):
+            if not kb.model.has("actuation"):
+                return {}   # the V2 family: no adjustable depth to read
             ids = hc.all_key_ids()
             out = {}
             for i, k in enumerate(ids):
@@ -666,6 +721,9 @@ class Api:
         return self._run(f)
 
     def set_effect(self, name, opts):
+        no = self._refused("lighting")
+        if no:
+            return no
         self._studio_off_for_firmware()
         return self._run(lambda kb: set_effect(kb, name, opts))
 
@@ -674,6 +732,9 @@ class Api:
             base, colours = check_colours(base, keys)
         except (ValueError, TypeError) as e:
             return {"ok": False, "error": str(e)}
+        no = self._refused("per_key")
+        if no:
+            return no
 
         self._studio_off_for_firmware()
 
@@ -705,6 +766,30 @@ class Api:
 
     def restore_original(self):
         return self._run(restore_factory)
+
+    # ----- LED check (Keyboard tab, experimental models): which key is at matrix cell (row, column)? -----
+    def led_check(self, row, col):
+        """Light only cell (row, col); Studio stops first, since its frames would hide the cell."""
+        if not (_is_int(row) and _is_int(col)):
+            return {"ok": False, "error": "row and column must be whole numbers"}
+        no = self._refused("per_key")
+        if no:
+            return no
+        self._studio_off_for_firmware()
+
+        def f(kb):
+            cell = kb.light_cell(row, col)
+            self._led_check = True
+            return cell
+        return self._run(f)
+
+    def end_led_check(self):
+        """Put back the lighting the keyboard showed before the check."""
+        def f(kb):
+            restore_lighting(kb)
+            self._led_check = False
+            return True
+        return self._run(f)
 
     # ----- Lighting Studio: proxied to the lighting service (started if needed); each returns {"ok", ...} -----
     def studio_state(self):
@@ -779,6 +864,22 @@ class Api:
         except Exception as e:
             traceback.print_exc()
             return {"ok": False, "error": str(e)}
+
+
+def studio_off_before_lock(svc):
+    """Before Experimental support goes off (the window and huntsman.py): stop Studio through the lighting service,
+    which puts the keyboard's own lighting back while writes are still allowed. A service that isn't running has
+    nothing streaming and isn't started for this."""
+    r = svc.call("studio_enable", {"on": False})
+    if not r["ok"] and not r.get("unavailable"):
+        print(f"huntsman: couldn't turn Studio off: {r['error']}", file=sys.stderr)
+
+
+def refused(e):
+    """A write the connected model doesn't take, for the window: the plain message, and why (so it isn't shown as
+    a lost connection): "experimental" (turn on Experimental support) or "unavailable" (the model lacks it)."""
+    return {"ok": False, "error": str(e),
+            "reason": "experimental" if isinstance(e, hc.ExperimentalLocked) else "unavailable"}
 
 
 def in_background(fn):

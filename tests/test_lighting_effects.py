@@ -201,3 +201,41 @@ def test_validate_params_fills_defaults_and_normalises():
     assert p["speed"] == 2.0 and set(p) == {s.name for s in fx.REGISTRY["rainbow"].params}
     assert fx.validate_params("solid", {"color": (1, 2, 3)})["color"] == (1, 2, 3)
     assert fx.validate_params("rainbow", {"colors": [[1, 2, 3], [4, 5, 6]]})["colors"] == [(1, 2, 3), (4, 5, 6)]
+
+
+# ---------- smaller layouts: the row count comes from the keymap (the V3 Pro Mini has 5 LED rows) ----------
+
+def _mini():
+    import huntsman_core as hc
+    import models
+    return Keymap(hc.load_layout(models.MODELS[0x02B0]))
+
+
+def test_keymap_knows_its_row_count():
+    assert KM.rows == 6 and _mini().rows == 5
+
+
+def test_audio_spectrum_fills_all_five_rows_of_the_mini():
+    km = _mini()
+    bottom = [k.id for k in km.keys if k.row == 4]
+    top = [k.id for k in km.keys if k.row == 0]
+
+    def spectrum(level):
+        c = fx.RenderContext(keymap=km, keys=km.ids, params={}, audio=AudioState(level=level, bands=[level] * 16))
+        return fx.create("audio_spectrum").render(0, c)
+    quiet = spectrum(0.19)   # just under a fifth: the bottom row only, almost fully lit
+    assert all(quiet[k] != (0, 0, 0) for k in bottom) and all(quiet[k] == (0, 0, 0) for k in top)
+    loud = spectrum(1.0)     # every row of the Mini lit, the top in the palette's last colour
+    assert all(loud[k] != (0, 0, 0) for k in km.ids)
+    palette = fx.REGISTRY["audio_spectrum"].params[0].default
+    assert loud[top[0]] == tuple(palette[-1]) and loud[bottom[0]] == tuple(palette[0])
+    assert max(quiet[bottom[0]]) >= 0.9 * max(loud[bottom[0]])
+
+
+def test_fire_is_hottest_on_the_bottom_row_of_the_mini(monkeypatch):
+    from lighting.effects import ambient
+    monkeypatch.setattr(ambient, "noise1", lambda *a: 1.0)
+    km = _mini()
+    frame = fx.create("fire").render(0, fx.RenderContext(keymap=km, keys=km.ids, params={}))
+    hottest = tuple(fx.REGISTRY["fire"].params[0].default[-1])
+    assert all(frame[k.id] == hottest for k in km.keys if k.row == 4)

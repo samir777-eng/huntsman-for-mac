@@ -1,25 +1,37 @@
 # HANDOFF
 
-Current state of Huntsman for Mac, updated 2026-11-17.
+Current state of Huntsman for Mac, updated 2026-11-18.
 
 ## Status
-- **Released:** v0.2.0 "Lighting Studio" (https://github.com/samir777-eng/huntsman-for-mac/releases/tag/v0.2.0).
-  v0.1.0 is also tagged. `master` = v0.2.0 (merge of branch `v2`, kept for history).
+- **Released:** v0.3.0 "More models" (https://github.com/samir777-eng/huntsman-for-mac/releases/tag/v0.3.0).
+  v0.1.0 and v0.2.0 are also tagged. `master` = v0.3.0 (merge of branch `v3-models`, kept for history).
 - **Repo:** public, GitHub `samir777-eng/huntsman-for-mac`, default branch `master`, SEO description + 18 topics.
-- **Tests:** 548 passing: `python -m pytest -q tests` (simulated keyboard, fake transports, headless Chromium UI
+- **Tests:** 972 passing: `python -m pytest -q tests` (simulated keyboard, fake transports, headless Chromium UI
   tests in demo mode). Dev env: `requirements.txt` + `requirements-dev.txt`, then `playwright install chromium`.
 - **Installed on the maintainer's Mac** from `master` via `./install.sh`; app + lighting service running.
 
 ## What the product is
 Unofficial macOS control app for the Razer Huntsman V3 Pro (USB 1532:02A6), which Razer Synapse for Mac doesn't
-support. Both parts live inside `~/Applications/Huntsman for Mac.app` (install.sh copies the code and a `--copies`
+support. Since 0.3.0 six more models are detected as **experimental** (see Models below). Both parts live inside `~/Applications/Huntsman for Mac.app` (install.sh copies the code and a `--copies`
 venv into the bundle and signs it ad hoc; unsigned apps can't read ~/Downloads):
 1. **The app** (`app.py` + `ui/`, pywebview): control panel with tabs Actuation, Rapid Trigger, Snap Tap, Lighting
-   (keyboard's own effects + per-key paint), Studio, Key tester, Keyboard (gear).
+   (keyboard's own effects + per-key paint), Studio, Keyboard (gear); the key tester is inside Actuation.
 2. **The lighting service** "Huntsman Lighting" (`service.py`, nested `Contents/Library/LoginItems/Huntsman
    Lighting.app`, LaunchAgent `io.github.huntsman-for-mac.lighting`, RunAtLoad + KeepAlive SuccessfulExit=false):
    owns the menu bar icon and the Studio engine, so app-drawn effects keep running after the app quits. The app talks
    to it over `ipc.py` (UNIX socket `data_dir()/service.sock`, JSON lines, pause leases around every keyboard op).
+
+## Models (0.3.0)
+- `models.py`: table of 7 models (PID, name, matrix, layout file, effects, features, status). Only 02A6 is
+  `verified`. Experimental: V3 Pro TKL 02A7, V3 Pro 8KHz 02CF, V3 Pro Mini 02B0 (5×15), V2 026C, V2 TKL 026B (6×18),
+  V2 Analog 0266 (8×23, frame size 74). V2 family: lighting/per-key/Studio only. Key tester only on verified models.
+- Layouts: `layout.json` (02A6) + `layouts/<PID>.json`; LED positions for experimental models are guesses
+  (reasoning in the models.py docstring) until testers send LED check results.
+- Gate (`huntsman_core.gate`, `Keyboard.check_write`, `_check_command`): experimental models get reads only until
+  `state.json["experimental"]` is on (Keyboard tab switch or `huntsman.py experimental on`); never driver mode;
+  unknown commands refused. Golden-byte tests (`tests/golden_02a6.json`) pin every 02A6 packet.
+- First-launch snapshot records its PID; restore refuses another model's snapshot. One snapshot per Mac user.
+- Key tester lives in Actuation ("Test with a key press"); the Key tester tab is gone.
 
 ## Code map
 - `huntsman_core.py`: protocol + USB transport (pyusb/libusb control transfers to interface 3, 90-byte reports, CRC,
@@ -46,6 +58,10 @@ venv into the bundle and signs it ad hoc; unsigned apps can't read ~/Downloads):
 - Driver mode 00:04 [3,0] streams report 0x0B (u16 BE, 16380 units/mm); back with [0,0]. SIGTERM and reconnect
   both restore typing. Normal typing is visible as HID page-7 values with Input Monitoring.
 
+## Verified by the owner on hardware (0.3.0 on 02A6, 2026-11-17/18)
+Window (no badge/switch, all tabs), actuation, Rapid Trigger + Snap Tap, firmware effect + per-key paint +
+brightness, Studio typing + ambient + after quit, key tester in Actuation with typing back. Other models: none.
+
 ## Verified by the owner on hardware (2026-11-17)
 Actuation (selection, presets, reset point, live meter), Rapid Trigger, Snap Tap, firmware lighting + per-key paint +
 brightness, key tester, Studio presets (rainbow, aurora, matrix, fire, typing glow, gaming WASD, music via microphone),
@@ -55,7 +71,8 @@ Studio layers/params/presets/Sound/Typing/Smart panels, effects continuing after
 - macOS permission prompt names for the service ("Huntsman Lighting" vs "Python").
 - Lighting restore at logout/shutdown; KeepAlive restart after a crash; install.sh rollback after a failed build.
 - Smart lighting over a long session (real sleep/lock); BlackHole/system-audio input.
-- Other models (V3 Pro TKL/Mini/8KHz), Intel Macs, macOS < 26.
+- All six experimental models (no tester reports yet), incl. LED positions and the 8KHz profile read (05:84).
+- Intel Macs, macOS < 26.
 
 ## Decisions (don't re-raise)
 - Name stays "Huntsman for Mac"; discoverability via README/FAQ/topics, not a rename.
@@ -66,11 +83,13 @@ Studio layers/params/presets/Sound/Typing/Smart panels, effects continuing after
   with the owner, then merge to master and release.
 
 ## Next (pick with the owner)
-1. GitHub social preview image (Settings → Social preview, `docs/screenshot-actuation.png`) — owner's manual step.
+1. GitHub social preview image (Settings → Social preview; `docs/banner.png` suits it) — owner's manual step.
 2. Optional GitHub Pages landing page for search visibility.
-3. Support/testers for other Huntsman V3 models (VID/PID constants in huntsman_core).
+3. Collect tester reports for the experimental models (issue template new_model.md); promote a model to `verified`
+   in models.py only after a tester confirms it, and fix its LED map from the LED check.
 4. Work through "Not yet verified".
 
 ## Plan records
 - docs/plans/2026-11-17-open-source-release.md (v0.1.0)
 - docs/plans/2026-11-17-v2-lighting-studio.md (v0.2.0)
+- docs/plans/2026-11-17-v3-more-models.md (v0.3.0)

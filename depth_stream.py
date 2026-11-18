@@ -33,7 +33,10 @@ SHUTDOWN_LIMIT = 2.0
 
 def recover_typing(kb):
     """If a crash or force-quit left the keyboard in driver mode (not typing), switch it back.
-    Returns True if it had to. Never raises: a failed check must not block connecting."""
+    Returns True if it had to. Never raises: a failed check must not block connecting.
+    Models the key tester never runs on (experimental ones, the V2 family) are left alone: nothing is sent."""
+    if not kb.allowed("key_tester"):
+        return False
     try:
         if kb.cmd(0x00, 0x84, size=2)[0] == MODE_DRIVER:
             print("huntsman: keyboard was left in driver mode; switching back to normal typing", file=sys.stderr)
@@ -42,6 +45,11 @@ def recover_typing(kb):
     except Exception:
         traceback.print_exc()
     return False
+
+
+def product_id():
+    """USB product id of the connected model (huntsman_core detection); the key tester only reads that one."""
+    return hc.active_model().pid
 
 
 def add_shutdown_hook(fn):
@@ -161,7 +169,7 @@ class _IOKit:
         mgr = self.iokit.IOHIDManagerCreate(None, 0)
         match = self.cf.CFDictionaryCreateMutable(None, 0, None, None)
         self.cf.CFDictionarySetValue(match, self.s("VendorID"), self.num(hc.VID))
-        self.cf.CFDictionarySetValue(match, self.s("ProductID"), self.num(hc.PID))
+        self.cf.CFDictionarySetValue(match, self.s("ProductID"), self.num(product_id()))
         self.iokit.IOHIDManagerSetDeviceMatching(mgr, match)
         found = self.iokit.IOHIDManagerCopyDevices(mgr)
         if not found:
@@ -189,6 +197,7 @@ class DepthSession:
 
     def start(self):
         """Returns True once streaming, False if stop() cancelled it first. Raises on failure."""
+        self.kb.check_write("key_tester")  # never on an experimental model; checked before anything else
         io = _IOKit()
         if not io.iokit.IOHIDRequestAccess(1):  # kIOHIDRequestTypeListenEvent: Input Monitoring
             raise hc.DeviceError("Allow Input Monitoring for this app in System Settings, Privacy & Security, "

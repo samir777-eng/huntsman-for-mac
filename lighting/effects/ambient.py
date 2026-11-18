@@ -7,7 +7,6 @@ from lighting.effects.base import ParamSpec, Renderer, effect, keys_of, noise1, 
 from lighting.frame import PALETTES, WHITE, lerp, sample, scale, smoothstep
 
 SEED = ParamSpec("seed", "Pattern seed", "int", 1, 0, 2**31 - 1)
-ROWS = 6
 
 
 @effect("aurora", "Aurora", "ambient", [
@@ -42,19 +41,19 @@ class Aurora(Renderer):
 class Matrix(Renderer):
     """Drops fall down each LED column; each pass a column rains with probability `density`."""
     TAIL = 3
-    PERIOD = ROWS + TAIL + 4
 
     def render(self, t, ctx):
         p = self.params
         seed, colour = p["seed"], p["color"]
+        period = ctx.keymap.rows + self.TAIL + 4   # the keyboard's rows (6, or 5 on a Mini), the tail, a gap
         out = {}
         for k in keys_of(ctx):
             key = ctx.keymap.key(k)
             col = key.led[1]
             speed = p["speed"] * (0.7 + 0.6 * rand(seed, col, 1))
-            pos = t * speed + rand(seed, col, 0) * self.PERIOD
-            cycle = math.floor(pos / self.PERIOD)
-            head = pos - cycle * self.PERIOD - 1
+            pos = t * speed + rand(seed, col, 0) * period
+            cycle = math.floor(pos / period)
+            head = pos - cycle * period - 1
             d = head - key.row
             if rand(seed, col, cycle, 2) >= p["density"] or not 0 <= d < self.TAIL:
                 out[k] = (0, 0, 0)
@@ -94,10 +93,11 @@ class Fire(Renderer):
 
     def render(self, t, ctx):
         p = self.params
+        bottom = max(1, ctx.keymap.rows - 1)
         out = {}
         for k in keys_of(ctx):
             key = ctx.keymap.key(k)
-            depth = key.row / (ROWS - 1)  # 0 at the top row, 1 at the bottom
+            depth = key.row / bottom  # 0 at the top row, 1 at the bottom
             flicker = noise1(p["seed"], key.led[1], t * p["speed"] * 3 + key.row * 0.8)
             heat = depth ** 1.6 * (0.55 + 0.6 * flicker) * p["intensity"] * 1.3
             heat = min(1.0, max(0.0, heat))

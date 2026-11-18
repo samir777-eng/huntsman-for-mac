@@ -6,7 +6,9 @@
   keyboard to its custom (per-key) effect.
 - Gamma correction happens here, once, at the sink (picker sRGB -> LED drive level, as hc.gamma).
 - Every other device operation runs inside `with engine.paused():`, which waits for the frame in flight.
-- Keyboard errors are reported through on_error and retried with exponential back-off, never in a loop.
+- Keyboard errors are reported through on_error and retried with exponential back-off, never in a loop. A refusal
+  (an experimental model with Experimental support off, or one without per-key lighting) is reported once and
+  sending stops until the next start(): retrying can't help, and the owner turns Studio off.
 - stop(restore=True) calls the injected restore callback (e.g. re-apply the saved firmware effect).
 """
 import contextlib
@@ -51,6 +53,7 @@ class Engine:
         self._pause_count = 0
         self._retry_at, self._backoff = None, None
         self._busy_count = 0
+        self._refused = False   # the keyboard refused frames (hc.ExperimentalLocked / FeatureUnavailable)
         self._lut = [hc.gamma([i, i, i])[0] for i in range(256)]
 
     # ---------- configuration and inputs (any thread) ----------
@@ -144,7 +147,7 @@ class Engine:
             return
         self._stop_event.clear()
         with self._send_lock:
-            self._need_mode, self._last_rows = True, None
+            self._need_mode, self._last_rows, self._refused = True, None, False
         self._thread = threading.Thread(target=self._run, name="lighting-engine", daemon=True)
         self._thread.start()
 
@@ -195,11 +198,15 @@ class Engine:
             self._report(e)
             return False
         self._preview(now, frame)
-        rows = self._rows(frame)
+        try:
+            rows = self._rows(frame, ctx.keymap)
+        except (KeyError, IndexError):   # the model changed under this frame: drop it, render the next one
+            self._report(hc.DeviceError("Another keyboard model was connected; waiting for its layout."))
+            return False
         error = None
         with self._send_lock:
             stopping = self._stop_event.is_set() and threading.current_thread() is self._thread
-            if self._pause_count or stopping:
+            if self._pause_count or stopping or self._refused:
                 return False
             if self._retry_at is not None and now < self._retry_at:
                 return False
@@ -207,7 +214,10 @@ class Engine:
                 return False
             try:
                 if self._kb is None:
+                    keymap = self.keymap
                     self._kb = self._factory()
+                    if self.keymap is not keymap or self._shape(rows) != hc.frame_shape():
+                        return False   # the connect found another model and its layout: render it next tick
                 self._kb.send_frame_fast(rows)
                 if self._need_mode:
                     self._kb.enter_custom_mode()
@@ -220,6 +230,9 @@ class Engine:
                 if self._busy_count >= BUSY_REPORT_AFTER:
                     self._busy_count = 0
                     error = e
+            except (hc.ExperimentalLocked, hc.FeatureUnavailable) as e:
+                self._refused, self._need_mode, self._last_rows = True, True, None   # the connection is fine
+                error = e
             except Exception as e:
                 self._kb, self._need_mode, self._last_rows = None, True, None
                 self._backoff = (self._backoff_min if self._backoff is None
@@ -233,13 +246,18 @@ class Engine:
 
     # ---------- helpers ----------
 
-    def _rows(self, frame):
+    def _rows(self, frame, keymap):
         lut = self._lut
-        rows = [[[0, 0, 0] for _ in range(hc.FRAME_COLS)] for _ in range(hc.FRAME_ROWS)]
+        n_rows, n_cols = hc.frame_shape()
+        rows = [[[0, 0, 0] for _ in range(n_cols)] for _ in range(n_rows)]
         for k, (r, g, b) in frame.items():
-            row, col = self.keymap.key(k).led
+            row, col = keymap.key(k).led
             rows[row][col] = [lut[r], lut[g], lut[b]]
         return rows
+
+    @staticmethod
+    def _shape(rows):
+        return len(rows), len(rows[0]) if rows else 0
 
     def _preview(self, now, frame):
         if not self._previews or frame == self._preview_frame:

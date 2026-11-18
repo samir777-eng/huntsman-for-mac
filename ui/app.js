@@ -3,14 +3,14 @@
 "use strict";
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 
-const TITLES = { actuation: "Actuation", rapid: "Rapid Trigger", snap: "Snap Tap", lighting: "Lighting", studio: "Studio", tester: "Key tester", device: "Keyboard" };
+const TITLES = { actuation: "Actuation", rapid: "Rapid Trigger", snap: "Snap Tap", lighting: "Lighting", studio: "Studio", device: "Keyboard" };
 const NOTES = {
   actuation: "Click a key to select it, or drag across several. The number on each key is the depth it types at, in mm.",
   rapid: "Select keys to limit Rapid Trigger to them, or leave nothing selected for all keys.",
   snap: "The two outlined keys are the pair. Choose them in the panel on the left.",
   lighting: "Each key shows the colour its LED is set to.",
   studio: "",
-  tester: "Keys sink as you press them. The trace shows the last key's travel.",
+  testing: "Keys sink as you press them. The trace shows the last key's travel.",
   device: "",
 };
 const EFFECT_NAMES = { static: "Static", breathing_one: "Breathing, one colour", breathing_two: "Breathing, two colours", breathing_random: "Breathing, random", spectrum: "Spectrum", wave: "Wave", reactive_key_one: "Reactive", reactive_key_random: "Reactive, random", reactive_ripple_one: "Ripple", reactive_ripple_random: "Ripple, random", starlight_one: "Starlight, one colour", starlight_two: "Starlight, two colours", starlight_random: "Starlight, random", fire: "Fire", off: "Off" };
@@ -21,6 +21,8 @@ const UNLIT = "#3a3a40";                 // an unlit doubleshot legend
 const RAINBOW = "#ff3b30";              // starting hue for spectrum and wave previews
 
 let api, layout = [], effects = {}, view = "actuation";
+let model = null;           // the connected model: {pid, name, status, matrix, features, experimental_on, locked}
+let devInfo = null;         // the last info(): firmware, version, ...
 let points = {};            // id -> [actuation mm, reset mm]
 let selected = new Set();
 let state = {};
@@ -67,7 +69,8 @@ function toast(msg, err) {
 function setConn(ok, text) { $("#led").className = "led " + (ok ? "on" : "err"); if (text) $("#conn").textContent = text; }
 async function call(name, ...args) {
   const r = await api[name](...args);
-  if (!r.ok) { toast(r.error, true); setConn(false, "Not connected"); throw new Error(r.error); }
+  // r.reason: the model refused it before anything was sent (experimental or missing feature), still connected
+  if (!r.ok) { toast(r.error, true); if (!r.reason) setConn(false, "Not connected"); throw new Error(r.error); }
   setConn(true); return r.data;
 }
 async function busy(btn, fn) { btn.disabled = true; try { await fn(); } catch (e) { /* toast shown */ } finally { btn.disabled = false; refreshButtons(); } }
@@ -80,6 +83,7 @@ function drawBoard() {
   const b = $("#board"); b.innerHTML = "";
   const w = Math.max(...layout.map(k => k.x + k.w)), h = Math.max(...layout.map(k => k.y + k.h));
   b.style.width = w * U + "px"; b.style.height = h * U + "px";
+  $(".kb-extras").hidden = w < 16;   // media keys and dial: not on 60 % boards
   const rows = [...new Set(layout.map(k => k.y))].sort((a, c) => a - c);
   for (const y of rows) {
     const row = document.createElement("div"); row.className = "kb-row"; row.setAttribute("role", "row");
@@ -106,7 +110,7 @@ function fit() {
   const kb = $("#kb"), stage = $("#stage");
   const nw = parseFloat($("#board").style.width) + 44, nh = parseFloat($("#board").style.height) + 68;
   const cs = getComputedStyle(stage);
-  const reserved = (view === "tester" ? 280 : 0) + $("#dock").offsetHeight + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + 64;
+  const reserved = (traceShown() ? 280 : 0) + $("#dock").offsetHeight + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + 64;
   zoom = Math.max(0.5, Math.min(1.6, stage.clientWidth * 0.9 / nw, (stage.clientHeight - reserved) / nh));
   kb.style.zoom = zoom;
   // keep small type at or above ~9.5 px on screen whatever the zoom
@@ -168,9 +172,9 @@ function paint() {
     c.classList.toggle("unlit", dark);
     c.tabIndex = id === focusId ? 0 : -1;
     if (view === "actuation") {
-      front.textContent = p ? p[0].toFixed(1) : "";
+      if (!(testing && c.classList.contains("pressed"))) front.textContent = p ? p[0].toFixed(1) : "";   // a pressed key shows its travel
       c.title = p ? `Types at ${mm(p[0])}, resets at ${mm(p[1])}` : "";
-    } else if (view !== "tester") { front.textContent = ""; if (!c.classList.contains("off")) c.title = ""; }
+    } else { front.textContent = ""; if (!c.classList.contains("off")) c.title = ""; }
     c.setAttribute("aria-label", capName(id));
   }
   // the glow the keyboard throws on the desk: the most common LED colour
@@ -215,8 +219,100 @@ function refreshButtons() {
   $("#applySnap").textContent = a === b ? "Choose two different keys" : `Turn on for ${label(a)} and ${label(b)}`;
   $("#applySnap").disabled = a === b;
   $("#offSnap").disabled = !state.snap;
-  fxScopeUi(); dirtyUi();
+  fxScopeUi(); dirtyUi(); lockUi();
 }
+
+/* ---------- models: experimental support, features, LED check ---------- */
+const FEATURE_TABS = { actuation: "actuation", rapid: "rapid", snap: "snap_tap" };
+const experimentalModel = () => !!model && model.status === "experimental";
+const writesLocked = () => experimentalModel() && !model.experimental_on;
+// No keyboard answered (model null): claim no feature, so only Lighting and Studio show until one connects
+const hasFeature = f => !!model && !!model.features[f];
+const viewShown = v => !FEATURE_TABS[v] || hasFeature(FEATURE_TABS[v]);
+// While an experimental model's switch is off, every control that writes to it is disabled, with a note
+// pointing at the switch. Controls with their own enabled state (refreshButtons) only get forced off here.
+let lockShown = false;
+function lockUi() {
+  const lk = writesLocked();
+  $$("[data-write]").forEach(e => { if (lk) e.disabled = true; else if (lockShown) e.disabled = false; });
+  $$(".lock-note").forEach(n => n.hidden = !lk);
+  const was = lockShown; lockShown = lk;
+  if (was && !lk) refreshButtons();
+}
+function applyModel() {
+  if (model) $(".device-name").textContent = model.name;
+  $("#expBadge").hidden = !experimentalModel();
+  Object.keys(FEATURE_TABS).forEach(v => { $(`#sources button[data-view="${v}"]`).hidden = !viewShown(v); });
+  $("#actTest").hidden = $("#actReadings").hidden = !hasFeature("key_tester");
+  if (testing && !hasFeature("key_tester")) stopTest();
+  $("#restore").hidden = $("#restoreHint").hidden = !hasFeature("actuation");
+  $("#expBox").hidden = !experimentalModel();
+  $("#expOn").checked = !!model?.experimental_on;
+  $("#ledBox").hidden = !experimentalModel() || !model.experimental_on;
+  if (!model) { lockUi(); return; }
+  const [rows, cols] = model.matrix;
+  if ($("#ledRow").options.length !== rows || $("#ledCol").options.length !== cols) {
+    for (const [sel, n] of [["#ledRow", rows], ["#ledCol", cols]]) {
+      const s = $(sel); s.innerHTML = "";
+      for (let i = 0; i < n; i++) { const o = document.createElement("option"); o.value = o.textContent = i; s.appendChild(o); }
+    }
+    ledUi();
+  }
+  lockUi();
+}
+$("#expOn").onchange = async () => {
+  const on = $("#expOn").checked; $("#expOn").disabled = true;
+  try {
+    await call("set_experimental", on);
+    if (!on) led.running = false;   // the app put the lighting back before switching off
+    model = await call("model");
+    toast(on ? "Experimental support on" : "Experimental support off");
+  } catch (e) { $("#expOn").checked = !on; }
+  finally { $("#expOn").disabled = false; applyModel(); ledUi(); paint(); if (window.studioRefresh) studioRefresh(); }
+};
+
+// LED check: light one matrix cell at a time; the tester notes which key lit, for an issue
+const led = { running: false, notes: {} };
+const ledCell = () => [+$("#ledRow").value || 0, +$("#ledCol").value || 0];
+function ledReport() {
+  const [rows, cols] = model ? model.matrix : [0, 0];
+  const head = model ? `${model.name} (1532:${model.pid}), firmware ${devInfo?.firmware ?? "?"}, Huntsman for Mac ${devInfo?.version ?? "?"}` : "";
+  const lines = Object.entries(led.notes).filter(([, v]) => v.trim())
+    .map(([k, v]) => k.split(",").map(Number).concat(v.trim()))
+    .sort((a, b) => a[0] - b[0] || a[1] - b[1])
+    .map(([r, c, v]) => `Row ${r}, column ${c}: ${v}`);
+  return [head, `LED check, ${rows} x ${cols} matrix:`, ...(lines.length ? lines : ["(nothing noted yet)"])].join("\n");
+}
+function ledUi() {
+  const [r, c] = ledCell();
+  $("#ledCell").textContent = `Row ${r}, column ${c}`;
+  $("#ledKey").value = led.notes[`${r},${c}`] || "";
+  $("#ledStart").hidden = led.running; $("#ledStop").hidden = !led.running;
+  $("#ledReport").value = ledReport();
+}
+async function ledShow() {
+  ledUi();
+  if (!led.running) return;
+  const [r, c] = ledCell();
+  try { await call("led_check", r, c); } catch (e) { /* toast shown */ }
+}
+function ledStep(d) {
+  const [rows, cols] = model.matrix, [r, c] = ledCell();
+  const i = ((r * cols + c + d) % (rows * cols) + rows * cols) % (rows * cols);
+  $("#ledRow").value = Math.floor(i / cols); $("#ledCol").value = i % cols;
+  return ledShow();
+}
+$("#ledKey").oninput = () => { const [r, c] = ledCell(); led.notes[`${r},${c}`] = $("#ledKey").value; $("#ledReport").value = ledReport(); };
+$("#ledRow").onchange = $("#ledCol").onchange = () => ledShow();
+$("#ledPrev").onclick = () => ledStep(-1);
+$("#ledNext").onclick = () => ledStep(1);
+$("#ledStart").onclick = e => busy(e.target, async () => { const [r, c] = ledCell(); await call("led_check", r, c); led.running = true; ledUi(); if (window.studioRefresh) studioRefresh(); });
+$("#ledStop").onclick = e => busy(e.target, async () => { await call("end_led_check"); led.running = false; ledUi(); $("#ledStart").focus(); });
+$("#ledCopy").onclick = async () => {
+  $("#ledReport").value = ledReport();
+  try { await navigator.clipboard.writeText($("#ledReport").value); toast("Summary copied"); }
+  catch (e) { $("#ledReport").select(); document.execCommand("copy"); toast("Summary copied"); }
+};
 
 /* ---------- selection: mouse ---------- */
 // click toggles; dragging applies the same toggle to every key it crosses
@@ -270,24 +366,28 @@ $$("#selectTools button").forEach(b => b.onclick = () => {
   const s = b.dataset.sel;
   const sets = { all: keyIds(), wasd: ["W", "A", "S", "D"].map(byName), letters: LETTERS.map(byName),
     numbers: "1234567890".split("").map(byName), arrows: ["UP_ARROW", "DOWN_ARROW", "LEFT_ARROW", "RIGHT_ARROW"].map(byName), none: [] };
-  selected = new Set(sets[s]); paint();
+  selected = new Set(sets[s].filter(id => id != null)); paint();   // keys this model lacks are skipped
 });
 
 /* ---------- navigation ---------- */
+// The key tester runs from Actuation: while it runs, the stage shows the travel trace under the keyboard
+const traceShown = () => testing && view === "actuation";
+const stageNote = v => v === "actuation" && testing ? NOTES.testing : NOTES[v];
 async function show(v) {
-  if (testing && v !== "tester" && v !== "actuation") await stopTest();
+  if (!viewShown(v)) v = "lighting";   // a tab this model doesn't have
+  if (testing && v !== "actuation") await stopTest();   // the key tester lives in Actuation
   view = v;
   $$("button[data-view]").forEach(b => { if (b.dataset.view === v) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   $$(".pane").forEach(p => p.hidden = p.dataset.pane !== v);
   document.title = `${TITLES[v]} · Huntsman for Mac`;
-  $("#stageNote").textContent = NOTES[v];
+  $("#stageNote").textContent = stageNote(v);
   $("#selectTools").hidden = !selecting();
   $("#board").setAttribute("aria-multiselectable", selecting());
-  $("#traceWrap").hidden = v !== "tester";
+  $("#traceWrap").hidden = !traceShown();
   $("#stage").dataset.view = v;
   $$(".cap").forEach(c => c.classList.remove("pressed", "typed"));
   fit(); paint(); fillAll(); snapUi();
-  if (v === "tester") drawTrace();
+  if (traceShown()) drawTrace();
   if (window.studioShown) studioShown(v);
 }
 $$("button[data-view]").forEach(b => b.onclick = () => show(b.dataset.view));
@@ -474,7 +574,7 @@ window.onDepth = batch => {            // batch: [[keyId, mm], ...] from the app
     c.classList.toggle("pressed", d > 0.05);
     c.querySelector(".fill").style.height = (d / 4 * 100).toFixed(1) + "%";
     c.classList.toggle("typed", !!(p && d >= p[0]));
-    if (view === "tester") c.querySelector(".front").textContent = d > 0 ? d.toFixed(2) : "";
+    if (view === "actuation") c.querySelector(".front").textContent = d > 0 ? d.toFixed(2) : p ? p[0].toFixed(1) : "";
   }
   if (batch.length) {
     const [id] = batch.reduce((a, b) => b[1] > a[1] ? b : a);
@@ -485,8 +585,6 @@ window.onDepth = batch => {            // batch: [[keyId, mm], ...] from the app
   while (trace.samples.length && now - trace.samples[0][0] > WINDOW_MS) trace.samples.shift();
   if (trace.key != null) {
     const p = points[trace.key] || [];
-    $("#testKey").textContent = `Key ${label(trace.key)}`;
-    $("#liveNum").textContent = d.toFixed(2);
     $("#tAct").textContent = p[0] != null ? mm(p[0]) : "–";
     $("#tRel").textContent = p[1] != null ? mm(p[1]) : "–";
     $("#tPeak").textContent = trace.peak.toFixed(2) + " mm";
@@ -557,24 +655,23 @@ function drawTrace() {
 }
 
 function testerUi() {
-  $("#testToggle").textContent = testing ? "Stop testing" : "Start testing";
-  $("#testToggle").classList.toggle("primary", !testing);
-  $("#testToggle").classList.toggle("secondary", testing);
-  $("#liveSub").textContent = testing ? "Press keys on the Huntsman now." : "Travel of the last key you pressed.";
   $("#actTest").textContent = testing ? "Stop testing" : "Test with a key press";
   $("#actTest").classList.toggle("on", testing);
   $("#testBanner").hidden = !testing;
   $("#stage").classList.toggle("testing", testing);
   if (testing) { $("#mLive").dataset.idle = "true"; $("#mKey").textContent = "Press a key on the Huntsman"; $("#mNum").textContent = "0.00"; $("#mHit").textContent = `Types at ${mm(depth())}`; }
   $("#mLive").classList.toggle("active", testing);
+  $("#traceWrap").hidden = !traceShown();
+  if (view === "actuation") $("#stageNote").textContent = stageNote(view);
+  fit(); if (traceShown()) drawTrace();
   if (!testing) { meterKey(0, false); $$(".cap").forEach(c => { c.classList.remove("pressed", "typed"); c.querySelector(".fill").style.height = 0; }); paint(); traceLabel(true); }
 }
 async function stopTest() { if (!testing) return; testing = false; testerUi(); try { await call("stop_test"); toast("Testing stopped. The keyboard types normally again."); } catch (e) { /* error toast already shown */ } }
 async function toggleTest() {
   if (testing) return stopTest();
   await call("start_test"); testing = true; trace.key = null; trace.samples = []; testerUi();
+  if (view !== "actuation") return stopTest();   // the tab changed while the test was starting
 }
-$("#testToggle").onclick = e => busy(e.target, toggleTest);
 $("#actTest").onclick = e => busy(e.target, toggleTest);
 $("#bannerStop").onclick = e => busy(e.target, stopTest);
 addEventListener("beforeunload", () => { if (testing) api.stop_test(); });
@@ -660,18 +757,42 @@ function fromRaw(raw) {  // effect bytes the keyboard reports: store, led, effec
   if (name === "static") $("#c1").value = "#" + raw.slice(12, 18);
   if (name) { $("#effect").value = name; effectUi(); fxShown = fxFromForm(name); }
 }
-async function load() {
+function fillEffects() {
+  const sel = $("#effect"), was = sel.value;
+  sel.innerHTML = "";
+  // only list effects the keyboard code supports (firmware 1.03 refuses some that other models have)
+  for (const n of Object.keys(EFFECT_NAMES).filter(n => effects[n])) { const o = document.createElement("option"); o.value = n; o.textContent = EFFECT_NAMES[n]; sel.appendChild(o); }
+  if (effects[was]) sel.value = was;
+}
+// The connected model, again: on Reconnect a keyboard may have appeared, or another model replaced it. A new
+// PID (or the first one after none) brings its layout and effects; the same one keeps the board as drawn.
+async function followModel() {
+  const before = model?.pid ?? null;
+  try { model = await call("model"); } catch (e) { model = null; }   // connects, so layout and effects follow it
+  if (model && model.pid !== before) {
+    layout = await api.layout(); effects = await api.effects();
+    selected = new Set([...selected].filter(id => keyOf(id)));
+    fillEffects(); fillSnap(); drawBoard(); effectUi();
+    if (window.studioRefresh) studioRefresh();
+  }
+  applyModel(); show(view);
+  return !!model;
+}
+async function load(again = true) {
+  if (again && !(await followModel())) { setConn(false, "Not connected"); return; }
   setConn(true, "Reading");
   try {
     const i = await call("info");
-    state = i.state;
+    devInfo = i; state = i.state;
     $("#bright").value = i.brightness; brightUi(); fillAll();
     if (!state.effect && !state.custom) fromRaw(i.effect);
     applyState();
     $("#devInfo").innerHTML = "";
-    [["Model", "Huntsman V3 Pro"], ["USB ID", "1532:02A6"], ["Firmware", i.firmware], ["Stored profile", String(i.profile)], ["Brightness", i.brightness + "%"], ["App version", i.version || "–"]]
+    const m = i.model || model || { name: "Huntsman V3 Pro", pid: "02A6" };
+    [["Model", m.name], ["USB ID", `1532:${m.pid}`], ["Firmware", i.firmware], ["Stored profile", String(i.profile)], ["Brightness", i.brightness + "%"], ["App version", i.version || "–"]]
       .forEach(([k, v]) => { const r = document.createElement("div"); r.className = "row"; r.innerHTML = '<span></span><span class="val"></span>'; r.children[0].textContent = k; r.children[1].textContent = v; $("#devInfo").appendChild(r); });
-    await readPoints();
+    if (hasFeature("actuation")) await readPoints();
+    ledUi();
     setConn(true, `Connected, firmware ${i.firmware}`);
   } catch (e) { setConn(false, "Not connected"); }
 }
@@ -679,12 +800,13 @@ async function load() {
 /* ---------- start ---------- */
 async function start() {
   api = window.pywebview.api;
+  try { model = await call("model"); } catch (e) { model = null; }   // connects, so layout and effects follow it
   layout = await api.layout(); effects = await api.effects();
-  // only list effects the keyboard code supports (firmware 1.03 refuses some that other models have)
-  for (const n of Object.keys(EFFECT_NAMES).filter(n => effects[n])) { const o = document.createElement("option"); o.value = n; o.textContent = EFFECT_NAMES[n]; $("#effect").appendChild(o); }
-  fillSnap(); drawBoard(); effectUi(); depthUi(); rtUi(); testerUi(); wellsUi(); show(view);
-  try { const done = await call("startup"); if (done.length) toast("Sent again: " + done.join(", ")); } catch (e) {}
-  await load();
+  fillEffects(); fillSnap(); drawBoard(); effectUi(); depthUi(); rtUi(); testerUi(); wellsUi(); applyModel(); show(view);
+  if (model) {
+    try { const done = await call("startup"); if (done.length) toast("Sent again: " + done.join(", ")); } catch (e) {}
+    await load(false);   // the model was just read
+  } else setConn(false, "Not connected");
   if (window.studioStart) await studioStart();
   let fitTimer;
   addEventListener("resize", () => { clearTimeout(fitTimer); fitTimer = setTimeout(() => { fit(); drawTrace(); }, 100); });

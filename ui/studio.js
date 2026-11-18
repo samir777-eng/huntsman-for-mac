@@ -419,7 +419,7 @@ $("#stOn").onchange = async () => {
   const on = $("#stOn").checked; $("#stOn").disabled = true;
   try { await scall("studio_enable", on); toast(on ? "Studio is lighting the keyboard" : "Studio off. The keyboard's own lighting is back."); }
   catch (e) { $("#stOn").checked = !on; }
-  finally { $("#stOn").disabled = false; }
+  finally { $("#stOn").disabled = writesLocked(); }
   await studioRefresh();
 };
 const sendBright = debounce(v => quiet(scall("set_studio_brightness", v)), 100);

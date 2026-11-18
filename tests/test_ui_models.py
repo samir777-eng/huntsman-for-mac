@@ -316,7 +316,9 @@ def test_windows_with_synapse_running_says_why_and_locks_writes(browser):  # noq
     page.add_init_script(RECORDER)
     try:
         page.goto(BASE + "&windows=synapse,dynamic")
-        expect(page.locator("#conn")).to_have_text("Connected, firmware 1.03")
+        # nothing is read while Synapse runs: the last model from memory, locked, and only the guard is polled
+        expect(page.locator("#conn")).to_have_text("Paused: Razer Synapse is running")
+        assert calls(page, "info") == [] and calls(page, "startup") == []
         note = page.locator("#platformNotice")
         expect(note).to_be_visible()
         expect(note).to_contain_text("Razer Synapse is running")
@@ -333,6 +335,21 @@ def test_windows_with_synapse_running_says_why_and_locks_writes(browser):  # noq
         assert page.locator("#smBundle").get_attribute("placeholder") == "or program name, e.g. steam.exe"
         expect(page.locator("#stCloseHint")).to_contain_text("tray icon")
         assert errors == []
+    finally:
+        page.close()
+
+
+def test_while_synapse_runs_the_window_polls_only_the_guard(browser):  # noqa: F811
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    page.clock.install()
+    page.add_init_script(RECORDER)
+    try:
+        page.goto(BASE + "&windows=synapse")
+        expect(page.locator("#conn")).to_have_text("Paused: Razer Synapse is running")
+        models_before, polls_before = len(calls(page, "model")), len(calls(page, "platform_status"))
+        page.clock.run_for(16000)
+        assert len(calls(page, "platform_status")) >= polls_before + 3
+        assert len(calls(page, "model")) == models_before and calls(page, "info") == []
     finally:
         page.close()
 

@@ -108,12 +108,12 @@ def test_set_state_rebuilds_the_installed_tray_menu():
 
 
 def test_a_notice_shows_as_a_disabled_first_item_in_both_menus():
-    items = build_menu(True, [], None, notice="Read only: Razer Synapse is running")
-    assert (items[0].title, items[0].enabled, items[0].action) == ("Read only: Razer Synapse is running", False, None)
+    items = build_menu(True, [], None, notice="Paused: Razer Synapse is running")
+    assert (items[0].title, items[0].enabled, items[0].action) == ("Paused: Razer Synapse is running", False, None)
     assert items[1].separator and items[2].title == "Lighting"
     tray = win_tray.TrayMenu(pystray=fake_pystray(), image=object(), **handlers([]))
-    tray.set_state(notice="Read only: Razer Synapse is running")
-    assert flat(tray.pystray_menu())[0] == ("Read only: Razer Synapse is running", False, False)
+    tray.set_state(notice="Paused: Razer Synapse is running")
+    assert flat(tray.pystray_menu())[0] == ("Paused: Razer Synapse is running", False, False)
     tray.set_state(notice=None)
     assert flat(tray.pystray_menu())[0][0] == "Lighting"
 

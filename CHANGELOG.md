@@ -2,6 +2,14 @@
 
 All notable changes to this project are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Fixed
+- Windows: while Razer Synapse runs, nothing at all reaches the keyboard, reads included (two programs on the same
+  HID interface swap each other's replies). The hidapi transport refuses to open the keyboard or send a report, the
+  app and the lighting service let go of an open handle, the window shows the last model it saw (locked) and polls
+  only the Synapse check, not the keyboard. The connection line says "Paused: Razer Synapse is running".
+
 ## 0.4.0 – 2026-11-18
 
 ### Added

@@ -67,7 +67,7 @@ Every model counts as experimental on Windows. Use a keyboard you can live witho
 1. Install it as in the README's [Windows section](README.md#install-on-windows). Note your Windows version (Settings
    → System → About) and whether SmartScreen asked.
 2. Quit Razer Synapse first. Then, if you like, start it once with the app open and check that the window says it's
-   read only, and that the controls come back within a few seconds after you quit Synapse again.
+   paused because of Synapse, and that the controls come back within a few seconds after you quit Synapse again.
 3. Open the app: does the window open and show the keyboard's model and firmware? Does a tray icon appear?
 4. Turn on **Keyboard → Experimental support**. If the window says Windows Dynamic Lighting is on, note that, and
    whether lighting changes show before and after turning it off for the keyboard.

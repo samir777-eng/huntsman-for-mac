@@ -479,6 +479,7 @@ class Api:
         self._led_check = False     # an LED check lit a cell and its lighting isn't back yet
         self.reapplied = []
         self._svc = service or ServiceLink()
+        self._last_model = None     # the model last connected, shown (read only) while Razer Synapse runs
         self._events = None
         self._pusher = JsPusher(lambda: self._window)
 
@@ -517,8 +518,13 @@ class Api:
         """Connect; on every (re)connect put a keyboard stuck in driver mode back to typing (a crash
         during a key test leaves it there) and re-send the RAM-only settings, since a replug drops them.
         Neither the snapshot nor the re-send may block connecting: failures are logged."""
+        reason = hc.synapse_block()
+        if reason:   # Windows: let go of the keyboard, and don't open it, while Razer Synapse runs
+            self._drop()
+            raise hc.SynapseRunning(reason)
         if self._kb is None:
             kb = hc.Keyboard()
+            self._last_model = kb.model
             depth_stream.recover_typing(kb)
             try:
                 ensure_snapshot(kb)
@@ -534,8 +540,10 @@ class Api:
         t = self._test
         if t and t.running:
             t.stop("Testing stopped because the keyboard reconnected.")
-        if self._kb is not None and hasattr(self._kb.t, "close"):
-            self._kb.t.close()
+        if self._kb is not None:
+            self._last_model = self._kb.model
+            if hasattr(self._kb.t, "close"):
+                self._kb.t.close()
         self._kb = None
 
     def _run(self, fn):
@@ -575,7 +583,21 @@ class Api:
     # ----- reads -----
     def model(self):
         """The connected model (connecting first): name, PID, status, matrix, effects, features, whether
-        Experimental support is on and whether writes are locked until it is."""
+        Experimental support is on and whether writes are locked until it is.
+        Windows, while Razer Synapse runs: nothing is sent; the last connected model from memory, marked "offline"
+        and locked, or None if none was connected yet (platform_status() carries the reason)."""
+        with self._lock:
+            reason = hc.synapse_block()
+            if reason:
+                self._drop()
+                m = self._last_model
+                if m is None:
+                    return {"ok": True, "data": None}
+                from platforms import win_guard
+                return {"ok": True, "data": {**hc.model_info(m), "experimental_on": hc.experimental_enabled(),
+                                             "locked": True, "offline": True, "blocked": reason,
+                                             "notices": win_guard.notices()}}
+
         def f(kb):
             d = {**hc.model_info(kb.model), "experimental_on": hc.experimental_enabled(),
                  "locked": not kb.allowed("lighting")}
@@ -584,6 +606,16 @@ class Api:
                 d["blocked"], d["notices"] = win_guard.write_block_reason(), win_guard.notices()
             return d
         return self._run(f)
+
+    def platform_status(self):
+        """For the window's poll: the platform, why the keyboard is left alone (Windows: Razer Synapse runs) and
+        Windows settings in the way. Asks only the guard (cached, a process list at most every few seconds): never
+        touches the keyboard."""
+        d = {"platform": platforms.current(), "blocked": hc.synapse_block(), "notices": []}
+        if platforms.is_windows():
+            from platforms import win_guard
+            d["notices"] = win_guard.notices()
+        return {"ok": True, "data": d}
 
     def layout(self):
         """Keys of the connected model (the window asks for model() first, which connects)."""

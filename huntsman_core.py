@@ -221,6 +221,15 @@ def gate(model, feature):
                                  "support to change its settings.")
 
 
+def synapse_block():
+    """Windows: why the keyboard is left alone right now (Razer Synapse runs: no writes and no reads, since two
+    programs on one HID interface swap replies), else None. The Mac never asks."""
+    if not platforms.is_windows():
+        return None
+    from platforms import win_guard
+    return win_guard.write_block_reason()
+
+
 def model_info(model):
     """model.info() as the window should see it on this platform, plus "platform", "platform_experimental" and
     "model_status" (the table's own status). On Windows every model reports "experimental" and no key tester."""

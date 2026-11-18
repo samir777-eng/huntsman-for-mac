@@ -59,7 +59,7 @@
     {"@type": "Question", "name": "Do I need Windows, Boot Camp or a virtual machine?",
      "acceptedAnswer": {"@type": "Answer", "text": "No. It talks to the keyboard directly over USB from macOS."}},
     {"@type": "Question", "name": "Does it work on Windows?",
-     "acceptedAnswer": {"@type": "Answer", "text": "There's an experimental Windows build (Huntsman-for-Windows-<version>.zip on the releases page), but it has never been run on a Windows PC with a keyboard, so nobody knows yet. On Windows every model needs Experimental support switched on, there's no key tester, and the app only reads while Razer Synapse is running."}},
+     "acceptedAnswer": {"@type": "Answer", "text": "There's an experimental Windows build (Huntsman-for-Windows-<version>.zip on the releases page), but it has never been run on a Windows PC with a keyboard, so nobody knows yet. On Windows every model needs Experimental support switched on, there's no key tester, and the app leaves the keyboard alone while Razer Synapse is running."}},
     {"@type": "Question", "name": "Is it free?",
      "acceptedAnswer": {"@type": "Answer", "text": "Yes. It's open source under GPL-3.0-or-later, with no account, no telemetry and no paid tier."}},
     {"@type": "Question", "name": "Which keyboards are supported?",
@@ -510,7 +510,7 @@ cd huntsman-for-mac</code></pre></div>
         </li>
         <li class="step">
           <h3>Close Synapse</h3>
-          <p>Quit Razer Synapse, including its tray icon. While it runs, the app only reads.</p>
+          <p>Quit Razer Synapse, including its tray icon. While it runs, the app leaves the keyboard alone.</p>
         </li>
         <li class="step">
           <h3>Run Huntsman.exe</h3>
@@ -583,7 +583,7 @@ cd huntsman-for-mac</code></pre></div>
         <details><summary>Can I use Rapid Trigger or Snap Tap on a Mac?</summary><p>Yes, from the Rapid Trigger and Snap Tap tabs. Both have been confirmed on a Huntsman V3 Pro; please report how they work on other models.</p></details>
         <details><summary>Can I set per-key RGB lighting without Synapse?</summary><p>Yes. Use Lighting → Per key to colour individual keys, or Effect for spectrum, wave, breathing, reactive and starlight. Ripple and other typing effects are in Studio.</p></details>
         <details><summary>Do I need Windows, Boot Camp or a virtual machine?</summary><p>No. It talks to the keyboard directly over USB from macOS.</p></details>
-        <details><summary>Does it work on Windows?</summary><p>There's an experimental Windows build (<code>Huntsman-for-Windows-&lt;version&gt;.zip</code> on the <a href="https://github.com/samir777-eng/huntsman-for-mac/releases/latest">releases page</a>), but it has never been run on a Windows PC with a keyboard, so nobody knows yet. On Windows every model needs Experimental support switched on, there's no key tester, and the app only reads while Razer Synapse is running. See <a href="#windows">Windows</a>.</p></details>
+        <details><summary>Does it work on Windows?</summary><p>There's an experimental Windows build (<code>Huntsman-for-Windows-&lt;version&gt;.zip</code> on the <a href="https://github.com/samir777-eng/huntsman-for-mac/releases/latest">releases page</a>), but it has never been run on a Windows PC with a keyboard, so nobody knows yet. On Windows every model needs Experimental support switched on, there's no key tester, and the app leaves the keyboard alone while Razer Synapse is running. See <a href="#windows">Windows</a>.</p></details>
         <details><summary>Is it free?</summary><p>Yes. It's open source under GPL-3.0-or-later, with no account, no telemetry and no paid tier.</p></details>
         <details><summary>Which keyboards are supported?</summary><p>The Razer Huntsman V3 Pro (full size, USB ID 1532:02A6) is tested. The V3 Pro TKL, V3 Pro 8KHz, V3 Pro Mini, V2, V2 TKL and V2 Analog have experimental support: untested, and off until you turn on Experimental support. See <a href="#models">Supported hardware</a>.</p></details>
         <details><summary>I have one of the experimental models. How can I help?</summary><p>Turn on Experimental support, run the LED check, and report what worked and what didn't. The steps are in <a href="https://github.com/samir777-eng/huntsman-for-mac/blob/master/CONTRIBUTING.md#testing-an-experimental-model">CONTRIBUTING.md</a>.</p></details>

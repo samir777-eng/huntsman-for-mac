@@ -21,8 +21,8 @@ Windows (experimental, untested on a Windows PC): the same service runs as `Hunt
 service.py from source), started at login by the HKCU Run value (platforms/win_autostart.py) and by the app when
 it isn't answering; a pystray tray icon (platforms/win_tray.py) shows the same menu; logoff/shutdown arrive as
 WM_ENDSESSION on a hidden window. Quitting leaves start at login on, so, as on the Mac, it stays off until the next
-login or until Studio is used. While Razer Synapse runs every write is refused (platforms/win_guard.py): Studio
-stays off, the tray says why, and check_guard() (every few seconds) turns Studio back on once Synapse quits if it
+login or until Studio is used. While Razer Synapse runs the keyboard isn't opened at all (platforms/win_guard.py):
+Studio stays off, the tray says why, and check_guard() (every few seconds) turns Studio back on once Synapse quits if it
 was on before.
 """
 import os
@@ -195,6 +195,10 @@ class LightingService:
     # ---------- keyboard ----------
 
     def _keyboard(self):
+        reason = hc.synapse_block()
+        if reason:   # Windows: let go of the keyboard, and don't open it, while Razer Synapse runs
+            self._drop()
+            raise hc.SynapseRunning(reason)
         if self._kb is None:
             kb = hc.Keyboard()
             depth_stream.recover_typing(kb)
@@ -221,7 +225,10 @@ class LightingService:
     def studio_blocked(self):
         """Why Studio can't stream to the connected keyboard (an experimental model with Experimental support off),
         else None. No keyboard yet: None, and the engine connects when it can. While the engine streams, the
-        keyboard is the engine's (and already took the frames): None."""
+        keyboard is the engine's (and already took the frames): None. Windows: Razer Synapse running, asked first."""
+        reason = hc.synapse_block()
+        if reason:   # Windows: Razer Synapse runs, so the keyboard isn't even opened to ask
+            return reason
         if self.studio is not None and self.studio.engine.running:
             return None
         try:
@@ -266,7 +273,7 @@ class LightingService:
             return reason
         self._guard_reason = reason
         if reason:
-            log(f"read only: {reason}")
+            log(f"keyboard left alone: {reason}")
         else:
             log("Razer Synapse quit; writes allowed again")
         for fn in list(self._guard_listeners):
@@ -668,7 +675,7 @@ def _main_windows():
         log(f"no logoff/shutdown notice: {e}")
     menu = make_menu(svc, TrayMenu, on_open=open_app, on_quit=quit_service, quit_title=QUIT_TITLE)
     holder["menu"] = menu
-    svc.on_guard(lambda reason: menu.set_state(notice="Read only: Razer Synapse is running" if reason else None))
+    svc.on_guard(lambda reason: menu.set_state(notice="Paused: Razer Synapse is running" if reason else None))
     svc.run_guard()
     log("started")
 

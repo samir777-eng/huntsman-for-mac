@@ -90,10 +90,11 @@ What's different on Windows:
 - **Every model is experimental**, the Huntsman V3 Pro too: nothing that changes the keyboard is sent until you turn
   on **Keyboard → Experimental support** (see [Experimental support](#experimental-support)). Reads always work.
 - **No key tester.** It puts the keyboard into a mode where it stops typing, so it stays off on an untested platform.
-- **Read only while Razer Synapse runs.** Synapse overwrites the keyboard's live settings, and two programs talking
+- **Hands off while Razer Synapse runs.** Synapse overwrites the keyboard's live settings, and two programs talking
   to it at once mix up the replies. While Synapse (`RazerAppEngine.exe`, or Synapse 3 or 2) is running, the app and the
-  lighting service only read, and the window says why. Quit Synapse, including its icon in the notification area,
-  and the controls come back within a few seconds.
+  lighting service don't open the keyboard at all, not even to read it: the window shows the last model it saw and
+  says why. Quit Synapse, including its icon in the notification area, and the controls come back within a few
+  seconds.
 - **Windows Dynamic Lighting** can take over the keyboard's lights, so lighting changes may not show. When it's on,
   the window says so. To give the lights to this app: **Settings → Personalization → Dynamic Lighting**, choose the
   Razer Huntsman and turn Dynamic Lighting off for it (or turn off *Use Dynamic Lighting on my devices*). The app never
@@ -109,7 +110,7 @@ What's different on Windows:
    [latest release](https://github.com/samir777-eng/huntsman-for-mac/releases/latest).
 2. **Unzip it** (right-click → *Extract All*) somewhere you'll keep it, for example `Documents`. You get a `Huntsman`
    folder; keep everything in it together.
-3. **Close Razer Synapse**, including its icon in the notification area, or the app stays read only.
+3. **Close Razer Synapse**, including its icon in the notification area, or the app leaves the keyboard alone.
 4. **Run `Huntsman.exe`.** It isn't code-signed, so Windows SmartScreen may say *Windows protected your PC*: click
    **More info**, then **Run anyway**.
 5. Turn on **Keyboard → Experimental support** and read its warning.
@@ -695,7 +696,7 @@ No. It talks to the keyboard directly over USB from macOS.
 
 There's an experimental Windows build (`Huntsman-for-Windows-<version>.zip` on the releases page), but it has never
 been run on a Windows PC with a keyboard, so nobody knows yet. On Windows every model needs Experimental support
-switched on, there's no key tester, and the app only reads while Razer Synapse is running. See
+switched on, there's no key tester, and the app leaves the keyboard alone while Razer Synapse is running. See
 [Windows (experimental)](#windows-experimental).
 
 </details>

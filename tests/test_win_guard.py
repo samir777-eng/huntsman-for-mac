@@ -3,7 +3,7 @@
 """The Synapse guard and the Dynamic Lighting notice on Windows (platforms/win_guard.py).
 
 While Razer Synapse runs it owns the keyboard (it overwrites the live profile and two writers mix replies), so the
-app and the lighting service only read, say why, and re-check every few seconds. Windows Dynamic Lighting on means
+app and the lighting service send nothing to the keyboard (not even reads), say why, and re-check every few seconds. Windows Dynamic Lighting on means
 lighting commands may do nothing: the window says how to turn it off for this keyboard (the app never changes it).
 Fake process lists, a fake clock and a fake winreg; the keyboard is FakeTransport."""
 import os
@@ -217,3 +217,132 @@ def test_the_notice_says_how_to_turn_it_off_and_nothing_is_written():
     assert "Dynamic Lighting" in msg and "Settings" in msg and "Personalization" in msg
     assert not hasattr(reg, "SetValueEx")
     assert wg.notices(FakeWinreg(0)) == []
+
+
+# ---------- no keyboard traffic at all while Synapse runs (reads swap replies with it) ----------
+
+def _fake_hid(monkeypatch):
+    from test_hid_win import FakeHid, entry
+    hid = FakeHid([entry(0x02A6, 3, b"ctl")])
+    monkeypatch.setitem(sys.modules, "hid", hid)
+    return hid
+
+
+def _sent(hid):
+    return [r for d in hid.opened for r in d.sent]
+
+
+def test_the_hid_transport_does_not_open_the_keyboard_while_synapse_runs(windows, monkeypatch):
+    from platforms import win_hid
+    procs, _ = windows
+    procs.names = ["RazerAppEngine.exe"]
+    hid = _fake_hid(monkeypatch)
+    with pytest.raises(hc.SynapseRunning):
+        win_hid.HidTransport(hid_module=hid)
+    with pytest.raises(hc.SynapseRunning):
+        hc.open_transport()
+    with pytest.raises(hc.SynapseRunning):
+        hc.Keyboard()
+    assert hid.opened == [] and _sent(hid) == []
+
+
+def test_an_open_hid_transport_sends_nothing_once_synapse_starts(windows, monkeypatch):
+    from platforms import win_hid
+    procs, clock = windows
+    hid = _fake_hid(monkeypatch)
+    t = win_hid.HidTransport(hid_module=hid)
+    for d in hid.opened:
+        d.sent.clear()
+    procs.names = ["RazerAppEngine.exe"]
+    clock.t += wg.CHECK_EVERY
+    with pytest.raises(hc.SynapseRunning):
+        t.exchange(hc.build_report(0x00, 0x81, size=2))
+    with pytest.raises(hc.SynapseRunning):
+        t.exchange_fast([hc.build_report(0x0F, 0x03, [0] * 10)])
+    assert _sent(hid) == []
+
+
+def test_the_window_reads_nothing_while_synapse_runs(windows, monkeypatch):
+    from test_models_wiring import FakeService, make_api
+    import app as appmod
+    procs, _ = windows
+    monkeypatch.setattr(appmod, "STATE_FILE", os.path.join(hc.data_dir(), "state.json"))
+    monkeypatch.setattr(wg, "notices", lambda winreg=None: [])
+    procs.names = ["RazerAppEngine.exe"]
+    hid = _fake_hid(monkeypatch)
+    api = make_api(appmod, FakeService())
+    r = api.model()                                   # no keyboard seen yet: nothing to show, nothing opened
+    assert r == {"ok": True, "data": None}
+    for call in (api.info, api.read_depths, api.startup, api.reconnect):
+        r = call()
+        assert r["ok"] is False and r["reason"] == "synapse"
+    assert hid.opened == [] and _sent(hid) == []
+
+
+def test_a_connected_window_lets_go_of_the_keyboard_when_synapse_starts(windows, monkeypatch):
+    from test_models_wiring import FakeService, make_api
+    import app as appmod
+    procs, clock = windows
+    monkeypatch.setattr(appmod, "STATE_FILE", os.path.join(hc.data_dir(), "state.json"))
+    monkeypatch.setattr(wg, "notices", lambda winreg=None: [])
+    api = make_api(appmod, FakeService())
+    t = FakeTransport()
+    api._kb = hc.Keyboard(t, model=V3PRO)
+    procs.names = ["RazerAppEngine.exe"]
+    clock.t += wg.CHECK_EVERY
+    d = api.model()["data"]                           # the last model, from memory, marked read only
+    assert d["name"] == V3PRO.name and d["offline"] is True and d["locked"] is True and "Razer Synapse" in d["blocked"]
+    assert api.info()["reason"] == "synapse"
+    assert t.sent == [] and api._kb is None
+
+
+def test_platform_status_only_asks_the_guard(windows, monkeypatch):
+    from test_models_wiring import FakeService, make_api
+    import app as appmod
+    procs, clock = windows
+    monkeypatch.setattr(wg, "notices", lambda winreg=None: ["Dynamic Lighting is on"])
+    monkeypatch.setattr(hc, "Keyboard", lambda *a, **k: pytest.fail("platform_status connected to the keyboard"))
+    api = make_api(appmod, FakeService())
+    procs.names = ["RazerAppEngine.exe"]
+    d = api.platform_status()["data"]
+    assert d["platform"] == "windows" and "Razer Synapse" in d["blocked"] and d["notices"] == ["Dynamic Lighting is on"]
+    procs.names = []
+    clock.t += wg.CHECK_EVERY
+    assert api.platform_status()["data"]["blocked"] is None
+
+
+def test_platform_status_on_the_mac_is_empty(tmp_path, monkeypatch):
+    from test_models_wiring import FakeService, make_api
+    import app as appmod
+    monkeypatch.setattr(hc, "data_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(hc, "Keyboard", lambda *a, **k: pytest.fail("platform_status connected to the keyboard"))
+    api = make_api(appmod, FakeService())
+    assert api.platform_status() == {"ok": True, "data": {"platform": "mac", "blocked": None, "notices": []}}
+
+
+def test_the_lighting_service_opens_nothing_while_synapse_runs(windows, monkeypatch):
+    import service
+    procs, _ = windows
+    hc.set_experimental(True)
+    procs.names = ["RazerAppEngine.exe"]
+    hid = _fake_hid(monkeypatch)
+    svc = service.LightingService()
+    assert "Razer Synapse" in svc.studio_blocked()
+    with pytest.raises(hc.SynapseRunning):
+        svc._keyboard()
+    assert hid.opened == [] and _sent(hid) == []
+
+
+def test_a_connected_lighting_service_lets_go_of_the_keyboard(windows, monkeypatch):
+    import service
+    procs, clock = windows
+    hc.set_experimental(True)
+    svc = service.LightingService()
+    t = FakeTransport()
+    svc._kb = hc.Keyboard(t, model=V3PRO)
+    procs.names = ["RazerAppEngine.exe"]
+    clock.t += wg.CHECK_EVERY
+    with pytest.raises(hc.SynapseRunning):
+        svc._keyboard()
+    assert svc._kb is None and t.sent == []

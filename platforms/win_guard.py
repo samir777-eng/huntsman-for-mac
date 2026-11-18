@@ -3,9 +3,10 @@
 """Things on Windows that take the keyboard away from this app (experimental, untested on a Windows PC).
 
 Razer Synapse: while it runs it holds the keyboard (it rewrites the live profile, and two programs talking to the
-same HID interface mix up each other's replies). So while one of its processes runs, huntsman_core.gate() refuses
-every write with SYNAPSE_MESSAGE (huntsman_core.SynapseRunning): the app and the lighting service only read. The
-check is cached for CHECK_EVERY seconds, so a write after Synapse quits goes through again; a process list that
+same HID interface mix up each other's replies). So while one of its processes runs, nothing is sent to the keyboard
+at all: huntsman_core.gate() refuses every write with SYNAPSE_MESSAGE (huntsman_core.SynapseRunning), the hidapi
+transport (win_hid.py) refuses to open the keyboard or exchange a report, and the app and the lighting service let
+go of an open handle; the window polls only this guard (app.Api.platform_status). The check is cached for CHECK_EVERY seconds, so a write after Synapse quits goes through again; a process list that
 can't be read counts as "running" (as in easyrazer: writes while Synapse lives get overwritten anyway).
 Processes: Synapse 4 (RazerAppEngine.exe), Synapse 3 ("Razer Synapse 3.exe", "Razer Synapse Service.exe",
 "Razer Synapse Service Process.exe"), Synapse 2 (RzSynapse.exe). Razer Central and Cortex don't drive the keyboard.
@@ -30,9 +31,10 @@ SYNAPSE_PROCESSES = frozenset(n.lower() for n in (
     "RazerAppEngine.exe", "Razer Synapse 3.exe", "Razer Synapse Service.exe", "Razer Synapse Service Process.exe",
     "RzSynapse.exe"))
 CHECK_EVERY = 5.0
-SYNAPSE_MESSAGE = ("Razer Synapse is running, so Huntsman for Mac only reads the keyboard (Synapse would overwrite "
-                   "any change). Quit Synapse, including its icon in the taskbar's notification area, and the "
-                   "controls come back within a few seconds.")
+SYNAPSE_MESSAGE = ("Razer Synapse is running, so Huntsman for Mac leaves the keyboard alone: it doesn't read or change "
+                   "it (two programs talking to the keyboard at once mix up each other's replies, and Synapse would "
+                   "overwrite any change). Quit Synapse, including its icon in the taskbar's notification area, and "
+                   "the controls come back within a few seconds.")
 LIGHTING_KEY = r"Software\Microsoft\Lighting"
 DYNAMIC_LIGHTING_MESSAGE = (
     "Windows Dynamic Lighting is on, so Windows may control the keyboard's lights and lighting changes here may "

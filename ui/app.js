@@ -231,8 +231,9 @@ function refreshButtons() {
 const FEATURE_TABS = { actuation: "actuation", rapid: "rapid", snap: "snap_tap" };
 const experimentalModel = () => !!model && model.status === "experimental";
 const switchLocked = () => experimentalModel() && !model.experimental_on;
-// Windows: while Razer Synapse runs (model.blocked) every write is refused too
-const writesLocked = () => switchLocked() || !!model?.blocked;
+// Windows: while Razer Synapse runs (platform.blocked) the app leaves the keyboard alone, so every write is refused too
+let platform = { blocked: null, notices: [] };
+const writesLocked = () => switchLocked() || !!platform.blocked || !!model?.blocked;
 // No keyboard answered (model null): claim no feature, so only Lighting and Studio show until one connects
 const hasFeature = f => !!model && !!model.features[f];
 const viewShown = v => !FEATURE_TABS[v] || hasFeature(FEATURE_TABS[v]);
@@ -247,17 +248,20 @@ function lockUi() {
   if (was && !lk) refreshButtons();
 }
 // Windows notices: why writes are off (Razer Synapse) and settings that get in the way (Dynamic Lighting). While
-// Synapse runs the model is read again every few seconds, so the controls come back once it quits.
+// Synapse runs only platform_status (the guard, no keyboard traffic) is asked every few seconds; once Synapse quits
+// the keyboard is connected and read again, so the controls come back.
 let guardTimer = null;
+async function readPlatform() { try { const r = await api.platform_status(); if (r.ok) platform = r.data; } catch (e) {} }
 function platformUi() {
-  const notes = model ? [model.blocked, ...(model.notices || [])].filter(Boolean) : [];
+  const notes = [platform.blocked, ...(platform.notices || [])].filter(Boolean);
   const box = $("#platformNotice"); box.innerHTML = "";
   notes.forEach(t => { const p = document.createElement("p"); p.textContent = t; box.appendChild(p); });
   box.hidden = !notes.length;
   if (model?.platform === "windows") $("#expBadge").title = "Windows support is experimental: it hasn't been tested on a Windows PC";
-  if (model?.blocked && !guardTimer) guardTimer = setTimeout(async () => {
+  if (platform.blocked && !guardTimer) guardTimer = setTimeout(async () => {
     guardTimer = null;
-    try { const r = await api.model(); if (r.ok) { model = r.data; applyModel(); refreshButtons(); } } catch (e) {}
+    await readPlatform();
+    if (platform.blocked) platformUi(); else { await load(); refreshButtons(); }
   }, 5000);
 }
 function applyModel() {
@@ -817,8 +821,12 @@ async function followModel() {
   applyModel(); show(view);
   return !!model;
 }
+const SYNAPSE_CONN = "Paused: Razer Synapse is running";
 async function load(again = true) {
-  if (again && !(await followModel())) { setConn(false, "Not connected"); return; }
+  if (again) await readPlatform();
+  const found = again ? await followModel() : !!model;
+  if (platform.blocked) { setConn(false, SYNAPSE_CONN); return; }   // nothing is read while Synapse runs
+  if (!found) { setConn(false, "Not connected"); return; }
   setConn(true, "Reading");
   try {
     const i = await call("info");
@@ -839,10 +847,12 @@ async function load(again = true) {
 /* ---------- start ---------- */
 async function start() {
   api = window.pywebview.api;
+  await readPlatform();
   try { model = await call("model"); } catch (e) { model = null; }   // connects, so layout and effects follow it
   layout = await api.layout(); effects = await api.effects();
   fillEffects(); fillSnap(); drawBoard(); effectUi(); depthUi(); rtUi(); testerUi(); wellsUi(); applyModel(); show(view);
-  if (model) {
+  if (platform.blocked) setConn(false, SYNAPSE_CONN);
+  else if (model) {
     try { const done = await call("startup"); if (done.length) toast("Sent again: " + done.join(", ")); } catch (e) {}
     await load(false);   // the model was just read
   } else setConn(false, "Not connected");

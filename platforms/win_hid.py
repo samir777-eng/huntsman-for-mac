@@ -9,11 +9,17 @@ Same interface as huntsman_core.UsbTransport: .model (the detected models.Model,
 exchange(report) -> 90-byte reply, exchange_fast(reports) -> replies, close(). Every exchange holds
 huntsman_core.usb_lock() (process + file lock), like the Mac's. hid errors become DeviceError, so the app drops the
 handle and reconnects. hid is imported only when a transport is made, behind HidApi, so this module imports on macOS
-and tests pass a fake hid module."""
+and tests pass a fake hid module.
+
+While Razer Synapse runs (platforms/win_guard.py) nothing reaches the keyboard, not even a read: two programs on the
+same HID interface swap each other's replies. Making a transport raises huntsman_core.SynapseRunning before hid is
+imported or the device opened, and an open transport raises it before each exchange (the guard is cached, so this
+costs a clock read per exchange)."""
 import importlib
 import time
 
 import huntsman_core as hc
+from platforms import win_guard
 
 REPORT_ID = 0x00
 PACKET = 90
@@ -22,6 +28,12 @@ MAX_POLLS = 10            # easyrazer transport.rs MAX_POLLS
 POLL_DELAY = 0.015        # easyrazer transport.rs POLL_DELAY
 _sleep = time.sleep       # tests replace these
 _monotonic = time.monotonic
+
+
+def _refuse_while_synapse_runs():
+    reason = win_guard.write_block_reason()
+    if reason:
+        raise hc.SynapseRunning(reason)
 
 
 def _err(e):
@@ -91,6 +103,7 @@ class HidApi:
 
 class HidTransport:
     def __init__(self, hid_module=None):
+        _refuse_while_synapse_runs()
         self._api = HidApi(hid_module)
         entries = self._api.enumerate(hc.VID)
 
@@ -130,6 +143,7 @@ class HidTransport:
 
     def exchange(self, report):
         """Send once, read the reply at once, and re-read while the keyboard says busy (never re-send a write)."""
+        _refuse_while_synapse_runs()
         with hc.usb_lock():
             dev = self._device()
             dev.send(report)
@@ -145,6 +159,7 @@ class HidTransport:
         """Several requests under one lock acquisition, each reply polled at once (no 15 ms sleep), as on the Mac:
         by time (FAST_BUSY_BUDGET), pausing briefly after FAST_POLLS quick reads; stops at the first reply that is
         not OK. The caller checks every reply and treats a short list as a failure."""
+        _refuse_while_synapse_runs()
         with hc.usb_lock():
             dev = self._device()
             replies = []

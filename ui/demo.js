@@ -21,7 +21,7 @@
     // ?demo&windows=synapse,dynamic previews the Windows build: every model experimental, Razer Synapse running
     // (writes refused, re-checked) and/or Dynamic Lighting on.
     const win = q.has("windows") ? (q.get("windows") || "").split(",") : null;
-    const SYNAPSE = "Razer Synapse is running, so Huntsman for Mac leaves the keyboard alone: it doesn't read or change it (two programs talking to the keyboard at once mix up each other's replies, and Synapse would overwrite any change). Quit Synapse, including its icon in the taskbar's notification area, and the controls come back within a few seconds.";
+    const SYNAPSE = "Razer Synapse is running, so this app leaves the keyboard alone: it doesn't read or change it (two programs talking to the keyboard at once mix up each other's replies, and Synapse would overwrite any change). Quit Synapse, including its icon in the taskbar's notification area, and the controls come back within a few seconds.";
     const DYNAMIC = "Windows Dynamic Lighting is on, so Windows may control the keyboard's lights and lighting changes here may not show. To give the lights to this app, open Settings, Personalization, Dynamic Lighting, choose the Razer Huntsman and turn off Dynamic Lighting for it (or turn off \"Use Dynamic Lighting on my devices\" for all devices).";
     const platform = () => win ? { platform: "windows", platform_experimental: true, status: "experimental",
       blocked: win.includes("synapse") ? SYNAPSE : null, offline: win.includes("synapse"), notices: win.includes("dynamic") ? [DYNAMIC] : [] } : {};
@@ -55,7 +55,8 @@
     const speed = n => n === "wave" ? [1, 255] : n.startsWith("starlight") ? [1, 3] : null;
     let timer = null;
     const studio = demoStudio(layout, ok);
-    const info = () => { const { layout: _, ...m } = M; return { ...m, experimental_on: experimentalOn, locked: locked(), ...platform() }; };
+    // as huntsman_core.model_info: on Windows every model is experimental and has no key tester
+    const info = () => { const { layout: _, ...m } = M; return { ...m, ...(win ? { features: { ...m.features, key_tester: false } } : {}), experimental_on: experimentalOn, locked: locked(), ...platform() }; };
     // platform_status: the guard alone, as the app asks it every few seconds while Synapse runs
     const status = () => ({ platform: win ? "windows" : "mac", blocked: win && win.includes("synapse") ? SYNAPSE : null,
       notices: win && win.includes("dynamic") ? [DYNAMIC] : [] });

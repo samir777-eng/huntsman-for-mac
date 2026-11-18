@@ -124,8 +124,12 @@ def test_static_effect_with_selection_paints_only_selected(page):
 
 
 def test_wave_with_selection_calls_set_effect_and_warns(page):
-    open_effects(page, "wave")
-    cap(page, "Q").click()
+    page.click('button[data-view="lighting"]')
+    cap(page, "Q").click()                                  # selected on Per key
+    page.click("#tabEffect")
+    page.select_option("#effect", "wave")
+    cap(page, "E").click()                                  # an effect doesn't select: it lights every key
+    sync_api.expect(page.locator(".cap.sel")).to_have_count(0)
     sync_api.expect(page.locator("#fxNote")).to_contain_text("Effects light the whole keyboard")
     sync_api.expect(page.locator("#applyFx")).to_have_text("Apply to whole keyboard")
     page.click("#applyFx")

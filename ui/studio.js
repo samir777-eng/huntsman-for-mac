@@ -90,8 +90,8 @@ function renderStudio() {
   fillAll();
 }
 function studioNote() {
-  return ST.data && ST.data.enabled ? "Live: what the keys show now. Select keys on the board to limit a layer to them."
-    : "Studio is off, so this is a preview: the keys don't show it until you turn Studio on. Select keys on the board to limit a layer to them.";
+  const keys = ST.tab === "layers" ? " Select keys on the board to limit a layer to them." : "";
+  return (ST.data && ST.data.enabled ? "Live: what the keys show now." : "Studio is off, so this is a preview: the keys don't show it until you turn Studio on.") + keys;
 }
 function sliderOuts() {
   const b = $("#stBright").value + "%", f = $("#stFps").value + " fps";
@@ -122,8 +122,8 @@ function presetsUi() {
 /* ---------- layer stack (shown top layer first) ---------- */
 const ICONS = {
   eye: '<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" d="M1.8 10S5 4.5 10 4.5 18.2 10 18.2 10 15 15.5 10 15.5 1.8 10 1.8 10z"/><circle cx="10" cy="10" r="2.6" fill="currentColor"/></svg>',
-  up: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M8 4l5 6H3z" fill="currentColor"/></svg>',
-  down: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M8 12L3 6h10z" fill="currentColor"/></svg>',
+  up: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 4l5 6H3z" fill="currentColor"/></svg>',
+  down: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 12L3 6h10z" fill="currentColor"/></svg>',
   del: '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
 };
 function paletteOf(effect, params) {
@@ -331,7 +331,9 @@ function addLayer(e) {
   const id = `l${Date.now().toString(36)}${layerSeq++}`;
   // typing reactions are black where nothing was pressed, so they add onto the layers below
   const blend = e.category === "reactive" || (e.category === "audio" && layers().length) ? "add" : "normal";
-  layers().push({ id, effect: e.name, params: {}, keys: "all", blend, opacity: 1, enabled: true });
+  // a solid colour over other layers would hide them all: it mixes in at half, so the preset still shows through
+  const opacity = e.name === "solid" && layers().length ? 0.5 : 1;
+  layers().push({ id, effect: e.name, params: {}, keys: "all", blend, opacity, enabled: true });
   ST.sel = id; changed(true);
   focusLayerButton(id, ".layer-main");
   toast(`${e.label} added on top`);
@@ -451,7 +453,8 @@ function stTab(t, focus) {
   $$("#stTabs button").forEach(b => { const on = b.dataset.tab === t; b.setAttribute("aria-selected", on); b.tabIndex = on ? 0 : -1; if (on && focus) b.focus(); });
   for (const [k, id] of [["layers", "stLayers"], ["sound", "stSound"], ["typing", "stTyping"], ["smart", "stSmart"]]) $("#" + id).hidden = k !== t;
   if (t === "smart" && !ST.apps.length) loadApps();
-  fillAll();
+  fillAll(); paint();   // the selection matters on Layers only
+  if (view === "studio" && ST.data) $("#stageNote").textContent = studioNote();
 }
 $$("#stTabs button").forEach(b => b.onclick = () => stTab(b.dataset.tab));
 $("#stTabs").addEventListener("keydown", e => {
@@ -572,5 +575,6 @@ $("#smAdd").onclick = () => {
 };
 
 /* ---------- hooks used by app.js ---------- */
+window.studioSelecting = () => ST.tab === "layers";   // only layers use the selected keys
 window.studioShown = v => { if (v === "studio") appRuleUi(); if (v === "studio" && ST.data) { $("#stageNote").textContent = studioNote(); keysUi(); } previewUi(); };
 window.studioStart = async () => { await studioRefresh(); };

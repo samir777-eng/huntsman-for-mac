@@ -22,6 +22,21 @@ All notable changes to this project are listed here. Versions follow [Semantic V
   - Built-in presets show Save as… as the main button with "Built-in preset: save a copy to keep your changes."
     instead of a disabled Save.
   - The live tester readout is announced to screen readers when it changes; switching tabs drops the last toast.
+- From the same UX audit (items 7–10 and the other quick wins):
+  - The Keyboard pane's button in the header says "Keyboard" next to its gear, matching the notes that point to it.
+    On models without the key tester, "Test with a key press" shows disabled with the reason (experimental models,
+    the Huntsman V2 family, or Windows) instead of disappearing.
+  - Windows: while Razer Synapse runs, the panel shows one notice, "Quit Razer Synapse to use these controls", with
+    the reason folded under Why, and no "turn on Experimental support" note (it wouldn't help). The Dynamic Lighting
+    notice is one line with Details. The Synapse message says "this app" instead of "Huntsman for Mac".
+  - The Select bar and key outlines show only where the selection does something (Actuation, Rapid Trigger,
+    Lighting's Per key and a Static effect, Studio's Layers). The panel names a selection made on another tab:
+    "Applying to 4 selected keys · Clear".
+  - Snap Tap has a switch and Apply like Rapid Trigger, "Not applied yet" while the panel differs from the keyboard,
+    and "On for A and D" once applied. Click two keys on the keyboard to make the pair, or use the lists. The
+    keyboard gets the same command as before.
+  - Studio: the layer up and down buttons are 32 px; a Solid colour added on top of other layers mixes in at 50 %
+    (Normal) instead of covering them all. The Keyboard pane says "Onboard profile" instead of "Stored profile".
 
 ### Fixed
 - Windows: while Razer Synapse runs, nothing at all reaches the keyboard, reads included (two programs on the same

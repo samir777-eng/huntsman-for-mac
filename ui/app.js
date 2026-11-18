@@ -8,7 +8,8 @@ const NOTES = {
   actuation: "Click a key to select it, or drag across several. The number on each key is the depth it types at, in mm.",
   actuationSmall: "Click a key to select it, or drag across several. To see the depth a key types at, point at it.",
   rapid: "Select keys to limit Rapid Trigger to them, or leave nothing selected for all keys.",
-  snap: "The two outlined keys are the pair. Choose them in the panel on the left.",
+  snap: "The two outlined keys are the pair. Click a key to make it the first key, then another for the second.",
+  snapSecond: "Now click the second key of the pair.",
   lighting: "Each key shows the colour its LED is set to.",
   studio: "",
   testing: "Keys sink as you press them. The trace shows the last key's travel.",
@@ -178,13 +179,19 @@ function capName(id) {
   }
   return name;
 }
-const selecting = () => ["actuation", "rapid", "lighting", "studio"].includes(view);
+// Where the selection does something: Actuation, Rapid Trigger, Lighting's Per key (and a Static effect, which colours
+// the selected keys), and Studio's Layers. Elsewhere the Select bar and the outlines hide; the selection is kept.
+const selecting = () => view === "actuation" || view === "rapid"
+  || (view === "lighting" && ($("#tabKeys").getAttribute("aria-selected") === "true" || $("#effect").value === "static"))
+  || (view === "studio" && (!window.studioSelecting || studioSelecting()));
 function rtCovers(id) { const r = state.rapid; return !!(r && r.enabled && (r.keys === "all" || (r.keys || []).map(Number).includes(id))); }
 const snapPair = () => [+$("#snapA").value, +$("#snapB").value];
 
 function paint() {
   const showSel = selecting(), [sa, sb] = snapPair(), kb = $("#kb");
   kb.dataset.view = view;
+  $("#selectTools").hidden = !showSel;
+  $("#board").setAttribute("aria-multiselectable", showSel);
   kb.dataset.fx = !custom && fxShown && !studioShowing() ? fxShown.name : "";
   for (const c of $$(".cap")) {
     const id = +c.dataset.id, p = points[id], front = c.querySelector(".front");
@@ -222,13 +229,22 @@ function fxDuration(f) {
   return 4;
 }
 
+// The selection carries across tabs, so wherever it applies the panel says so, with a way to drop it
+function scopeUi(el, n, none) {
+  if (el.dataset.n === String(n)) return; el.dataset.n = n;
+  if (!n) { el.textContent = none; return; }
+  el.textContent = `Applying to ${plural(n, "selected key")} · `;
+  const b = document.createElement("button"); b.className = "link"; b.textContent = "Clear"; b.setAttribute("aria-label", "Clear selection");
+  b.onclick = () => { selected.clear(); paint(); el.focus(); };
+  el.tabIndex = -1; el.appendChild(b);
+}
 // Labels and enabled states that depend on the selection and on what is applied
 function refreshButtons() {
   syncDepth();
-  const n = selected.size, scope = n ? `${plural(n, "key")} selected` : "All keys";
-  $("#actScope").textContent = scope; $("#rtScope").textContent = scope;
+  const n = selected.size;
+  scopeUi($("#actScope"), n, "All keys"); scopeUi($("#rtScope"), n, "All keys");
   $("#applyDepth").textContent = n ? `Apply to ${plural(n, "key")}` : "Apply to all keys";
-  $("#paintScope").textContent = n ? `${plural(n, "key")} selected` : "Select keys on the keyboard to paint them";
+  scopeUi($("#paintScope"), n, "Select keys on the keyboard to paint them");
   const pb = $("#paintSel"), eb = $("#eraseSel");
   pb.disabled = eb.disabled = !n;
   pb.textContent = n ? `Paint ${plural(n, "key")}` : "Paint selected keys";
@@ -242,10 +258,12 @@ function refreshButtons() {
     $("#stageNote").textContent = (!r.enabled ? "Rapid Trigger is off. " + NOTES.rapid : r.keys === "all" ? "Rapid Trigger is on for all keys, marked with a bar."
       : `Rapid Trigger is on for ${plural((r.keys || []).length, "key")}, marked with a bar. Select keys to change which ones it covers.`);
   }
-  const [a, b] = snapPair();
-  $("#applySnap").textContent = a === b ? "Choose two different keys" : `Turn on for ${label(a)} and ${label(b)}`;
-  $("#applySnap").disabled = a === b;
-  $("#offSnap").disabled = !state.snap;
+  const [a, b] = snapPair(), snapOn = $("#snapOn").checked, sd = snapDirty();
+  $("#applySnap").textContent = !snapOn ? (state.snap ? "Turn off Snap Tap" : "Snap Tap is off")
+    : a === b ? "Choose two different keys" : `Apply to ${label(a)} and ${label(b)}`;
+  $("#applySnap").disabled = !sd || (snapOn && a === b);
+  $("#snapDirty").hidden = !sd;
+  $("#actTest").disabled = !hasFeature("key_tester");
   fxScopeUi(); dirtyUi(); lockUi();
 }
 
@@ -265,7 +283,8 @@ let lockShown = false;
 function lockUi() {
   const lk = writesLocked();
   $$("[data-write]").forEach(e => { if (lk) e.disabled = true; else if (lockShown) e.disabled = false; });
-  $$(".lock-note").forEach(n => n.hidden = !switchLocked());
+  // while Razer Synapse runs, the Experimental switch wouldn't help: the Synapse notice says what will
+  $$(".lock-note").forEach(n => n.hidden = !switchLocked() || !!platform.blocked || !!model?.blocked);
   const was = lockShown; lockShown = lk;
   if (was && !lk) refreshButtons();
 }
@@ -274,11 +293,23 @@ function lockUi() {
 // the keyboard is connected and read again, so the controls come back.
 let guardTimer = null;
 async function readPlatform() { try { const r = await api.platform_status(); if (r.ok) platform = r.data; } catch (e) {} }
+// One short line each, the long text folded into a disclosure. Rebuilt only when the text changes, so the guard's
+// polling doesn't close a disclosure someone opened or announce the alert again.
+function noticePart(box, lead, more, summary, bold) {
+  const p = document.createElement("p"), t = document.createElement(bold ? "strong" : "span");
+  t.textContent = lead; p.appendChild(t); box.appendChild(p);
+  const d = document.createElement("details"), s = document.createElement("summary"), m = document.createElement("p");
+  s.textContent = summary; m.textContent = more; d.append(s, m); box.appendChild(d);
+}
 function platformUi() {
-  const notes = [platform.blocked, ...(platform.notices || [])].filter(Boolean);
-  const box = $("#platformNotice"); box.innerHTML = "";
-  notes.forEach(t => { const p = document.createElement("p"); p.textContent = t; box.appendChild(p); });
-  box.hidden = !notes.length;
+  const blocked = platform.blocked || model?.blocked || null, notices = (platform.notices || []).filter(Boolean);
+  const box = $("#platformNotice"), key = JSON.stringify([blocked, notices]);
+  if (box.dataset.key !== key) {
+    box.dataset.key = key; box.innerHTML = "";
+    if (blocked) noticePart(box, "Quit Razer Synapse to use these controls", blocked, "Why", true);
+    notices.forEach(t => noticePart(box, t.split(/, so |\. /)[0].replace(/\.$/, "") + ".", t, "Details"));
+  }
+  box.hidden = !blocked && !notices.length;
   if (model?.platform === "windows") $("#expBadge").title = "Windows support is experimental: it hasn't been tested on a Windows PC";
   if ((platform.blocked || model?.blocked) && !guardTimer) guardTimer = setTimeout(async () => {
     guardTimer = null;
@@ -297,12 +328,21 @@ function noKbUi() {
   $(".device-name").textContent = model ? model.name : "No keyboard";
   $("#noKbWhy").textContent = none && modelError ? modelError : "";
 }
+// The key tester shows on every model with Actuation, disabled with the reason where it isn't offered
+function testerWhy() {
+  if (!model || hasFeature("key_tester")) return "";
+  if (model.platform === "windows") return "Key tester isn't available on Windows yet.";
+  if (/^Huntsman V2\b/.test(model.name)) return "Key tester isn't available on the Huntsman V2 family.";
+  return "Key tester isn't available on experimental models.";
+}
 function applyModel() {
   noKbUi();
   $("#expBadge").hidden = !experimentalModel();
   platformUi();
   Object.keys(FEATURE_TABS).forEach(v => { $(`#sources button[data-view="${v}"]`).hidden = !viewShown(v); });
-  $("#actTest").hidden = !hasFeature("key_tester");
+  const why = testerWhy();
+  $("#actTestWhy").textContent = why; $("#actTestWhy").hidden = !why;
+  if (why) $("#actTest").setAttribute("aria-describedby", "actTestWhy"); else $("#actTest").removeAttribute("aria-describedby");
   $("#actReadings").hidden = !hasFeature("key_tester") || !testing;   // readings and the warning while testing only
   if (testing && !hasFeature("key_tester")) stopTest();
   setAct(hasFeature("actuation") && model.actuation || V3_ACT);
@@ -381,6 +421,7 @@ let drag = null;
 $("#board").addEventListener("mousedown", e => {
   const c = e.target.closest(".cap"); if (!c) return;
   focusId = +c.dataset.id;
+  if (view === "snap" && !c.classList.contains("off")) { e.preventDefault(); c.focus({ preventScroll: true }); pickSnap(focusId); return; }
   if (!selecting() || c.classList.contains("off") || testing) { paint(); return; }
   e.preventDefault(); c.focus({ preventScroll: true });
   const id = +c.dataset.id; drag = selected.has(id) ? "remove" : "add"; toggle(id);
@@ -415,7 +456,8 @@ $("#board").addEventListener("keydown", e => {
     const row = c.parentElement.querySelectorAll(".cap"); next = +(e.key === "Home" ? row[0] : row[row.length - 1]).dataset.id;
   } else if (e.key === " " || e.key === "Enter") {
     e.preventDefault();
-    if (selecting() && !c.classList.contains("off") && !testing) { selected.has(id) ? selected.delete(id) : selected.add(id); paint(); }
+    if (view === "snap" && !c.classList.contains("off")) pickSnap(id);
+    else if (selecting() && !c.classList.contains("off") && !testing) { selected.has(id) ? selected.delete(id) : selected.add(id); paint(); }
     return;
   } else return;
   e.preventDefault();
@@ -434,7 +476,8 @@ $$("#selectTools button").forEach(b => b.onclick = () => {
 // The key tester runs from Actuation: while it runs, the stage shows the travel trace under the keyboard
 const traceShown = () => testing && view === "actuation";
 const depthsOnDemand = () => $("#kb").classList.contains("depths-on-demand");
-const stageNote = v => v === "actuation" && testing ? NOTES.testing : v === "actuation" && depthsOnDemand() ? NOTES.actuationSmall : NOTES[v];
+const stageNote = v => v === "actuation" && testing ? NOTES.testing : v === "actuation" && depthsOnDemand() ? NOTES.actuationSmall
+  : v === "snap" && snapNext ? NOTES.snapSecond : NOTES[v];
 async function show(v) {
   if (!viewShown(v)) v = "lighting";   // a tab this model doesn't have
   if (testing && v !== "actuation") await stopTest();   // the key tester lives in Actuation
@@ -444,8 +487,6 @@ async function show(v) {
   $$(".pane").forEach(p => p.hidden = p.dataset.pane !== v);
   document.title = `${TITLES[v]} · Huntsman for Mac`;
   $("#stageNote").textContent = stageNote(v);
-  $("#selectTools").hidden = !selecting();
-  $("#board").setAttribute("aria-multiselectable", selecting());
   $("#traceWrap").hidden = !traceShown();
   $("#stage").dataset.view = v;
   $$(".cap").forEach(c => c.classList.remove("pressed", "typed"));
@@ -582,14 +623,30 @@ function fillSnap() {
   }
   $("#snapA").value = byName("A"); $("#snapB").value = byName("D");
 }
-function snapUi() { const p = state.snap; $("#snapState").textContent = p ? `On for ${label(p[0])} and ${label(p[1])}` : "Off"; }
-$("#snapA").onchange = $("#snapB").onchange = () => paint();
+// A switch and Apply, like Rapid Trigger. The pair is chosen in the lists or by clicking two keys on the board,
+// which fill the first key, then the second, in turn. set_snap gets the pair, or null to turn it off.
+let snapNext = 0;
+const samePair = (x, y) => [...x].map(Number).sort().join() === [...y].map(Number).sort().join();
+function snapDirty() {
+  const on = $("#snapOn").checked;
+  return on !== !!state.snap || (on && !samePair(snapPair(), state.snap));
+}
+function snapUi() { const p = state.snap; $("#snapState").textContent = p ? `On for ${label(+p[0])} and ${label(+p[1])}` : "Off"; }
+function pickSnap(id) {
+  $(snapNext ? "#snapB" : "#snapA").value = id; snapNext ^= 1;
+  $("#snapOn").checked = true; paint();
+  $("#stageNote").textContent = stageNote(view);
+}
+$("#snapA").onchange = $("#snapB").onchange = () => { $("#snapOn").checked = true; paint(); };
+$("#snapOn").onchange = () => refreshButtons();
 $("#applySnap").onclick = e => {
-  const [a, b] = snapPair();
-  if (a === b) return toast("Choose two different keys", true);
-  busy(e.target, async () => { await call("set_snap", [a, b]); state.snap = [a, b]; snapUi(); toast(`Snap Tap on for ${label(a)} and ${label(b)}`); });
+  const on = $("#snapOn").checked, [a, b] = snapPair();
+  if (on && a === b) return toast("Choose two different keys", true);
+  busy(e.target, async () => {
+    await call("set_snap", on ? [a, b] : null); state.snap = on ? [a, b] : null; snapUi(); paint();
+    toast(on ? `Snap Tap on for ${label(a)} and ${label(b)}` : "Snap Tap off");
+  });
 };
-$("#offSnap").onclick = e => busy(e.target, async () => { await call("set_snap", null); state.snap = null; snapUi(); toast("Snap Tap off"); });
 
 /* ---------- lighting ---------- */
 function wellsUi() {
@@ -603,7 +660,7 @@ $("#paint").oninput = $("#bg").oninput = wellsUi;
 function lightMode(m, focus) {
   $$("#lightMode button").forEach(b => { const on = b.dataset.mode === m; b.setAttribute("aria-selected", on); b.tabIndex = on ? 0 : -1; if (on && focus) b.focus(); });
   $("#keysPane").hidden = m !== "keys"; $("#effectPane").hidden = m !== "effect";
-  fillAll();
+  fillAll(); if (layout.length) paint();
 }
 $$("#lightMode button").forEach(b => b.onclick = () => lightMode(b.dataset.mode));
 $("#lightMode").addEventListener("keydown", e => {
@@ -645,7 +702,7 @@ function speedUi() {
   const t = fx.dir ? Math.round((hi - v) / (hi - lo) * 100) + "%" : ["", "Fast", "Medium", "Slow"][v];
   $("#speedOut").textContent = t; valueText("speed", fx.dir ? `${t} speed` : t);
 }
-$("#speed").oninput = speedUi; $("#effect").onchange = () => { effectUi(); fxScopeUi(); };
+$("#speed").oninput = speedUi; $("#effect").onchange = () => { effectUi(); paint(); };
 // Effects always cover the whole keyboard. A static colour with keys selected is really a per-key paint.
 function fxScopeUi() {
   const n = selected.size, name = $("#effect").value, staticSel = n && name === "static";
@@ -881,6 +938,8 @@ function applyState() {
     if (fx.direction) $("#dir").value = fx.direction;
     fxShown = custom ? null : fxFromForm(fx.name);
   }
+  $("#snapOn").checked = !!state.snap;
+  if (state.snap) { $("#snapA").value = state.snap[0]; $("#snapB").value = state.snap[1]; }
   wellsUi(); snapUi(); paint(); applyAccent();
 }
 function fromRaw(raw) {  // effect bytes the keyboard reports: store, led, effect id, ...
@@ -930,7 +989,7 @@ async function load(again = true) {
     applyState();
     $("#devInfo").innerHTML = "";
     const m = i.model || model || { name: "Huntsman V3 Pro", pid: "02A6" };
-    [["Model", m.name], ["USB ID", `1532:${m.pid}`], ["Firmware", i.firmware], ["Stored profile", String(i.profile)], ["Brightness", i.brightness + "%"], ["App version", i.version || "–"]]
+    [["Model", m.name], ["USB ID", `1532:${m.pid}`], ["Firmware", i.firmware], ["Onboard profile", String(i.profile)], ["Brightness", i.brightness + "%"], ["App version", i.version || "–"]]
       .forEach(([k, v]) => { const r = document.createElement("div"); r.className = "row"; r.innerHTML = '<span></span><span class="val"></span>'; r.children[0].textContent = k; r.children[1].textContent = v; $("#devInfo").appendChild(r); });
     if (hasFeature("actuation")) await readPoints();
     ledUi();

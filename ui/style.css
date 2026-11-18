@@ -58,7 +58,7 @@ button, select, input, output { font: inherit; color: inherit; }
   box-shadow: 0 0 8px var(--accent);
 }
 .tabs button:focus-visible { outline-offset: -6px; border-radius: 8px; }
-.gear { margin-inline-start: auto; align-self: center; border: 0; background: none; color: var(--ink-2); padding: 6px; border-radius: 6px; cursor: default; }
+.gear { margin-inline-start: auto; align-self: center; display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; color: var(--ink-2); padding: 6px 10px; border-radius: 6px; font-size: 13.5px; font-weight: 550; cursor: default; }
 .gear:hover, .gear[aria-current="page"] { color: var(--ink); background: var(--raise); }
 
 /* ---------- settings panel ---------- */
@@ -70,6 +70,7 @@ h2 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: -.2px; }
 .unsaved { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 550; color: var(--warn); }
 .unsaved::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
 .scope { margin: -8px 0 0; color: var(--ink-2); font-size: 12px; }
+.scope button.link { font-size: inherit; }
 .readout { display: flex; align-items: baseline; gap: 6px; margin-top: 4px; }
 .readout .num { font: 650 56px/1 ui-rounded, -apple-system, sans-serif; font-variant-numeric: tabular-nums; letter-spacing: -1.5px; }
 .readout .unit { font-size: 16px; color: var(--ink-2); }
@@ -353,6 +354,10 @@ input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 4px; }
 button.link { border: 0; background: none; padding: 0; color: var(--accent); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; cursor: default; }
 .master { margin-inline-start: auto; display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
 .notice { margin: 0; padding: 9px 12px; border-radius: 9px; background: #2a2010; border: 1px solid #5a4318; color: #ffe2a8; font-size: 12px; }
+.notice p { margin: 0; }
+.notice p + p, .notice details + p, .notice p + details, .notice details + details { margin-top: 8px; }
+.notice summary { cursor: default; color: #ffe2a8; text-decoration: underline; text-underline-offset: 2px; width: fit-content; }
+.notice details p { margin-top: 4px; }
 h3 { margin: 0; font-size: 13px; font-weight: 650; }
 h4 { margin: 4px 0 -6px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
 .studio-pane .subpane { gap: 12px; }
@@ -404,7 +409,7 @@ h4 { margin: 4px 0 -6px; font-size: 12px; font-weight: 600; color: var(--ink-2);
 .lmeta { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hidden-layer .lname, .hidden-layer .swatch { opacity: .4; }
 .layer-tools { display: flex; gap: 1px; }
-.mini { border: 0; background: none; color: var(--ink-2); width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; padding: 0; cursor: default; }
+.mini { border: 0; background: none; color: var(--ink-2); width: 32px; height: 32px; border-radius: 6px; display: grid; place-items: center; padding: 0; cursor: default; }
 .mini:hover:not(:disabled) { background: #26262b; color: var(--ink); }
 .mini:disabled { visibility: hidden; }
 .mini.del:hover { color: var(--danger); }

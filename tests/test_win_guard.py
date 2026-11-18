@@ -382,3 +382,8 @@ def test_turning_studio_on_while_synapse_runs_does_not_re_add_start_at_login(win
     assert api.studio_enable(True)["ok"] is False and calls == []
     api = make_api(appmod, FakeService())
     assert api.studio_enable(True)["ok"] is True and calls == [True]
+
+
+def test_the_synapse_message_says_this_app_not_the_mac_name():
+    # read on Windows, where "Huntsman for Mac" reads oddly; the window folds it under "Quit Razer Synapse ..."
+    assert "this app" in wg.SYNAPSE_MESSAGE and "Huntsman for Mac" not in wg.SYNAPSE_MESSAGE

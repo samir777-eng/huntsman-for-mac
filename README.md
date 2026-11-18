@@ -263,7 +263,8 @@ There's no *Restore factory depth* on this model, because its factory depth isn'
 distance, anywhere in its travel. Both distances go from 0.1 to 1.0 mm, and there's a *Stay on for the whole press*
 option.
 
-**Snap Tap** takes one pair of keys (usually A and D): while both are held, only the one pressed last counts.
+**Snap Tap** takes one pair of keys (usually A and D): while both are held, only the one pressed last counts. In the
+window, turn on its switch, click the two keys on the keyboard (or pick them in the lists) and choose Apply.
 
 Both were confirmed on a Huntsman V3 Pro. The keyboard forgets them when unplugged, so the lighting service sends them
 again when it starts.

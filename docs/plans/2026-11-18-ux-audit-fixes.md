@@ -27,3 +27,12 @@ hardware check of actuation, Snap Tap and Studio preview on the owner's keyboard
   `tests/test_ui_audit.py` (demo mode) and the Studio preview in `tests/test_studio.py` / `tests/test_lighting_engine.py`
   (`Engine.preview`, `Studio.preview`, IPC `studio_preview`). Still open: items 7–10 and the other quick wins, the
   independent review and the hardware check.
+- Batch B done (branch `windows`): items 7–10, bigger layer reorder buttons (32 px), "Onboard profile". Tests at the
+  end of `tests/test_ui_audit.py` (demo mode, incl. `&model=02B0|0266`, `&windows=synapse,dynamic`) and
+  `tests/test_win_guard.py` (Synapse message wording). Decisions: the key tester reason is per case (experimental
+  models / the Huntsman V2 family / Windows); a Static effect counts as using the selection (it colours the selected
+  keys), other effects don't; picking a Snap Tap key turns the switch on. Solid colour default: the plan said
+  Multiply/50 %, but Multiply can only darken (a cyan tint turned most of Gaming WASD nearly off in the preview), so a
+  Solid colour added over other layers is Normal at 50 % (the colour shows, the preset shows through); on an empty
+  stack it stays Normal 100 %. Still open: the independent review and the hardware check (actuation, Snap Tap,
+  Studio preview on the owner's keyboard).

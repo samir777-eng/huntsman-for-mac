@@ -231,3 +231,213 @@ def test_switching_tabs_drops_the_last_toast(page):  # noqa: F811
     expect(page.locator("#toast")).to_have_class(SHOWN)
     page.click('.tabs button[data-view="rapid"]')
     expect(page.locator("#toast")).not_to_have_class(SHOWN)
+
+
+# ---------- batch B: 7. the Keyboard button and the key tester ----------
+
+def open_url(browser, query):  # noqa: F811
+    pg = browser.new_page(viewport={"width": 1280, "height": 900})
+    pg.errors = []
+    pg.on("pageerror", lambda e: pg.errors.append(str(e)))
+    pg.add_init_script(RECORDER)
+    pg.goto(URL + query)
+    return pg
+
+
+def test_the_gear_is_labelled_keyboard(page):  # noqa: F811
+    gear = page.locator("header .gear")
+    expect(gear).to_have_text("Keyboard")                                      # a visible label, not only an icon
+    expect(gear).to_have_accessible_name("Keyboard")                          # what the lock notes call it
+    gear.click()
+    expect(page.locator('.pane[data-pane="device"] h2')).to_have_text("Keyboard")
+
+
+@pytest.mark.parametrize("query, reason", [
+    ("&model=02B0", "Key tester isn't available on experimental models."),
+    ("&model=0266", "Key tester isn't available on the Huntsman V2 family."),
+    ("&windows=dynamic", "Key tester isn't available on Windows yet."),
+])
+def test_key_tester_shows_disabled_with_the_reason(browser, query, reason):  # noqa: F811
+    pg = open_url(browser, query)
+    try:
+        expect(pg.locator("#conn")).to_have_text("Connected, firmware 1.03")
+        btn = pg.locator("#actTest")
+        expect(btn).to_be_visible()
+        expect(btn).to_be_disabled()
+        why = pg.locator("#actTestWhy")
+        expect(why).to_have_text(reason)
+        assert why.get_attribute("id") in btn.get_attribute("aria-describedby")
+        assert calls(pg, "start_test") == []
+        assert pg.errors == []
+    finally:
+        pg.close()
+
+
+def test_key_tester_has_no_reason_where_it_works(page):  # noqa: F811
+    expect(page.locator("#actTest")).to_be_enabled()
+    expect(page.locator("#actTestWhy")).to_be_hidden()
+
+
+# ---------- 8. Windows notices ----------
+
+def test_while_synapse_runs_one_short_notice_with_details(browser):  # noqa: F811
+    pg = open_url(browser, "&windows=synapse,dynamic")
+    try:
+        expect(pg.locator("#conn")).to_have_text("Paused: Razer Synapse is running")
+        box = pg.locator("#platformNotice")
+        expect(box.locator("strong").first).to_have_text("Quit Razer Synapse to use these controls")
+        why = box.locator("details").first
+        assert why.evaluate("d => d.open") is False                           # the long reason is folded away
+        expect(why).to_contain_text("two programs talking to the keyboard")
+        assert "Huntsman for Mac" not in box.text_content()                    # "this app" on Windows
+        expect(box.locator("details")).to_have_count(2)                        # Dynamic Lighting folded too
+        assert box.bounding_box()["height"] < 120                               # was ~10 lines
+        expect(pg.locator(".lock-note:visible")).to_have_count(0)               # turning on Experimental won't help
+        pg.click('#sources button[data-view="lighting"]')
+        expect(pg.locator(".lock-note:visible")).to_have_count(0)
+        why.locator("summary").click()
+        expect(why).to_contain_text("Quit Synapse, including its icon")
+        assert pg.errors == []
+    finally:
+        pg.close()
+
+
+def test_windows_without_synapse_keeps_the_lock_note_and_a_compact_dynamic_lighting_notice(browser):  # noqa: F811
+    pg = open_url(browser, "&windows=dynamic")
+    try:
+        expect(pg.locator("#conn")).to_have_text("Connected, firmware 1.03")
+        box = pg.locator("#platformNotice")
+        expect(box).to_contain_text("Windows Dynamic Lighting is on")
+        expect(box.locator("details")).to_have_count(1)
+        assert box.bounding_box()["height"] < 90
+        expect(pg.locator('.pane[data-pane="actuation"] .lock-note')).to_be_visible()   # the switch does help here
+        assert pg.errors == []
+    finally:
+        pg.close()
+
+
+# ---------- 9. selection scope ----------
+
+def test_selection_from_another_tab_is_named_with_a_clear(page):  # noqa: F811
+    page.click('#selectTools [data-sel="wasd"]')
+    page.click('.tabs button[data-view="rapid"]')
+    scope = page.locator("#rtScope")
+    expect(scope).to_contain_text("Applying to 4 selected keys")
+    scope.get_by_role("button", name="Clear selection").click()
+    expect(scope).to_have_text("All keys")
+    expect(page.locator(".cap.sel")).to_have_count(0)
+    page.check("#rtOn")
+    expect(page.locator("#applyRt")).to_have_text("Apply to all keys")
+    page.click('.tabs button[data-view="actuation"]')
+    page.click('#selectTools [data-sel="letters"]')
+    expect(page.locator("#actScope")).to_contain_text("Applying to 26 selected keys")
+    assert page.errors == []
+
+
+def test_select_bar_hides_where_selection_does_nothing(page):  # noqa: F811
+    page.click('#selectTools [data-sel="wasd"]')
+    page.click('.tabs button[data-view="lighting"]')
+    expect(page.locator("#selectTools")).to_be_visible()                       # Per key paints the selection
+    page.click("#tabEffect")
+    page.select_option("#effect", "spectrum")
+    expect(page.locator("#selectTools")).to_be_hidden()                        # effects light every key
+    expect(page.locator(".cap.sel")).to_have_count(0)
+    page.select_option("#effect", "static")                                   # Static colours the selection
+    expect(page.locator("#selectTools")).to_be_visible()
+    page.click('.tabs button[data-view="studio"]')
+    expect(page.locator("#selectTools")).to_be_visible()                       # layers can use the selection
+    for tab in ["#stTabSound", "#stTabTyping", "#stTabSmart"]:
+        page.click(tab)
+        expect(page.locator("#selectTools")).to_be_hidden()
+        expect(page.locator(".cap.sel")).to_have_count(0)
+    page.click("#stTabLayers")
+    expect(page.locator("#selectTools")).to_be_visible()
+    expect(page.locator(".cap.sel")).to_have_count(4)                          # the selection was kept
+    assert page.errors == []
+
+
+# ---------- 10. Snap Tap ----------
+
+def test_snap_tap_switch_apply_and_state(page):  # noqa: F811
+    page.click('.tabs button[data-view="snap"]')
+    on, btn, dirty = page.locator("#snapOn"), page.locator("#applySnap"), page.locator("#snapDirty")
+    expect(on).not_to_be_checked()
+    expect(btn).to_have_text("Snap Tap is off")
+    expect(btn).to_be_disabled()
+    expect(dirty).to_be_hidden()
+    page.check("#snapOn")
+    expect(dirty).to_have_text("Not applied yet")
+    expect(btn).to_have_text("Apply to A and D")
+    btn.click()
+    assert wait_for_call(page, "set_snap")[-1] == [[IDS["A"], IDS["D"]]]       # the same call as before
+    expect(page.locator("#snapState")).to_have_text("On for A and D")
+    expect(dirty).to_be_hidden()
+    expect(btn).to_be_disabled()                                               # nothing left to apply
+    expect(page.locator("#offSnap")).to_have_count(0)                          # the switch turns it off
+    page.uncheck("#snapOn")
+    expect(dirty).to_be_visible()
+    expect(btn).to_have_text("Turn off Snap Tap")
+    btn.click()
+    page.wait_for_function("() => window.__calls.filter(c => c[0] === 'set_snap').length === 2")
+    assert calls(page, "set_snap")[-1] == [None]
+    expect(page.locator("#snapState")).to_have_text("Off")
+    expect(dirty).to_be_hidden()
+    assert page.errors == []
+
+
+def test_snap_tap_keys_are_picked_on_the_board(page):  # noqa: F811
+    page.click('.tabs button[data-view="snap"]')
+    expect(page.locator("#stageNote")).to_contain_text("first key")
+    cap(page, "Q").click()
+    expect(page.locator("#snapA")).to_have_value(str(IDS["Q"]))
+    expect(page.locator("#stageNote")).to_contain_text("second key")
+    cap(page, "E").click()
+    expect(page.locator("#snapB")).to_have_value(str(IDS["E"]))
+    expect(page.locator("#snapOn")).to_be_checked()                            # picking keys means turning it on
+    expect(cap(page, "Q")).to_have_class(re.compile(r"\bpair\b"))
+    expect(cap(page, "E")).to_have_class(re.compile(r"\bpair\b"))
+    expect(page.locator("#snapDirty")).to_be_visible()
+    expect(page.locator("#applySnap")).to_have_text("Apply to Q and E")
+    cap(page, "W").focus()                                                     # and from the keyboard
+    page.keyboard.press("Enter")
+    expect(page.locator("#snapA")).to_have_value(str(IDS["W"]))
+    page.select_option("#snapB", str(IDS["S"]))                               # the lists still work
+    expect(cap(page, "S")).to_have_class(re.compile(r"\bpair\b"))
+    page.click("#applySnap")
+    assert wait_for_call(page, "set_snap")[-1] == [[IDS["W"], IDS["S"]]]
+    assert page.errors == []
+
+
+# ---------- quick wins, batch B ----------
+
+def test_layer_reorder_buttons_are_big_enough(studio):
+    box = studio.locator("#stStack li").first.locator(".layer-tools .down").bounding_box()
+    assert box["width"] >= 32 and box["height"] >= 32
+
+
+def test_a_solid_colour_added_on_top_mixes_in_at_half(studio):
+    studio.click("#stAdd")
+    studio.click('#gallery button[data-effect="solid"]')
+    wait_for_call(studio, "update_layers")
+    top = calls(studio, "update_layers")[-1][0][-1]
+    assert top["effect"] == "solid" and top["blend"] == "normal" and top["opacity"] == 0.5
+    expect(studio.locator("#stOpacity")).to_have_value("50")
+
+
+def test_a_solid_colour_on_an_empty_stack_covers_the_keys(studio):
+    studio.select_option("#stPreset", "Rainbow wave")
+    expect(studio.locator("#stStack li")).to_have_count(1)
+    studio.locator("#stStack li").first.get_by_role("button", name="Delete Rainbow").click()
+    expect(studio.locator("#stStack li.layer")).to_have_count(0)
+    studio.click("#stAdd")
+    studio.click('#gallery button[data-effect="solid"]')
+    studio.wait_for_function("() => window.__calls.some(c => c[0] === 'update_layers' && c[1][0].length === 1"
+                             " && c[1][0][0].effect === 'solid')")
+    (top,) = calls(studio, "update_layers")[-1][0]
+    assert top["blend"] == "normal" and top["opacity"] == 1
+
+
+def test_device_info_says_onboard_profile(page):  # noqa: F811
+    page.locator("header .gear").click()
+    expect(page.locator("#devInfo")).to_contain_text("Onboard profile")
+    expect(page.locator("#devInfo")).not_to_contain_text("Stored profile")

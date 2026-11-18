@@ -31,8 +31,8 @@ SYNAPSE_PROCESSES = frozenset(n.lower() for n in (
     "RazerAppEngine.exe", "Razer Synapse 3.exe", "Razer Synapse Service.exe", "Razer Synapse Service Process.exe",
     "RzSynapse.exe"))
 CHECK_EVERY = 5.0
-SYNAPSE_MESSAGE = ("Razer Synapse is running, so Huntsman for Mac leaves the keyboard alone: it doesn't read or change "
-                   "it (two programs talking to the keyboard at once mix up each other's replies, and Synapse would "
+SYNAPSE_MESSAGE = ("Razer Synapse is running, so this app leaves the keyboard alone: it doesn't read or change it "
+                   "(two programs talking to the keyboard at once mix up each other's replies, and Synapse would "
                    "overwrite any change). Quit Synapse, including its icon in the taskbar's notification area, and "
                    "the controls come back within a few seconds.")
 LIGHTING_KEY = r"Software\Microsoft\Lighting"

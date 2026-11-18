@@ -18,6 +18,8 @@ All notable changes to this project are listed here. Versions follow [Semantic V
   `state.json` remembers that it was added (`autostart_added`).
 - Windows: the "request too large" reply on the service's pipe is documented (multiprocessing keeps the connection
   writable after dropping an over-long message, so the reply still arrives before it closes).
+- Windows: a hidden message window that starts only after its start timed out is destroyed at once instead of
+  running a message loop nothing could stop (each start has its own stop flag).
 
 ## 0.4.0 – 2026-11-18
 

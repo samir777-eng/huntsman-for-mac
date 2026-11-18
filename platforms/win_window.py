@@ -77,11 +77,13 @@ class MessageWindow:
         self._stopping = threading.Event()
 
     def start(self, timeout=5.0):
+        """Each start has its own stop flag: a thread from a start that timed out keeps the flag stop() set, so
+        if its window appears later it is destroyed at once (no on_create, no loop), even after a new start()."""
         if self._thread is not None:
             return
-        self._stopping.clear()
+        self._stopping = stopping = threading.Event()
         ready, failure = threading.Event(), []
-        self._thread = threading.Thread(target=self._run, args=(ready, failure), daemon=True,
+        self._thread = threading.Thread(target=self._run, args=(ready, failure, stopping), daemon=True,
                                         name=f"huntsman-{self.name}")
         self._thread.start()
         if not ready.wait(timeout) or failure:
@@ -111,7 +113,7 @@ class MessageWindow:
                 traceback.print_exc()   # never let an exception cross into Windows
         return api().user32.DefWindowProcW(hwnd, msg, wparam, lparam)
 
-    def _run(self, ready, failure):
+    def _run(self, ready, failure, stopping):
         try:
             a = api()
         except Exception as e:   # not Windows, or user32 missing
@@ -135,7 +137,15 @@ class MessageWindow:
             u.UnregisterClassW(cls, hinst)
             ready.set()
             return
-        self.hwnd, self._tid = hwnd, k.GetCurrentThreadId()
+        tid = k.GetCurrentThreadId()
+        if stopping.is_set():   # start() gave up (timed out) before the window existed: leave nothing behind
+            u.DestroyWindow(hwnd)
+            u.UnregisterClassW(cls, hinst)
+            ready.set()
+            return
+        # tid first; a stop() from now on either sees it (and posts WM_QUIT) or has set the flag, which the loop
+        # checks before its first GetMessageW
+        self.hwnd, self._tid = hwnd, tid
         try:
             if self.on_create is not None:
                 self.on_create(hwnd)
@@ -144,7 +154,7 @@ class MessageWindow:
         ready.set()
         try:
             msg = w.MSG()
-            while not failure and not self._stopping.is_set() and u.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+            while not failure and not stopping.is_set() and u.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
                 u.TranslateMessage(ctypes.byref(msg))
                 u.DispatchMessageW(ctypes.byref(msg))
         finally:
@@ -155,4 +165,5 @@ class MessageWindow:
                 traceback.print_exc()
             u.DestroyWindow(hwnd)
             u.UnregisterClassW(cls, hinst)
-            self.hwnd = self._tid = None
+            if self._tid == tid:   # a newer start's window keeps its own
+                self.hwnd = self._tid = None

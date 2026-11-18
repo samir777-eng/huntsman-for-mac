@@ -1,22 +1,53 @@
-# Huntsman for Mac: Razer Huntsman V3 Pro on macOS, without Synapse
+<p align="center">
+  <img src="docs/banner.png" width="900" alt="Huntsman for Mac: per-key actuation, Rapid Trigger, Snap Tap and RGB Studio, no Synapse needed. A glowing keyboard silhouette on a dark background.">
+</p>
 
-**Tune your Razer Huntsman V3 Pro on a Mac. No Synapse, no Windows, no virtual machine.**
+<h1 align="center">Huntsman for Mac: Razer Huntsman V3 Pro on macOS, without Synapse</h1>
 
-[![Latest release](https://img.shields.io/github/v/release/samir777-eng/huntsman-for-mac?label=release)](https://github.com/samir777-eng/huntsman-for-mac/releases/latest)
-[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
-[![Tested on Apple silicon](https://img.shields.io/badge/tested%20on-Apple%20silicon-111111?logo=apple)](#supported-hardware)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](#install)
+<p align="center">
+  <b>Tune your Razer Huntsman V3 Pro on a Mac. No Synapse, no Windows, no virtual machine.</b>
+</p>
+
+<p align="center">
+  <a href="https://github.com/samir777-eng/huntsman-for-mac/releases/latest"><img src="https://img.shields.io/github/v/release/samir777-eng/huntsman-for-mac?label=release&style=for-the-badge&color=6ad7ff&labelColor=0a0a0b" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-6ad7ff?style=for-the-badge&labelColor=0a0a0b" alt="License: GPL-3.0-or-later"></a>
+  <a href="#supported-hardware"><img src="https://img.shields.io/badge/tested%20on-Apple%20silicon-6ad7ff?style=for-the-badge&logo=apple&logoColor=white&labelColor=0a0a0b" alt="Tested on Apple silicon"></a>
+  <a href="#install"><img src="https://img.shields.io/badge/python-3.11%2B-6ad7ff?style=for-the-badge&logo=python&logoColor=white&labelColor=0a0a0b" alt="Python 3.11+"></a>
+  <a href="#synapse-for-mac-vs-huntsman-for-mac"><img src="https://img.shields.io/badge/Synapse-not%20needed-6ad7ff?style=for-the-badge&labelColor=0a0a0b" alt="No Synapse needed"></a>
+</p>
+
+<p align="center">
+  <a href="#quick-start"><b>Quick start</b></a> ·
+  <a href="#features"><b>Features</b></a> ·
+  <a href="#supported-hardware"><b>Supported models</b></a> ·
+  <a href="#safety"><b>Safety</b></a> ·
+  <a href="#faq"><b>FAQ</b></a>
+</p>
+
+<p align="center">
+  <img src="docs/demo-studio.gif" width="900" alt="Demo mode: the Lighting Studio's Rainbow wave preset sweeping across the on-screen keyboard">
+  <br>
+  <sub>🌈 Lighting Studio's <b>Rainbow wave</b> preset, recorded in the app's demo mode.</sub>
+</p>
 
 The Huntsman V3 Pro has analog optical switches you can set to a tenth of a millimetre. Razer Synapse for Mac doesn't
 support its settings (at the time of writing). **Huntsman for Mac** is a free, open-source app that does the job:
 per-key actuation from 0.1 to 4.0 mm, Rapid Trigger, Snap Tap, per-key RGB, and a lighting studio that reacts to your
 typing and your music.
 
-![Huntsman for Mac in demo mode, Actuation tab: four keys set to 1.2 mm while the key tester shows the D key pressed to 2.8 mm](docs/screenshot-actuation.png)
+### Synapse for Mac vs Huntsman for Mac
 
-<sub>Screenshots are from the app's demo mode (`ui/index.html?demo`), which simulates a keyboard.</sub>
+At the time of writing, Razer Synapse for Mac doesn't support the Huntsman V3 Pro's settings.
+
+| On a Huntsman V3 Pro, from macOS | Synapse for Mac | Huntsman for Mac |
+|---|:---:|:---:|
+| 🎯 Change the actuation point (0.1 to 4.0 mm, per key) | ❌ | ✅ |
+| ⚡ Rapid Trigger | ❌ | ✅ |
+| 🎨 Per-key lighting | ❌ | ✅ |
 
 ## Quick start
+
+Three steps and you're tuning:
 
 1. **Get the code**
 
@@ -36,6 +67,7 @@ typing and your music.
 
 You need Python 3.11 or newer, and Homebrew if libusb isn't installed yet. Details in [Install](#install).
 
+> [!NOTE]
 > Unofficial. Not made, endorsed or supported by Razer. "Razer" and "Huntsman" are Razer Inc. trademarks, used here
 > only to say which keyboard this works with. Use at your own risk; see [Safety](#safety).
 
@@ -56,7 +88,56 @@ You need Python 3.11 or newer, and Homebrew if libusb isn't installed yet. Detai
 
 ## Features
 
+<table>
+  <tr>
+    <td width="50%"><a href="#actuation-and-the-key-tester"><img src="docs/screenshot-actuation.png" alt="Huntsman for Mac in demo mode, Actuation tab: four keys set to 1.2 mm while the key tester shows the D key pressed to 2.8 mm"></a></td>
+    <td width="50%">
+      <h3>🎯 Actuation, to a tenth of a millimetre</h3>
+      Every key, anywhere from <b>0.1 mm</b> (a feather) to <b>4.0 mm</b> (the whole way down). It's stored on the
+      keyboard, so it goes with the keyboard to other computers. Then hit <b>Test with a key press</b> and watch the
+      key sink. <a href="#actuation-and-the-key-tester">More →</a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h3>⚡ Rapid Trigger and 🥊 Snap Tap</h3>
+      Rapid Trigger fires a key again as soon as it moves down by the press distance after rising by the release
+      distance, anywhere in its travel. Snap Tap: while both keys of a pair are held, only the one pressed last
+      counts. Both confirmed on a Huntsman V3 Pro. <a href="#rapid-trigger-and-snap-tap">More →</a>
+    </td>
+    <td width="50%"><a href="#keyboard-lighting"><img src="docs/screenshot-lighting.png" alt="Lighting tab: per-key colours painted in a rainbow across the keyboard, with W, A, S and D in white"></a></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="#lighting-studio"><img src="docs/screenshot-studio.png" alt="Studio tab: the Aurora preset running, with its layer, palette and speed settings"></a></td>
+    <td width="50%">
+      <h3>🌈 Lighting Studio</h3>
+      Layers, 17 effects and eight built-in presets, reacting to your typing and your music. Studio runs in a small
+      background lighting service, so close the app and your aurora keeps drifting.
+      <a href="#lighting-studio">More →</a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h3>💡 Keyboard lighting and 🎨 per-key colours</h3>
+      Static, breathing, spectrum, wave, reactive and starlight run on the keyboard and are saved on it. Or select
+      keys and paint them. <a href="#keyboard-lighting">More →</a>
+      <h3>🧪 Six more models, looking for testers</h3>
+      Experimental support for six more Huntsman models, plus an LED check to map their keys.
+      <a href="#more-models-and-a-call-for-testers">More →</a>
+    </td>
+    <td width="50%"><a href="#more-models-and-a-call-for-testers"><img src="docs/screenshot-keyboard.png" alt="Keyboard tab for a Huntsman V3 Pro Mini in demo mode: Experimental badge, Experimental support switched on, and the LED check panel"></a></td>
+  </tr>
+</table>
+
+<sub>Screenshots and GIFs are from the app's demo mode (`ui/index.html?demo`), which simulates a keyboard.</sub>
+
 ### Actuation and the key tester
+
+<p align="center">
+  <img src="docs/demo-key-tester.gif" width="900" alt="Demo mode, Actuation tab: the key tester running while W, A, S and D sink in turn, the travel meter follows each key and the trace draws its travel">
+  <br>
+  <sub>🔬 The key tester in Actuation, recorded in demo mode (simulated key presses, not a hardware recording).</sub>
+</p>
 
 Pick keys on the board (or none, for all of them), drag the slider anywhere from **0.1 mm** (a feather) to **4.0 mm**
 (the whole way down) and click Apply. Presets cover the usual suspects: 0.5 light, 1.0 gaming, 1.2 factory, 1.5
@@ -83,8 +164,6 @@ again when it starts.
 
 ### Keyboard lighting
 
-![Lighting tab: per-key colours painted in a rainbow across the keyboard, with W, A, S and D in white](docs/screenshot-lighting.png)
-
 The **Lighting** tab drives the keyboard's own effects: static, breathing, spectrum, wave, reactive and starlight, plus
 brightness. They run on the keyboard and are saved on it, so they keep going without the app. Colours are corrected so
 the keys match the colour you pick. (The Fire effect some Razer keyboards have is refused by this one's firmware, so
@@ -94,8 +173,6 @@ it isn't offered.)
 the lighting service send them again.
 
 ### Lighting Studio
-
-![Studio tab: the Aurora preset running, with its layer, palette and speed settings](docs/screenshot-studio.png)
 
 Studio is where the app draws every frame itself and streams it to the keys, so effects can stack, react and change
 with what you're doing.
@@ -119,13 +196,12 @@ with what you're doing.
 
 When Studio is turned off or the lighting service quits, the keyboard's own lighting comes back.
 
-**Privacy.** Key presses and sound are processed in memory, frame by frame, to draw the lights. Nothing is recorded,
-logged or sent anywhere. The typing heatmap is off by default; when on, it stores only how many times each key was
-pressed (`heatmap.json`, on this Mac), never which keys in which order, and **Reset heatmap** deletes it.
+> [!TIP]
+> **Privacy.** Key presses and sound are processed in memory, frame by frame, to draw the lights. Nothing is recorded,
+> logged or sent anywhere. The typing heatmap is off by default; when on, it stores only how many times each key was
+> pressed (`heatmap.json`, on this Mac), never which keys in which order, and **Reset heatmap** deletes it.
 
 ### More models, and a call for testers
-
-![Keyboard tab for a Huntsman V3 Pro Mini in demo mode: Experimental badge, Experimental support switched on, and the LED check panel](docs/screenshot-keyboard.png)
 
 Version 0.3.0 adds **experimental support** for six more Huntsman models. Nobody has tried them with this app yet.
 They get only commands already checked on the V3 Pro, nothing that changes them is sent until you turn on
@@ -135,7 +211,8 @@ so you can tell us which key it belongs to.
 🙋 **Own one of them?** You can turn our guess into a fact. See
 [Supported hardware](#supported-hardware) and [CONTRIBUTING.md](CONTRIBUTING.md#testing-an-experimental-model).
 
-(This screenshot is from demo mode, which previews any model without a keyboard; it isn't a hardware result.)
+(The Keyboard tab screenshot above is from demo mode, which previews any model without a keyboard; it isn't a hardware
+result.)
 
 ## Supported hardware
 
@@ -170,6 +247,7 @@ Studio.
 Turning it on allows lighting effects, brightness, per-key colours and Studio, and on the V3 Pro models also
 actuation, Rapid Trigger, Snap Tap and *Restore factory depth*. The switch shows this warning:
 
+> [!WARNING]
 > This keyboard hasn't been tested with this app. When on, the app sends it only commands checked on the Huntsman V3
 > Pro; they may not work, or may light or change the wrong keys. The key tester stays off.
 
@@ -230,10 +308,14 @@ Then run `./install.sh` from the project folder (see [Quick start](#quick-start)
   (`io.github.huntsman-for-mac.lighting`) that starts it now and at every login. It replaces the `apply-saved` login
   item of earlier versions, which the installer removes.
 
-**Try it without a keyboard:** open `ui/index.html?demo` in a browser. Add `&model=02B0` (or any USB product ID from
-the table) to preview another model; a list in the header switches between them.
+> [!TIP]
+> **Try it without a keyboard:** open `ui/index.html?demo` in a browser. Add `&model=02B0` (or any USB product ID from
+> the table) to preview another model; a list in the header switches between them.
 
 ### Update
+
+<details>
+<summary>Three steps: quit, pull, install</summary>
 
 1. Quit the app (Cmd-Q). The installer stops and restarts the lighting service itself.
 2. `git pull`
@@ -242,7 +324,12 @@ the table) to preview another model; a list in the header switches between them.
 Run `./install.sh` again after Homebrew upgrades Python too: the app's environment points at the Python it was built
 with.
 
+</details>
+
 ### Uninstall
+
+<details>
+<summary>Remove the app, and optionally your settings</summary>
 
 Quit the app first, then:
 
@@ -253,6 +340,8 @@ Quit the app first, then:
 
 Stopping the lighting service puts the keyboard's own lighting back; nothing else on the keyboard changes. Use
 *Restore factory depth* in the app first if you want the keyboard back to its defaults.
+
+</details>
 
 ## Permissions
 
@@ -269,6 +358,9 @@ hasn't been confirmed on hardware yet; it may show up as **Python** instead.
 
 ### Input Monitoring for the key tester
 
+<details>
+<summary>If you said no, or nothing was asked</summary>
+
 The key tester reads the keyboard's travel reports, which macOS treats as input monitoring. If you said no, or
 nothing was asked:
 
@@ -279,7 +371,12 @@ nothing was asked:
 
 Re-installing replaces the app, so macOS may ask again, or the switch may need to be turned off and on.
 
+</details>
+
 ### Studio's permissions
+
+<details>
+<summary>Input Monitoring and Microphone for Huntsman Lighting</summary>
 
 - **Input Monitoring → Huntsman Lighting**, for typing effects and the heatmap. The service only listens while a
   preset with a typing effect is on or the heatmap is counting.
@@ -287,10 +384,15 @@ Re-installing replaces the app, so macOS may ask again, or the switch may need t
   is on. If access is refused, Studio shows where to turn it on.
 - After changing either, use **Quit lighting service** in the menu bar, then turn Studio on again in the app.
 
+</details>
+
 ## Lighting service and menu bar
 
 The keyboard icon in the menu bar belongs to the lighting service. It turns Studio on or off, switches presets, opens
 Huntsman for Mac, and has **Quit lighting service**, which stops Studio and puts the keyboard's own lighting back.
+
+<details>
+<summary>When it starts, restarts and pauses</summary>
 
 - The service starts at login and when the installer finishes. When it starts, it sends per-key colours, Rapid
   Trigger and Snap Tap to the keyboard again and starts Studio if it was on.
@@ -300,6 +402,8 @@ Huntsman for Mac, and has **Quit lighting service**, which stops Studio and puts
 - While the app changes the keyboard (actuation, keyboard effects, per-key colours, brightness, the key tester), the
   service pauses its frames.
 
+</details>
+
 ## Command line
 
 The installed app includes a command-line tool:
@@ -308,6 +412,9 @@ The installed app includes a command-line tool:
 APP=~/Applications/"Huntsman for Mac.app"/Contents/Resources
 "$APP/venv/bin/python" "$APP/code/huntsman.py" status
 ```
+
+<details>
+<summary>All commands</summary>
 
 | Command | What it does |
 |---|---|
@@ -324,10 +431,15 @@ APP=~/Applications/"Huntsman for Mac.app"/Contents/Resources
 | `--version` | Print the version |
 | `help` | Print this list |
 
+</details>
+
 ## Safety
 
 The app writes to the keyboard's memory using commands the community worked out by reverse engineering, not from
 Razer documentation. So it's careful:
+
+<details open>
+<summary><b>🛡️ How it stays careful</b></summary>
 
 - **Checked replies.** Every command checks that the keyboard's reply matches the request and passes its checksum.
   Actuation writes are also read back key by key; lighting writes are not read back.
@@ -348,9 +460,13 @@ Razer documentation. So it's careful:
 - **If everything else fails,** connecting the keyboard to Windows with Razer Synapse should reset it. This hasn't
   been needed or tried.
 
+</details>
+
 ## Troubleshooting
 
-**"No supported Razer Huntsman found"**
+<details>
+<summary><b>"No supported Razer Huntsman found"</b></summary>
+
 - Connect it with its USB cable, directly or through a powered hub, then open Keyboard info (the gear icon) and click
   *Reconnect*.
 - Check the model: **Apple menu → About This Mac → More Info → System Report → USB**. Look for a Razer device with
@@ -358,23 +474,51 @@ Razer documentation. So it's careful:
 - Only one program can use the keyboard's control interface. Quit Razer Synapse, OpenRazer-based tools or anything
   else that talks to Razer devices, then click *Reconnect*.
 
-**"libusb is missing"** Run `brew install libusb`, then `./install.sh` again.
+</details>
 
-**The app doesn't open, or macOS says it's damaged or from an unidentified developer**
+<details>
+<summary><b>"libusb is missing"</b></summary>
+
+Run `brew install libusb`, then `./install.sh` again.
+
+</details>
+
+<details>
+<summary><b>The app doesn't open, or macOS says it's damaged or from an unidentified developer</b></summary>
+
 - The installer removes the download quarantine flag and signs the app ad hoc. If it printed a signing warning, run
   `./install.sh` again and keep the output for a bug report.
 - You can also right-click the app, choose **Open**, and confirm.
 - Check the log: `~/Library/Logs/Huntsman for Mac.log`.
 
-**The app stops working after a Python upgrade** Run `./install.sh` again.
+</details>
 
-**Installer says the app is running** Quit the window (Cmd-Q), then run the installer again. The lighting service
-doesn't need quitting; the installer stops and restarts it.
+<details>
+<summary><b>The app stops working after a Python upgrade</b></summary>
 
-**The keyboard stopped typing** It was left in test mode. Unplug it and plug it back in; opening the app, or running
-any `huntsman.py` command, also puts it back to typing.
+Run `./install.sh` again.
 
-**Settings aren't sent again after login, or Studio stops when the app quits**
+</details>
+
+<details>
+<summary><b>Installer says the app is running</b></summary>
+
+Quit the window (Cmd-Q), then run the installer again. The lighting service doesn't need quitting; the installer
+stops and restarts it.
+
+</details>
+
+<details>
+<summary><b>The keyboard stopped typing</b></summary>
+
+It was left in test mode. Unplug it and plug it back in; opening the app, or running any `huntsman.py` command, also
+puts it back to typing.
+
+</details>
+
+<details>
+<summary><b>Settings aren't sent again after login, or Studio stops when the app quits</b></summary>
+
 - Check the lighting service is running: `launchctl print gui/$(id -u)/io.github.huntsman-for-mac.lighting`. Start it
   by hand with `launchctl kickstart gui/$(id -u)/io.github.huntsman-for-mac.lighting` (the app does this when you use
   Studio).
@@ -382,47 +526,89 @@ any `huntsman.py` command, also puts it back to typing.
   must be allowed.
 - Its output goes to the same log, `~/Library/Logs/Huntsman for Mac.log`.
 
-**Studio lights don't follow typing or sound** Studio → Typing or Sound shows the reason. Usually Input Monitoring or
-Microphone access is off for Huntsman Lighting (see [Permissions](#permissions)); use *Quit lighting service* in the
-menu bar after turning it on, then turn Studio on again. For the Mac's own sound, the input must be a loopback device
-such as BlackHole, not the microphone.
+</details>
+
+<details>
+<summary><b>Studio lights don't follow typing or sound</b></summary>
+
+Studio → Typing or Sound shows the reason. Usually Input Monitoring or Microphone access is off for Huntsman Lighting
+(see [Permissions](#permissions)); use *Quit lighting service* in the menu bar after turning it on, then turn Studio
+on again. For the Mac's own sound, the input must be a loopback device such as BlackHole, not the microphone.
+
+</details>
 
 ## FAQ
 
-**Does Razer Synapse work with the Huntsman V3 Pro on Mac?**
+<details>
+<summary><b>Does Razer Synapse work with the Huntsman V3 Pro on Mac?</b></summary>
+
 Not at the time of writing: Razer Synapse for Mac doesn't support the Huntsman V3 Pro's settings, so actuation, Rapid
 Trigger and per-key lighting can't be changed there. This app fills that gap.
 
-**How do I change the actuation point of a Razer Huntsman V3 Pro on macOS?**
+</details>
+
+<details>
+<summary><b>How do I change the actuation point of a Razer Huntsman V3 Pro on macOS?</b></summary>
+
 Open Huntsman for Mac, select keys (or none for all keys), pick a depth between 0.1 and 4.0 mm and click Apply. The
 setting is stored on the keyboard, so it stays after unplugging and also works on other computers.
 
-**Can I use Rapid Trigger or Snap Tap on a Mac?**
+</details>
+
+<details>
+<summary><b>Can I use Rapid Trigger or Snap Tap on a Mac?</b></summary>
+
 Yes, from the Rapid Trigger and Snap Tap tabs. Both have been confirmed on a Huntsman V3 Pro; please report how they
 work on other models.
 
-**Can I set per-key RGB lighting without Synapse?**
+</details>
+
+<details>
+<summary><b>Can I set per-key RGB lighting without Synapse?</b></summary>
+
 Yes. Use Lighting → Per key to colour individual keys, or Effect for spectrum, wave, breathing, reactive and
 starlight. Ripple and other typing effects are in Studio.
 
-**Do I need Windows, Boot Camp or a virtual machine?**
+</details>
+
+<details>
+<summary><b>Do I need Windows, Boot Camp or a virtual machine?</b></summary>
+
 No. It talks to the keyboard directly over USB from macOS.
 
-**Is it free?**
+</details>
+
+<details>
+<summary><b>Is it free?</b></summary>
+
 Yes. It's open source under GPL-3.0-or-later, with no account, no telemetry and no paid tier.
 
-**Which keyboards are supported?**
+</details>
+
+<details>
+<summary><b>Which keyboards are supported?</b></summary>
+
 The Razer Huntsman V3 Pro (full size, USB ID 1532:02A6) is tested. The V3 Pro TKL, V3 Pro 8KHz, V3 Pro Mini, V2, V2
 TKL and V2 Analog have experimental support: untested, and off until you turn on Experimental support. See
 [Supported hardware](#supported-hardware).
 
-**I have one of the experimental models. How can I help?**
+</details>
+
+<details>
+<summary><b>I have one of the experimental models. How can I help?</b></summary>
+
 Turn on Experimental support, run the LED check, and report what worked and what didn't. The steps are in
 [CONTRIBUTING.md](CONTRIBUTING.md#testing-an-experimental-model).
 
-**Why is there no key tester on my model?**
+</details>
+
+<details>
+<summary><b>Why is there no key tester on my model?</b></summary>
+
 The key tester switches the keyboard into a mode where it stops typing. It's only offered on a model that has been
 tested, so an untested keyboard can't be left unable to type. The V2 family also has no analog keys to test.
+
+</details>
 
 ## Under the hood
 
@@ -430,6 +616,9 @@ The app talks to the keyboard's control interface with USB control transfers thr
 macOS driver (it keeps that interface to itself). Settings go to two places: the copy the keyboard is using right now,
 and the saved onboard profile. The key tester puts the keyboard into "driver mode" and reads its travel reports
 (report `0x0B`) through IOKit.
+
+<details>
+<summary>Code map, and where your settings live</summary>
 
 - `huntsman_core.py`: protocol and USB transport · `models.py`: the supported models · `layouts/`: their key layouts
 - `depth_stream.py`: live travel readings
@@ -451,9 +640,11 @@ Your settings and logs live in:
   socket (`service.sock`).
 - `~/Library/Logs/Huntsman for Mac.log`
 
+</details>
+
 ## Contributing
 
-Hardware reports are the most useful thing right now: experimental models, Intel Macs and older macOS. See
+🙌 Hardware reports are the most useful thing right now: experimental models, Intel Macs and older macOS. See
 [CONTRIBUTING.md](CONTRIBUTING.md) for the steps, the safety rule for new commands, and how to run the tests:
 
 ```bash
@@ -487,3 +678,5 @@ only to say which keyboard this software works with. No Razer logos, artwork or 
 ## License
 
 GPL-3.0-or-later. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+<p align="center"><sub>Made for Mac people with a Huntsman on the desk. ⌨️✨ If it helps you, a ⭐ helps others find it.</sub></p>

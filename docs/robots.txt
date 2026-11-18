@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://samir777-eng.github.io/huntsman-for-mac/sitemap.xml

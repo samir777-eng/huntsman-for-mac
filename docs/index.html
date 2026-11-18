@@ -1,0 +1,592 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later
+     Copyright (C) 2026 Huntsman for Mac contributors -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Huntsman for Mac: Razer Huntsman V3 Pro on macOS, without Synapse</title>
+<meta name="description" content="Free, open-source Mac app for the Razer Huntsman V3 Pro: per-key actuation from 0.1 to 4.0 mm, Rapid Trigger, Snap Tap and RGB. No Synapse needed.">
+<link rel="canonical" href="https://samir777-eng.github.io/huntsman-for-mac/">
+<meta name="theme-color" content="#0a0a0b">
+<meta name="color-scheme" content="dark">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Huntsman for Mac">
+<meta property="og:title" content="Huntsman for Mac: Razer Huntsman V3 Pro on macOS, without Synapse">
+<meta property="og:description" content="Per-key actuation, Rapid Trigger, Snap Tap and a lighting studio for the Razer Huntsman V3 Pro on a Mac. Free and open source.">
+<meta property="og:url" content="https://samir777-eng.github.io/huntsman-for-mac/">
+<meta property="og:image" content="https://samir777-eng.github.io/huntsman-for-mac/social-preview.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="Huntsman for Mac: per-key actuation, Rapid Trigger, Snap Tap and RGB Studio, no Synapse needed">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Huntsman for Mac: Razer Huntsman V3 Pro on macOS, without Synapse">
+<meta name="twitter:description" content="Per-key actuation, Rapid Trigger, Snap Tap and a lighting studio for the Razer Huntsman V3 Pro on a Mac. Free and open source.">
+<meta name="twitter:image" content="https://samir777-eng.github.io/huntsman-for-mac/social-preview.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='4' y='14' width='56' height='36' rx='8' fill='%230a0a0b' stroke='%236ad7ff' stroke-width='4'/%3E%3Crect x='14' y='24' width='8' height='6' rx='2' fill='%236ad7ff'/%3E%3Crect x='28' y='24' width='8' height='6' rx='2' fill='%236ad7ff'/%3E%3Crect x='42' y='24' width='8' height='6' rx='2' fill='%236ad7ff'/%3E%3Crect x='18' y='36' width='28' height='6' rx='2' fill='%236ad7ff'/%3E%3C/svg%3E">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Huntsman for Mac",
+  "description": "Free, open-source macOS app for the Razer Huntsman V3 Pro: per-key actuation from 0.1 to 4.0 mm, Rapid Trigger, Snap Tap, per-key RGB and a lighting studio. No Synapse needed.",
+  "operatingSystem": "macOS",
+  "applicationCategory": "UtilitiesApplication",
+  "softwareVersion": "0.3.0",
+  "license": "https://spdx.org/licenses/GPL-3.0-or-later.html",
+  "url": "https://samir777-eng.github.io/huntsman-for-mac/",
+  "downloadUrl": "https://github.com/samir777-eng/huntsman-for-mac/releases/latest",
+  "sameAs": ["https://github.com/samir777-eng/huntsman-for-mac"],
+  "image": "https://samir777-eng.github.io/huntsman-for-mac/social-preview.png",
+  "screenshot": "https://samir777-eng.github.io/huntsman-for-mac/screenshot-actuation.png",
+  "isAccessibleForFree": true,
+  "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {"@type": "Question", "name": "Does Razer Synapse work with the Huntsman V3 Pro on Mac?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Not at the time of writing: Razer Synapse for Mac doesn't support the Huntsman V3 Pro's settings, so actuation, Rapid Trigger and per-key lighting can't be changed there. This app fills that gap."}},
+    {"@type": "Question", "name": "How do I change the actuation point of a Razer Huntsman V3 Pro on macOS?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Open Huntsman for Mac, select keys (or none for all keys), pick a depth between 0.1 and 4.0 mm and click Apply. The setting is stored on the keyboard, so it stays after unplugging and also works on other computers."}},
+    {"@type": "Question", "name": "Can I use Rapid Trigger or Snap Tap on a Mac?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Yes, from the Rapid Trigger and Snap Tap tabs. Both have been confirmed on a Huntsman V3 Pro; please report how they work on other models."}},
+    {"@type": "Question", "name": "Can I set per-key RGB lighting without Synapse?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Yes. Use Lighting → Per key to colour individual keys, or Effect for spectrum, wave, breathing, reactive and starlight. Ripple and other typing effects are in Studio."}},
+    {"@type": "Question", "name": "Do I need Windows, Boot Camp or a virtual machine?",
+     "acceptedAnswer": {"@type": "Answer", "text": "No. It talks to the keyboard directly over USB from macOS."}},
+    {"@type": "Question", "name": "Is it free?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Yes. It's open source under GPL-3.0-or-later, with no account, no telemetry and no paid tier."}},
+    {"@type": "Question", "name": "Which keyboards are supported?",
+     "acceptedAnswer": {"@type": "Answer", "text": "The Razer Huntsman V3 Pro (full size, USB ID 1532:02A6) is tested. The V3 Pro TKL, V3 Pro 8KHz, V3 Pro Mini, V2, V2 TKL and V2 Analog have experimental support: untested, and off until you turn on Experimental support."}},
+    {"@type": "Question", "name": "I have one of the experimental models. How can I help?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Turn on Experimental support, run the LED check, and report what worked and what didn't. The steps are in CONTRIBUTING.md."}},
+    {"@type": "Question", "name": "Why is there no key tester on my model?",
+     "acceptedAnswer": {"@type": "Answer", "text": "The key tester switches the keyboard into a mode where it stops typing. It's only offered on a model that has been tested, so an untested keyboard can't be left unable to type. The V2 family also has no analog keys to test."}}
+  ]
+}
+</script>
+<style>
+:root{
+  --bg:#0a0a0b;--bg-2:#101114;--card:#13151a;--card-2:#181b21;--line:#23272f;--line-2:#2e333d;
+  --text:#f2f4f7;--muted:#a7b0bd;--dim:#8a93a0;--ice:#6ad7ff;--ice-2:#b4ecff;--ice-ink:#04131b;
+  --ok:#7ee2a8;--warn:#ffc66b;--radius:18px;--max:1160px;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 var(--font);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+img{max-width:100%;height:auto;display:block}
+a{color:var(--ice);text-underline-offset:3px}
+a:hover{color:var(--ice-2)}
+:focus-visible{outline:2px solid var(--ice);outline-offset:3px;border-radius:6px}
+code{font-family:var(--mono);font-size:.92em}
+.wrap{width:100%;max-width:var(--max);margin-inline:auto;padding-inline:20px}
+.skip{position:absolute;inset-inline-start:12px;top:-60px;background:var(--ice);color:var(--ice-ink);padding:8px 14px;border-radius:10px;font-weight:700;z-index:100}
+.skip:focus{top:12px}
+.eyebrow{font-size:.78rem;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--ice);margin:0 0 14px}
+h1,h2,h3{line-height:1.12;letter-spacing:-.02em;margin:0}
+h2{font-size:clamp(1.8rem,1.2rem + 2.4vw,2.9rem);font-weight:800}
+h3{font-size:1.2rem;font-weight:700}
+.lead{color:var(--muted);font-size:clamp(1.02rem,.95rem + .35vw,1.18rem);max-width:62ch}
+.section{padding-block:clamp(56px,7vw,96px)}
+.section-head{margin-bottom:clamp(28px,4vw,48px)}
+.section-head .lead{margin:16px 0 0}
+.grad{background:linear-gradient(100deg,var(--ice) 10%,var(--ice-2) 60%,#ffffff 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+/* header */
+.top{position:sticky;top:0;z-index:50;background:rgba(10,10,11,.72);backdrop-filter:saturate(160%) blur(14px);-webkit-backdrop-filter:saturate(160%) blur(14px);border-bottom:1px solid rgba(255,255,255,.06)}
+.top .wrap{display:flex;align-items:center;gap:16px;height:60px}
+.brand{display:flex;align-items:center;gap:10px;color:var(--text);text-decoration:none;font-weight:800;letter-spacing:-.01em;white-space:nowrap}
+.brand svg{flex:none}
+.brand:hover{color:var(--text)}
+.nav{display:flex;gap:4px;margin-inline-start:auto}
+.nav a{color:var(--muted);text-decoration:none;font-size:.92rem;font-weight:600;padding:8px 12px;border-radius:10px}
+.nav a:hover{color:var(--text);background:rgba(255,255,255,.05)}
+.top .btn{margin-inline-start:8px}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:48px;padding:12px 22px;border-radius:14px;font-weight:700;font-size:1rem;text-decoration:none;border:1px solid transparent;transition:transform .2s ease,box-shadow .2s ease,background .2s ease,border-color .2s ease;white-space:nowrap}
+.btn-sm{min-height:38px;padding:7px 14px;font-size:.9rem;border-radius:11px}
+.btn-primary{background:var(--ice);color:var(--ice-ink);box-shadow:0 0 0 1px rgba(106,215,255,.4),0 10px 40px -8px rgba(106,215,255,.55)}
+.btn-primary:hover{color:var(--ice-ink);background:var(--ice-2);transform:translateY(-1px);box-shadow:0 0 0 1px rgba(106,215,255,.6),0 14px 50px -6px rgba(106,215,255,.7)}
+.btn-ghost{color:var(--text);background:rgba(255,255,255,.04);border-color:var(--line-2)}
+.btn-ghost:hover{color:var(--text);border-color:var(--ice);background:rgba(106,215,255,.08);transform:translateY(-1px)}
+
+/* hero */
+.hero{position:relative;padding-block:clamp(56px,9vw,120px) clamp(40px,6vw,72px);text-align:center;isolation:isolate;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:-20% -10% auto;height:120%;z-index:-2;
+  background:radial-gradient(48% 40% at 50% 28%,rgba(106,215,255,.22),transparent 70%),
+             radial-gradient(30% 30% at 20% 60%,rgba(164,112,255,.14),transparent 70%),
+             radial-gradient(30% 30% at 82% 58%,rgba(255,120,170,.10),transparent 70%);
+  animation:drift 16s ease-in-out infinite alternate}
+.hero::after{content:"";position:absolute;inset:0;z-index:-1;
+  background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+  background-size:44px 44px;mask-image:radial-gradient(70% 60% at 50% 30%,#000,transparent 75%);-webkit-mask-image:radial-gradient(70% 60% at 50% 30%,#000,transparent 75%)}
+@keyframes drift{from{transform:translate3d(-2%,0,0) scale(1)}to{transform:translate3d(2%,3%,0) scale(1.06)}}
+.pill{display:inline-flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;border:1px solid rgba(106,215,255,.3);background:rgba(106,215,255,.07);color:var(--ice-2);font-size:.82rem;font-weight:600;margin-bottom:26px}
+.pill b{color:var(--ice)}
+.hero h1{font-size:clamp(2.6rem,1.4rem + 6.2vw,5.6rem);font-weight:850;letter-spacing:-.045em;line-height:1}
+.hero .sub{font-size:clamp(1.1rem,.9rem + 1vw,1.5rem);font-weight:650;margin:22px auto 0;max-width:38ch;color:var(--text);letter-spacing:-.01em}
+.hero .lead{margin:16px auto 0}
+.cta{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin-top:34px}
+.hero-shot{margin:clamp(44px,6vw,72px) auto 0;max-width:980px;position:relative}
+.hero-shot::before{content:"";position:absolute;inset:8% 6% -6%;background:radial-gradient(closest-side,rgba(106,215,255,.35),transparent);filter:blur(40px);z-index:-1;animation:glow 6s ease-in-out infinite alternate}
+@keyframes glow{from{opacity:.55}to{opacity:1}}
+.frame{border-radius:20px;padding:10px;background:linear-gradient(180deg,#1b1e25,#0f1115);border:1px solid var(--line-2);box-shadow:0 40px 80px -30px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.06)}
+.frame img{border-radius:12px;width:100%}
+.frame-bar{display:flex;gap:7px;padding:4px 6px 12px}
+.frame-bar i{width:11px;height:11px;border-radius:50%;background:#3a3f49}
+.frame-bar i:nth-child(1){background:#ff5f57}.frame-bar i:nth-child(2){background:#febc2e}.frame-bar i:nth-child(3){background:#28c840}
+figcaption{color:var(--dim);font-size:.88rem;margin-top:14px}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-top:clamp(40px,6vw,64px)}
+.stat{background:var(--bg-2);padding:22px 18px;text-align:center}
+.stat b{display:block;font-size:clamp(1.4rem,1rem + 1.4vw,2rem);font-weight:800;letter-spacing:-.02em;color:var(--text)}
+.stat span{color:var(--muted);font-size:.9rem}
+
+/* features */
+.bento{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:18px}
+.card{position:relative;background:linear-gradient(180deg,var(--card-2),var(--card));border:1px solid var(--line);border-radius:var(--radius);padding:24px;overflow:hidden;transition:border-color .25s ease,transform .25s ease}
+.card:hover{border-color:rgba(106,215,255,.4);transform:translateY(-2px)}
+.card h3{margin-bottom:10px}
+.card p{color:var(--muted);margin:0}
+.card .shot{margin:-4px -4px 22px;border-radius:12px;overflow:hidden;border:1px solid var(--line-2);background:#0c0d10}
+.card .shot img{width:100%}
+.wide{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:32px;align-items:center}
+.wide .shot{margin:0}
+.span-3{grid-column:span 3}.span-2{grid-column:span 2}.span-4{grid-column:span 4}.span-6{grid-column:span 6}
+.icon{display:inline-grid;place-items:center;width:40px;height:40px;border-radius:12px;background:rgba(106,215,255,.1);border:1px solid rgba(106,215,255,.25);color:var(--ice);margin-bottom:16px}
+.tag{display:inline-block;font-size:.74rem;font-weight:700;letter-spacing:.04em;padding:3px 9px;border-radius:999px;border:1px solid var(--line-2);color:var(--muted);margin:14px 6px 0 0}
+.tag.on{color:var(--ice);border-color:rgba(106,215,255,.35);background:rgba(106,215,255,.07)}
+.meter{margin-top:22px;display:grid;gap:10px}
+.meter div{display:flex;justify-content:space-between;gap:12px;font-size:.88rem;color:var(--muted)}
+.meter i{display:block;height:8px;border-radius:99px;background:linear-gradient(90deg,var(--ice),rgba(106,215,255,.15));box-shadow:0 0 18px rgba(106,215,255,.45)}
+.note{color:var(--dim);font-size:.88rem;margin-top:18px}
+
+/* compare */
+.compare-wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:clamp(28px,5vw,64px);align-items:center}
+table{width:100%;border-collapse:collapse}
+.tbl{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--card)}
+.tbl th,.tbl td{padding:16px 18px;text-align:start;border-bottom:1px solid var(--line);vertical-align:top}
+.tbl tr:last-child td,.tbl tr:last-child th{border-bottom:0}
+.tbl thead th{font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--bg-2)}
+.tbl tbody th{font-weight:600}
+.c{text-align:center !important}
+.tbl thead th.c{width:24%}
+.yes,.no{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;font-weight:800}
+.yes{background:rgba(106,215,255,.14);color:var(--ice);box-shadow:0 0 18px rgba(106,215,255,.35)}
+.no{background:rgba(255,255,255,.05);color:var(--dim)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* models */
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;font-weight:700;padding:4px 10px;border-radius:999px;white-space:nowrap}
+.badge.tested{color:var(--ok);background:rgba(126,226,168,.1);border:1px solid rgba(126,226,168,.35)}
+.badge.exp{color:var(--warn);background:rgba(255,198,107,.08);border:1px solid rgba(255,198,107,.35)}
+.models td:nth-child(2){font-family:var(--mono);font-size:.9rem;color:var(--muted);white-space:nowrap}
+.models td:last-child{color:var(--muted)}
+.models tr.hero-row{background:rgba(106,215,255,.05)}
+.fine{color:var(--dim);font-size:.92rem;margin-top:18px;max-width:80ch}
+
+/* install */
+.steps{display:grid;grid-template-columns:minmax(0,2.2fr) minmax(0,1fr) minmax(0,1fr);gap:18px;counter-reset:s}
+.step{counter-increment:s;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:24px;min-width:0}
+.step::before{content:counter(s);display:inline-grid;place-items:center;width:36px;height:36px;border-radius:12px;background:var(--ice);color:var(--ice-ink);font-weight:800;margin-bottom:16px;box-shadow:0 0 24px rgba(106,215,255,.45)}
+.step p{color:var(--muted);margin:8px 0 0}
+.code{position:relative;margin-top:16px;background:#07080a;border:1px solid var(--line-2);border-radius:12px}
+.code-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px 6px 14px;border-bottom:1px solid var(--line);font:600 .72rem var(--font);letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.code pre{margin:0;padding:14px 16px;overflow-x:auto;font:13px/1.6 var(--mono);color:#dfe8f2}
+.code pre::before{content:"$ ";color:var(--ice)}
+.copy{font:600 .78rem var(--font);color:var(--muted);background:var(--card-2);border:1px solid var(--line-2);border-radius:8px;padding:5px 9px;cursor:pointer}
+.copy:hover{color:var(--text);border-color:var(--ice)}
+.req{margin-top:22px;color:var(--muted)}
+
+/* testers */
+.testers{position:relative;border-radius:24px;padding:clamp(28px,5vw,56px);overflow:hidden;isolation:isolate;border:1px solid rgba(106,215,255,.3);
+  background:radial-gradient(60% 120% at 0% 0%,rgba(106,215,255,.16),transparent 60%),radial-gradient(50% 120% at 100% 100%,rgba(164,112,255,.14),transparent 60%),var(--card)}
+.testers-grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:clamp(24px,4vw,48px);align-items:center}
+.testers ol{margin:0;padding-inline-start:1.2em;color:var(--muted)}
+.testers li{margin-bottom:8px}
+.testers li::marker{color:var(--ice);font-weight:800}
+
+/* safety */
+.safe{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px}
+.safe .card p{font-size:.95rem}
+
+/* faq */
+.faq{display:grid;gap:12px;max-width:860px}
+details{background:var(--card);border:1px solid var(--line);border-radius:14px;transition:border-color .2s ease}
+details[open]{border-color:rgba(106,215,255,.35)}
+summary{cursor:pointer;list-style:none;padding:18px 56px 18px 20px;padding-inline:20px 56px;font-weight:650;position:relative}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"";position:absolute;inset-inline-end:22px;top:50%;width:10px;height:10px;border-right:2px solid var(--ice);border-bottom:2px solid var(--ice);transform:translateY(-70%) rotate(45deg);transition:transform .2s ease}
+details[open] summary::after{transform:translateY(-30%) rotate(-135deg)}
+details p{margin:0;padding:0 20px 20px;color:var(--muted)}
+
+/* footer */
+footer{border-top:1px solid var(--line);background:var(--bg-2);padding-block:56px 40px;color:var(--muted);font-size:.94rem}
+.foot{display:grid;grid-template-columns:minmax(0,1.4fr) repeat(2,minmax(0,1fr));gap:32px}
+footer h2{font-size:.8rem;letter-spacing:.14em;text-transform:uppercase;color:var(--text);margin-bottom:14px}
+footer ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+footer p{margin:0 0 12px}
+.legal{border-top:1px solid var(--line);margin-top:40px;padding-top:24px;font-size:.86rem;color:var(--dim)}
+
+@media (max-width:960px){
+  .compare-wrap,.testers-grid,.wide{grid-template-columns:minmax(0,1fr)}
+  .steps{grid-template-columns:minmax(0,1fr)}
+  .safe{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .span-2,.span-3,.span-4{grid-column:span 3}
+  .foot{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .foot>div:first-child{grid-column:1/-1}
+}
+@media (max-width:760px){
+  .nav{display:none}
+  .top .btn{margin-inline-start:auto}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .bento{grid-template-columns:minmax(0,1fr)}
+  .span-2,.span-3,.span-4,.span-6{grid-column:auto}
+  .models thead{display:none}
+  .models,.models tbody,.models tr,.models td,.models th{display:block;width:100%}
+  .models tr{padding:16px 18px;border-bottom:1px solid var(--line)}
+  .models tr:last-child{border-bottom:0}
+  .models th,.models td{border:0;padding:0 !important}
+  .models td{margin-top:6px;line-height:1.5}
+  .models th{font-size:1.05rem}
+}
+@media (max-width:520px){
+  .wrap{padding-inline:16px}
+  .safe{grid-template-columns:minmax(0,1fr)}
+  .foot{grid-template-columns:minmax(0,1fr)}
+  .cta .btn{width:100%}
+  .brand .full{display:none}
+  .tbl th,.tbl td{padding:14px 10px}
+  .tbl thead th{font-size:.7rem;letter-spacing:.03em}
+  .card{padding:20px}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation:none !important;transition:none !important}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="Huntsman for Mac, back to top">
+      <svg width="28" height="28" viewBox="0 0 64 64" aria-hidden="true"><rect x="4" y="14" width="56" height="36" rx="8" fill="#0a0a0b" stroke="#6ad7ff" stroke-width="4"/><rect x="14" y="24" width="8" height="6" rx="2" fill="#6ad7ff"/><rect x="28" y="24" width="8" height="6" rx="2" fill="#6ad7ff"/><rect x="42" y="24" width="8" height="6" rx="2" fill="#6ad7ff"/><rect x="18" y="36" width="28" height="6" rx="2" fill="#6ad7ff"/></svg>
+      <span>Huntsman <span class="full">for Mac</span></span>
+    </a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#features">Features</a>
+      <a href="#models">Models</a>
+      <a href="#install">Install</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <a class="btn btn-ghost btn-sm" href="https://github.com/samir777-eng/huntsman-for-mac">
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" id="top" aria-labelledby="hero-title">
+    <div class="wrap">
+      <p class="pill"><b>v0.3.0</b> · Free &amp; open source · macOS</p>
+      <h1 id="hero-title">Huntsman <span class="grad" style="display:inline-block">for Mac</span></h1>
+      <p class="sub">Tune your Razer Huntsman V3 Pro on a Mac. No Synapse, no Windows, no virtual machine.</p>
+      <p class="lead">Per-key actuation from 0.1 to 4.0 mm, Rapid Trigger, Snap Tap, per-key RGB, and a lighting studio that reacts to your typing and your music.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/samir777-eng/huntsman-for-mac">
+          <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          Get it on GitHub
+        </a>
+        <a class="btn btn-ghost" href="#install">Quick start <span aria-hidden="true">→</span></a>
+      </div>
+
+      <figure class="hero-shot">
+        <div class="frame">
+          <div class="frame-bar" aria-hidden="true"><i></i><i></i><i></i></div>
+          <picture>
+            <source media="(prefers-reduced-motion: reduce)" srcset="screenshot-studio.png">
+            <img src="demo-studio.gif" width="900" height="322" alt="Demo mode: the Lighting Studio's Rainbow wave preset sweeping across the on-screen keyboard" fetchpriority="high">
+          </picture>
+        </div>
+        <figcaption>Lighting Studio's Rainbow wave preset, recorded in the app's demo mode.</figcaption>
+      </figure>
+
+      <dl class="stats">
+        <div class="stat"><dt class="sr">Actuation range</dt><dd style="margin:0"><b>0.1–4.0 mm</b><span>actuation, per key</span></dd></div>
+        <div class="stat"><dt class="sr">Studio effects</dt><dd style="margin:0"><b>17</b><span>Studio effects</span></dd></div>
+        <div class="stat"><dt class="sr">Built-in presets</dt><dd style="margin:0"><b>8</b><span>built-in presets</span></dd></div>
+        <div class="stat"><dt class="sr">Price</dt><dd style="margin:0"><b>Free</b><span>GPL-3.0-or-later</span></dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="section" id="features" aria-labelledby="features-title">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Features</p>
+        <h2 id="features-title">Tuned to a tenth of a millimetre,<br> <span class="grad">right from macOS.</span></h2>
+        <p class="lead">The Huntsman V3 Pro has analog optical switches you can set to a tenth of a millimetre. Here's how you set them, and light them, on a Mac.</p>
+      </div>
+
+      <div class="bento">
+        <article class="card span-3">
+          <div class="shot"><img src="screenshot-actuation.png" width="1280" height="900" loading="lazy" alt="Huntsman for Mac in demo mode, Actuation tab: four keys set to 1.2 mm while the key tester shows the D key pressed to 2.8 mm"></div>
+          <h3>Actuation, to a tenth of a millimetre</h3>
+          <p>Every key, anywhere from <strong>0.1 mm</strong> (a feather) to <strong>4.0 mm</strong> (the whole way down), with its reset point. It's stored on the keyboard, so it goes with the keyboard to other computers.</p>
+          <span class="tag on">Saved on the keyboard</span>
+        </article>
+
+        <article class="card span-3">
+          <div class="shot">
+            <picture>
+              <source media="(prefers-reduced-motion: reduce)" srcset="screenshot-actuation.png">
+              <img src="demo-key-tester.gif" width="960" height="675" loading="lazy" alt="Demo mode, Actuation tab: the key tester running while W, A, S and D sink in turn, the travel meter follows each key and the trace draws its travel">
+            </picture>
+          </div>
+          <h3>Key tester: watch each key's travel live</h3>
+          <p>Hit <strong>Test with a key press</strong> and watch the key sink: a meter follows it, a trace draws its travel, and the panel shows where it typed, where it reset and how deep you pressed. Offered on the Huntsman V3 Pro (1532:02A6), the one model tested with this app.</p>
+          <p class="note">Recorded in demo mode (simulated key presses, not a hardware recording).</p>
+        </article>
+
+        <article class="card span-2">
+          <div class="icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+          <h3>Rapid Trigger</h3>
+          <p>Fires a key again as soon as it moves down by the press distance after rising by the release distance, anywhere in its travel.</p>
+          <div class="meter" aria-hidden="true">
+            <div><span>Press</span><span>0.1–1.0 mm</span></div><i style="width:72%"></i>
+            <div><span>Release</span><span>0.1–1.0 mm</span></div><i style="width:46%"></i>
+          </div>
+          <span class="tag on">Confirmed on a V3 Pro</span>
+        </article>
+
+        <article class="card span-2">
+          <div class="icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="8" height="12" rx="2"/><rect x="14" y="6" width="8" height="12" rx="2"/><path d="M10 12h4"/></svg></div>
+          <h3>Snap Tap</h3>
+          <p>Takes one pair of keys (usually A and D): while both are held, only the one pressed last counts.</p>
+          <span class="tag on">Confirmed on a V3 Pro</span>
+          <span class="tag">Sent again by the lighting service</span>
+        </article>
+
+        <article class="card span-2">
+          <div class="icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.4A4.6 4.6 0 0 0 22 9.8C22 6 17.5 3 12 3z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/></svg></div>
+          <h3>Private by design</h3>
+          <p>Key presses and sound are processed in memory, frame by frame, to draw the lights. Nothing is recorded, logged or sent anywhere. No account, no telemetry.</p>
+        </article>
+
+        <article class="card span-3">
+          <div class="shot"><img src="screenshot-lighting.png" width="1280" height="900" loading="lazy" alt="Lighting tab: per-key colours painted in a rainbow across the keyboard, with W, A, S and D in white"></div>
+          <h3>Keyboard lighting and per-key colours</h3>
+          <p>Static, breathing, spectrum, wave, reactive and starlight run on the keyboard and are saved on it. Or select keys and paint them. Colours are corrected so the keys match the colour you pick.</p>
+        </article>
+
+        <article class="card span-3">
+          <div class="shot"><img src="screenshot-studio.png" width="1280" height="900" loading="lazy" alt="Studio tab: the Aurora preset running, with its layer, palette and speed settings"></div>
+          <h3>Lighting Studio</h3>
+          <p>Layers, 17 effects and eight built-in presets, reacting to your typing and your music. Studio runs in a small background lighting service, so close the app and your aurora keeps drifting.</p>
+        </article>
+
+        <article class="card span-6 wide">
+          <div class="shot"><img src="screenshot-keyboard.png" width="1280" height="900" loading="lazy" alt="Keyboard tab for a Huntsman V3 Pro Mini in demo mode: Experimental badge, Experimental support switched on, and the LED check panel"></div>
+          <div><span class="tag" style="margin:0 0 14px">Experimental</span>
+          <h3>Six more models, looking for testers</h3>
+          <p>Experimental support for six more Huntsman models: untested so far, with guessed LED positions, plus an LED check to map their keys. This screenshot is from demo mode, which previews any model without a keyboard; it isn't a hardware result.</p>
+          <a class="btn btn-ghost btn-sm" style="margin-top:20px" href="#testers">Help test a model</a></div>
+        </article>
+      </div>
+      <p class="fine">Screenshots and GIFs are from the app's demo mode, which simulates a keyboard.</p>
+    </div>
+  </section>
+
+  <section class="section" id="compare" aria-labelledby="compare-title" style="padding-top:0">
+    <div class="wrap compare-wrap">
+      <div>
+        <p class="eyebrow">Synapse for Mac vs Huntsman for Mac</p>
+        <h2 id="compare-title">The gap, <span class="grad">filled.</span></h2>
+        <p class="lead" style="margin-top:16px">Razer Synapse for Mac doesn't support the Huntsman V3 Pro's settings (at the time of writing). Huntsman for Mac talks to the keyboard directly over USB from macOS.</p>
+      </div>
+      <div class="tbl">
+        <table>
+          <caption class="sr">On a Huntsman V3 Pro, from macOS: what Synapse for Mac and Huntsman for Mac can change</caption>
+          <thead><tr><th scope="col">On a Huntsman V3 Pro, from macOS</th><th scope="col" class="c">Synapse for Mac</th><th scope="col" class="c">Huntsman for Mac</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Change the actuation point (0.1 to 4.0 mm, per key)</th><td class="c"><span class="no" aria-hidden="true">✕</span><span class="sr">No</span></td><td class="c"><span class="yes" aria-hidden="true">✓</span><span class="sr">Yes</span></td></tr>
+            <tr><th scope="row">Rapid Trigger</th><td class="c"><span class="no" aria-hidden="true">✕</span><span class="sr">No</span></td><td class="c"><span class="yes" aria-hidden="true">✓</span><span class="sr">Yes</span></td></tr>
+            <tr><th scope="row">Per-key lighting</th><td class="c"><span class="no" aria-hidden="true">✕</span><span class="sr">No</span></td><td class="c"><span class="yes" aria-hidden="true">✓</span><span class="sr">Yes</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="models" aria-labelledby="models-title" style="background:linear-gradient(180deg,transparent,var(--bg-2) 30%,var(--bg-2) 70%,transparent)">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Supported hardware</p>
+        <h2 id="models-title">One keyboard tested. <span class="grad">Six more on the way.</span></h2>
+        <p class="lead">Wired only. Only the Huntsman V3 Pro (1532:02A6) has been tested with this app. The other models are experimental: the app sends them only commands checked on the V3 Pro, and their LED positions are a guess until a tester confirms them with the LED check.</p>
+      </div>
+      <div class="tbl">
+        <table class="models">
+          <caption class="sr">Supported Razer Huntsman models, their USB IDs, test status and what the app offers</caption>
+          <thead><tr><th scope="col">Model</th><th scope="col">USB ID</th><th scope="col">Status</th><th scope="col">What the app offers</th></tr></thead>
+          <tbody>
+            <tr class="hero-row"><th scope="row">Huntsman V3 Pro</th><td>1532:02A6</td><td><span class="badge tested">✓ Tested</span></td><td>Everything: actuation, Rapid Trigger, Snap Tap, lighting, per-key colours, Studio, key tester</td></tr>
+            <tr><th scope="row">Huntsman V3 Pro TKL</th><td>1532:02A7</td><td><span class="badge exp">Experimental, untested</span></td><td>Lighting, per-key colours, Studio, actuation, Rapid Trigger, Snap Tap. No key tester</td></tr>
+            <tr><th scope="row">Huntsman V3 Pro 8KHz</th><td>1532:02CF</td><td><span class="badge exp">Experimental, untested</span></td><td>Lighting, per-key colours, Studio, actuation, Rapid Trigger, Snap Tap. No key tester</td></tr>
+            <tr><th scope="row">Huntsman V3 Pro Mini</th><td>1532:02B0</td><td><span class="badge exp">Experimental, untested</span></td><td>Lighting, per-key colours, Studio, actuation, Rapid Trigger, Snap Tap. No key tester</td></tr>
+            <tr><th scope="row">Huntsman V2</th><td>1532:026C</td><td><span class="badge exp">Experimental, untested</span></td><td>Lighting, per-key colours and Studio only</td></tr>
+            <tr><th scope="row">Huntsman V2 TKL</th><td>1532:026B</td><td><span class="badge exp">Experimental, untested</span></td><td>Lighting, per-key colours and Studio only</td></tr>
+            <tr><th scope="row">Huntsman V2 Analog</th><td>1532:0266</td><td><span class="badge exp">Experimental, untested</span></td><td>Lighting, per-key colours and Studio only. No starlight effects; its analog features aren't supported</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="fine">On the experimental models none of this has been seen working yet, and nothing that changes them is sent until you turn on <strong>Keyboard → Experimental support</strong>. Macs: tested on Apple silicon with macOS 26. Intel Macs and earlier macOS versions are untested; they will probably work, and a report either way helps.</p>
+    </div>
+  </section>
+
+  <section class="section" id="install" aria-labelledby="install-title" style="padding-top:clamp(24px,3vw,40px)">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Quick start</p>
+        <h2 id="install-title">Three steps and <span class="grad">you're tuning.</span></h2>
+      </div>
+      <ol class="steps" style="list-style:none;margin:0;padding:0">
+        <li class="step">
+          <h3>Get the code</h3>
+          <div class="code"><div class="code-bar"><span>Terminal</span><button class="copy" type="button" hidden data-copy="git clone https://github.com/samir777-eng/huntsman-for-mac.git&#10;cd huntsman-for-mac">Copy</button></div><pre><code>git clone https://github.com/samir777-eng/huntsman-for-mac.git
+cd huntsman-for-mac</code></pre></div>
+        </li>
+        <li class="step">
+          <h3>Install it</h3>
+          <div class="code"><div class="code-bar"><span>Terminal</span><button class="copy" type="button" hidden data-copy="./install.sh">Copy</button></div><pre><code>./install.sh</code></pre></div>
+          <p>Installs the app in <code>~/Applications</code>, libusb through Homebrew if it's missing, and the lighting service.</p>
+        </li>
+        <li class="step">
+          <h3>Open it</h3>
+          <p>The installer opens <strong>Huntsman for Mac</strong> when it's done. Next time, find it in <code>~/Applications</code> or Spotlight.</p>
+        </li>
+      </ol>
+      <p class="req">You need Python 3.11 or newer, and Homebrew if libusb isn't installed yet. Full details, updating and uninstalling are in the <a href="https://github.com/samir777-eng/huntsman-for-mac#install">README</a>.</p>
+    </div>
+  </section>
+
+  <section class="section" id="testers" aria-labelledby="testers-title" style="padding-top:0">
+    <div class="wrap">
+      <div class="testers">
+        <div class="testers-grid">
+          <div>
+            <p class="eyebrow">Testers wanted</p>
+            <h2 id="testers-title">Own a TKL, 8KHz, Mini or V2? <span class="grad">Turn our guess into a fact.</span></h2>
+            <p class="lead" style="margin-top:16px">Nobody has tried the six experimental models with this app yet. Hardware reports are the most useful thing right now: experimental models, Intel Macs and older macOS.</p>
+            <div class="cta" style="justify-content:flex-start">
+              <a class="btn btn-primary" href="https://github.com/samir777-eng/huntsman-for-mac/blob/master/CONTRIBUTING.md#testing-an-experimental-model">How to test a model</a>
+              <a class="btn btn-ghost" href="https://github.com/samir777-eng/huntsman-for-mac/issues/new?template=new_model.md">Open a new model issue</a>
+            </div>
+          </div>
+          <ol>
+            <li>Turn on <strong>Keyboard → Experimental support</strong>.</li>
+            <li>Click <strong>Start LED check</strong>: only one LED lights up, in white.</li>
+            <li>Type the key that lit, then click <strong>Next</strong>.</li>
+            <li>Click <strong>Copy summary</strong> and paste it into a new model issue.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="safety" aria-labelledby="safety-title" style="padding-top:0">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Safety</p>
+        <h2 id="safety-title">Careful with <span class="grad">your keyboard.</span></h2>
+        <p class="lead">The app writes to the keyboard's memory using commands the community worked out by reverse engineering, not from Razer documentation. So it's careful.</p>
+      </div>
+      <div class="safe">
+        <div class="card"><h3>Checked replies</h3><p>Every command checks that the keyboard's reply matches the request and passes its checksum. Actuation writes are also read back key by key.</p></div>
+        <div class="card"><h3>Your settings saved</h3><p>On first launch the app copies every key's settings to a snapshot; <code>restore-snapshot</code> puts them back.</p></div>
+        <div class="card"><h3>Factory reset</h3><p><em>Restore factory depth</em> puts every key back to 1.2 mm and turns off Rapid Trigger and Snap Tap.</p></div>
+        <div class="card"><h3>The tester lets go</h3><p>The keyboard goes back to typing when you stop, after 60 seconds, when you close the window or when the app quits.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="faq" aria-labelledby="faq-title" style="padding-top:0">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">FAQ</p>
+        <h2 id="faq-title">Questions, <span class="grad">answered.</span></h2>
+      </div>
+      <div class="faq">
+        <details open><summary>Does Razer Synapse work with the Huntsman V3 Pro on Mac?</summary><p>Not at the time of writing: Razer Synapse for Mac doesn't support the Huntsman V3 Pro's settings, so actuation, Rapid Trigger and per-key lighting can't be changed there. This app fills that gap.</p></details>
+        <details><summary>How do I change the actuation point of a Razer Huntsman V3 Pro on macOS?</summary><p>Open Huntsman for Mac, select keys (or none for all keys), pick a depth between 0.1 and 4.0 mm and click Apply. The setting is stored on the keyboard, so it stays after unplugging and also works on other computers.</p></details>
+        <details><summary>Can I use Rapid Trigger or Snap Tap on a Mac?</summary><p>Yes, from the Rapid Trigger and Snap Tap tabs. Both have been confirmed on a Huntsman V3 Pro; please report how they work on other models.</p></details>
+        <details><summary>Can I set per-key RGB lighting without Synapse?</summary><p>Yes. Use Lighting → Per key to colour individual keys, or Effect for spectrum, wave, breathing, reactive and starlight. Ripple and other typing effects are in Studio.</p></details>
+        <details><summary>Do I need Windows, Boot Camp or a virtual machine?</summary><p>No. It talks to the keyboard directly over USB from macOS.</p></details>
+        <details><summary>Is it free?</summary><p>Yes. It's open source under GPL-3.0-or-later, with no account, no telemetry and no paid tier.</p></details>
+        <details><summary>Which keyboards are supported?</summary><p>The Razer Huntsman V3 Pro (full size, USB ID 1532:02A6) is tested. The V3 Pro TKL, V3 Pro 8KHz, V3 Pro Mini, V2, V2 TKL and V2 Analog have experimental support: untested, and off until you turn on Experimental support. See <a href="#models">Supported hardware</a>.</p></details>
+        <details><summary>I have one of the experimental models. How can I help?</summary><p>Turn on Experimental support, run the LED check, and report what worked and what didn't. The steps are in <a href="https://github.com/samir777-eng/huntsman-for-mac/blob/master/CONTRIBUTING.md#testing-an-experimental-model">CONTRIBUTING.md</a>.</p></details>
+        <details><summary>Why is there no key tester on my model?</summary><p>The key tester switches the keyboard into a mode where it stops typing. It's only offered on a model that has been tested, so an untested keyboard can't be left unable to type. The V2 family also has no analog keys to test.</p></details>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot">
+      <div>
+        <a class="brand" href="#top" style="margin-bottom:14px;display:inline-flex">
+          <svg width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><rect x="4" y="14" width="56" height="36" rx="8" fill="#0a0a0b" stroke="#6ad7ff" stroke-width="4"/><rect x="14" y="24" width="8" height="6" rx="2" fill="#6ad7ff"/><rect x="28" y="24" width="8" height="6" rx="2" fill="#6ad7ff"/><rect x="42" y="24" width="8" height="6" rx="2" fill="#6ad7ff"/><rect x="18" y="36" width="28" height="6" rx="2" fill="#6ad7ff"/></svg>
+          Huntsman for Mac
+        </a>
+        <p>Made for Mac people with a Huntsman on the desk. If it helps you, a star on GitHub helps others find it.</p>
+        <p>Licence: <a href="https://github.com/samir777-eng/huntsman-for-mac/blob/master/LICENSE">GPL-3.0-or-later</a>. No account, no telemetry, no paid tier. This site sets no cookies and has no trackers.</p>
+      </div>
+      <div>
+        <h2>Project</h2>
+        <ul>
+          <li><a href="https://github.com/samir777-eng/huntsman-for-mac">Source on GitHub</a></li>
+          <li><a href="https://github.com/samir777-eng/huntsman-for-mac/releases/latest">Latest release</a></li>
+          <li><a href="https://github.com/samir777-eng/huntsman-for-mac/blob/master/CONTRIBUTING.md">Contributing</a></li>
+          <li><a href="https://github.com/samir777-eng/huntsman-for-mac/blob/master/SECURITY.md">Security</a></li>
+        </ul>
+      </div>
+      <div>
+        <h2>Credits</h2>
+        <ul>
+          <li><a href="https://github.com/janeblower/easyrazer">easyrazer</a> (GPL-3.0-or-later)</li>
+          <li><a href="https://github.com/openrazer/openrazer">OpenRazer</a> (protocol facts only)</li>
+          <li><a href="https://github.com/ohy1/SensorFinder-for-Razer-Huntsman">SensorFinder for Razer Huntsman</a> (protocol facts only)</li>
+          <li><a href="https://github.com/samir777-eng/huntsman-for-mac/blob/master/NOTICE">NOTICE</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="legal">Unofficial. Not made, endorsed or supported by Razer Inc. "Razer" and "Huntsman" are trademarks of Razer Inc., used only to say which keyboard this software works with. No Razer logos, artwork or software are included. Use at your own risk.</p>
+  </div>
+</footer>
+
+<script>
+document.querySelectorAll(".copy").forEach(function (b) {
+  if (!navigator.clipboard) return;
+  b.hidden = false;
+  b.addEventListener("click", function () {
+    navigator.clipboard.writeText(b.dataset.copy).then(function () {
+      b.textContent = "Copied";
+      setTimeout(function () { b.textContent = "Copy"; }, 1600);
+    });
+  });
+});
+</script>
+</body>
+</html>

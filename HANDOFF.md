@@ -6,7 +6,7 @@ Current state of Huntsman for Mac, updated 2026-11-18.
 - **Released:** v0.3.0 "More models" (https://github.com/samir777-eng/huntsman-for-mac/releases/tag/v0.3.0).
   v0.1.0 and v0.2.0 are also tagged. `master` = v0.3.0 (merge of branch `v3-models`, kept for history).
 - **Repo:** public, GitHub `samir777-eng/huntsman-for-mac`, default branch `master`, SEO description + 18 topics.
-- **Tests:** 1245 passing on the Mac (branch `windows`): `python -m pytest -q tests` (simulated keyboard, fake transports,
+- **Tests:** 1257 passing on the Mac (branch `windows`): `python -m pytest -q tests` (simulated keyboard, fake transports,
   headless Chromium UI tests in demo mode). Dev env: `requirements.txt` + `requirements-dev.txt`, then
   `playwright install chromium`. GitHub Actions `CI` (.github/workflows/ci.yml) runs it on macos-latest and
   windows-latest (Windows: `requirements-win.txt`; 37 `mac_only` tests skipped, see tests/conftest.py).
@@ -47,6 +47,12 @@ venv into the bundle and signs it ad hoc; unsigned apps can't read ~/Downloads):
   `Huntsman.exe --version` / `--self-test`, workflow `Windows build` (dispatch, packaging pushes, release published →
   `Huntsman-for-Windows-<version>.zip` attached). Frozen self-test passes on windows-latest; nothing run on a real
   Windows PC with a keyboard. Next: W4 docs (README/landing Windows section, SmartScreen, CHANGELOG).
+- Review fixes after 0.4.0 (branch `windows`, CHANGELOG "Unreleased"): while Synapse runs nothing reaches the keyboard
+  (`HidTransport` refuses to open/exchange, `hc.synapse_block()`, app/service drop handles, `Api.platform_status()`
+  is the window's only poll, `model()` answers from the last model with `offline`); build workflow `contents: read`
+  with a separate `release` job (tag minus v must equal the built version); V2 Analog "Just above" always uses
+  `sc.release(thr)`; Windows start at login respects a removed Run value (`state.json["autostart_added"]`, re-added
+  by Studio on); `win_window` per-start stop flag.
 - Layouts: `layout.json` (02A6) + `layouts/<PID>.json`; LED positions for experimental models are guesses
   (reasoning in the models.py docstring) until testers send LED check results.
 - Gate (`huntsman_core.gate`, `Keyboard.check_write`, `_check_command`): experimental models get reads only until

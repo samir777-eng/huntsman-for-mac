@@ -191,3 +191,20 @@ def test_page_says_the_windows_build_is_experimental_and_untested():
     assert "SmartScreen" in win and "Synapse" in win and "Dynamic Lighting" in win
     assert 'href="#windows"' in text
     assert "Does it work on Windows?" in text
+
+
+def test_preset_and_effect_counts_match_the_code():
+    """The landing page and README state how many built-in presets and effects Studio has; keep them true."""
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from lighting import effects as fx
+    from lighting.presets import builtin_presets
+    words = {8: "eight", 14: "fourteen", 17: "17"}
+    presets, effects = len(builtin_presets()), len(fx.REGISTRY)
+    text, readme = _html(), (ROOT / "README.md").read_text(encoding="utf-8")
+    assert f"<b>{presets}</b><span>built-in presets</span>" in text
+    claim = f"{effects} effects and {words[presets]} built-in presets"
+    assert claim in text and claim in readme
+    assert f"**Presets.** {words[presets].capitalize()} built in: " in readme
+    for p in builtin_presets():
+        assert p.name in readme.split("**Presets.**", 1)[1].split("\n- ", 1)[0], p.name

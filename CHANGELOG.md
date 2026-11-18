@@ -54,6 +54,10 @@ All notable changes to this project are listed here. Versions follow [Semantic V
   active saved profile first and then the live one, and is read back. Reads show the depth the keyboard acts on, so a
   key Synapse left at 0/0 shows as 1.62 mm. Key ids are easyrazer's 0266 key map; all 104 keys of the layout match.
 - The V2 Analog gets the first-launch snapshot, and `huntsman.py restore-snapshot` works on it.
+- Six more built-in Studio presets, after the original eight (fourteen in all): Plasma (a vivid flowing plasma),
+  Starfield (twinkling stars on a deep blue sky), Ripple (colour rings from each key press over a dim base),
+  Spectrum bars (sound bars in blue to pink over a slowly drifting base), Sunset (a slow warm gradient) and Neon
+  cycle (the whole keyboard fading through neon colours). They work on every model's layout.
 
 ### Changed
 - Every JSON and text file the app reads or writes is opened as UTF-8 (found by CI on Windows, where the locale

@@ -200,7 +200,7 @@ Settings stored on the keyboard (actuation, keyboard effects) stay on it.
     <td width="50%"><a href="#lighting-studio"><img src="docs/screenshot-studio.png" alt="Studio tab: the Aurora preset running, with its layer, palette and speed settings"></a></td>
     <td width="50%">
       <p><b>🌈 Lighting Studio</b></p>
-      Layers, 17 effects and eight built-in presets, reacting to your typing and your music. Studio runs in a small
+      Layers, 17 effects and fourteen built-in presets, reacting to your typing and your music. Studio runs in a small
       background lighting service, so close the app and your aurora keeps drifting.
       <a href="#lighting-studio">More →</a>
     </td>
@@ -288,7 +288,8 @@ with what you're doing.
 - **17 effects.** Basic: solid colour, gradient (linear or radial, 2 to 5 colours), rainbow wave, colour cycle,
   breathing. Ambient: aurora, matrix rain, plasma, fire, starfield. Sound: audio spectrum (bars across the keyboard),
   audio pulse. Typing: ripple, afterglow, explosion, trail, and a typing heatmap.
-- **Presets.** Eight built in: Rainbow wave, Aurora, Gaming WASD, Typing glow, Music, Fire, Matrix, Calm breathing.
+- **Presets.** Fourteen built in: Rainbow wave, Aurora, Gaming WASD, Typing glow, Music, Fire, Matrix, Calm breathing,
+  Plasma, Starfield, Ripple, Spectrum bars, Sunset, Neon cycle.
   Save, save as, rename, duplicate, delete, and import or export a preset as a JSON file. Built-in presets can't be
   changed; save a copy instead. Brightness and smoothness (15 to 60 frames a second) apply to every preset.
 - **Sound.** Choose the input in Studio → Sound. A microphone hears the room. For the Mac's own sound, install a

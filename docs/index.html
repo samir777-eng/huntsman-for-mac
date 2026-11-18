@@ -316,10 +316,10 @@ footer p{margin:0 0 12px}
           <div class="frame-bar" aria-hidden="true"><i></i><i></i><i></i></div>
           <picture>
             <source media="(prefers-reduced-motion: reduce)" srcset="screenshot-studio.png">
-            <img src="demo-studio.gif" width="900" height="322" alt="Demo mode: the Lighting Studio's Rainbow wave preset sweeping across the on-screen keyboard" fetchpriority="high">
+            <img src="demo-studio.gif" width="900" height="322" alt="Demo mode: Lighting Studio running a preset on the on-screen keyboard" fetchpriority="high">
           </picture>
         </div>
-        <figcaption>Lighting Studio's Rainbow wave preset, recorded in the app's demo mode.</figcaption>
+        <figcaption>Lighting Studio in the app's demo mode.</figcaption>
       </figure>
 
       <dl class="stats">
@@ -351,7 +351,7 @@ footer p{margin:0 0 12px}
           <div class="shot">
             <picture>
               <source media="(prefers-reduced-motion: reduce)" srcset="screenshot-actuation.png">
-              <img src="demo-key-tester.gif" width="960" height="675" loading="lazy" alt="Demo mode, Actuation tab: the key tester running while W, A, S and D sink in turn, the travel meter follows each key and the trace draws its travel">
+              <img src="demo-key-tester.gif" width="960" height="675" loading="lazy" alt="Demo mode, Actuation tab: the key tester showing key travel on the meter and in the readings">
             </picture>
           </div>
           <h3>Key tester: watch each key's travel live</h3>
@@ -433,21 +433,21 @@ footer p{margin:0 0 12px}
     <div class="wrap">
       <div class="section-head">
         <p class="eyebrow">Supported hardware</p>
-        <h2 id="models-title">One keyboard tested. <span class="grad">Six more on the way.</span></h2>
+        <h2 id="models-title">One keyboard tested. <span class="grad">Six more, looking for testers.</span></h2>
         <p class="lead">Wired only. Only the Huntsman V3 Pro (1532:02A6) has been tested with this app. The other models are experimental: the app sends them only commands checked on the V3 Pro, and their LED positions are a guess until a tester confirms them with the LED check.</p>
       </div>
       <div class="tbl">
-        <table class="models">
+        <table class="models" role="table">
           <caption class="sr">Supported Razer Huntsman models, their USB IDs, test status and what the app offers</caption>
-          <thead><tr><th scope="col">Model</th><th scope="col">USB ID</th><th scope="col">Status</th><th scope="col">What the app offers</th></tr></thead>
+          <thead><tr role="row"><th scope="col" role="columnheader">Model</th><th scope="col" role="columnheader">USB ID</th><th scope="col" role="columnheader">Status</th><th scope="col" role="columnheader">What the app offers</th></tr></thead>
           <tbody>
-            <tr class="hero-row"><th scope="row">Huntsman V3 Pro</th><td>1532:02A6</td><td><span class="badge tested">✓ Tested</span></td><td>Everything: actuation, Rapid Trigger, Snap Tap, lighting, per-key colours, Studio, key tester</td></tr>
-            <tr><th scope="row">Huntsman V3 Pro TKL</th><td>1532:02A7</td><td><span class="badge exp">Experimental, untested</span></td><td>Lighting, per-key colours, Studio, actuation, Rapid Trigger, Snap Tap. No key tester</td></tr>
-            <tr><th scope="row">Huntsman V3 Pro 8KHz</th><td>1532:02CF</td><td><span class="badge exp">Experimental, untested</span></td><td>Lighting, per-key colours, Studio, actuation, Rapid Trigger, Snap Tap. No key tester</td></tr>
-            <tr><th scope="row">Huntsman V3 Pro Mini</th><td>1532:02B0</td><td><span class="badge exp">Experimental, untested</span></td><td>Lighting, per-key colours, Studio, actuation, Rapid Trigger, Snap Tap. No key tester</td></tr>
-            <tr><th scope="row">Huntsman V2</th><td>1532:026C</td><td><span class="badge exp">Experimental, untested</span></td><td>Lighting, per-key colours and Studio only</td></tr>
-            <tr><th scope="row">Huntsman V2 TKL</th><td>1532:026B</td><td><span class="badge exp">Experimental, untested</span></td><td>Lighting, per-key colours and Studio only</td></tr>
-            <tr><th scope="row">Huntsman V2 Analog</th><td>1532:0266</td><td><span class="badge exp">Experimental, untested</span></td><td>Lighting, per-key colours and Studio only. No starlight effects; its analog features aren't supported</td></tr>
+            <tr role="row" class="hero-row"><th scope="row" role="rowheader">Huntsman V3 Pro</th><td role="cell">1532:02A6</td><td role="cell"><span class="badge tested">✓ Tested</span></td><td role="cell">Everything: actuation, Rapid Trigger, Snap Tap, lighting, per-key colours, Studio, key tester</td></tr>
+            <tr role="row"><th scope="row" role="rowheader">Huntsman V3 Pro TKL</th><td role="cell">1532:02A7</td><td role="cell"><span class="badge exp">Experimental, untested</span></td><td role="cell">Lighting, per-key colours, Studio, actuation, Rapid Trigger, Snap Tap. No key tester</td></tr>
+            <tr role="row"><th scope="row" role="rowheader">Huntsman V3 Pro 8KHz</th><td role="cell">1532:02CF</td><td role="cell"><span class="badge exp">Experimental, untested</span></td><td role="cell">Lighting, per-key colours, Studio, actuation, Rapid Trigger, Snap Tap. No key tester</td></tr>
+            <tr role="row"><th scope="row" role="rowheader">Huntsman V3 Pro Mini</th><td role="cell">1532:02B0</td><td role="cell"><span class="badge exp">Experimental, untested</span></td><td role="cell">Lighting, per-key colours, Studio, actuation, Rapid Trigger, Snap Tap. No key tester</td></tr>
+            <tr role="row"><th scope="row" role="rowheader">Huntsman V2</th><td role="cell">1532:026C</td><td role="cell"><span class="badge exp">Experimental, untested</span></td><td role="cell">Lighting, per-key colours and Studio only</td></tr>
+            <tr role="row"><th scope="row" role="rowheader">Huntsman V2 TKL</th><td role="cell">1532:026B</td><td role="cell"><span class="badge exp">Experimental, untested</span></td><td role="cell">Lighting, per-key colours and Studio only</td></tr>
+            <tr role="row"><th scope="row" role="rowheader">Huntsman V2 Analog</th><td role="cell">1532:0266</td><td role="cell"><span class="badge exp">Experimental, untested</span></td><td role="cell">Lighting, per-key colours and Studio only. No starlight effects; its analog features aren't supported</td></tr>
           </tbody>
         </table>
       </div>
@@ -464,12 +464,12 @@ footer p{margin:0 0 12px}
       <ol class="steps" style="list-style:none;margin:0;padding:0">
         <li class="step">
           <h3>Get the code</h3>
-          <div class="code"><div class="code-bar"><span>Terminal</span><button class="copy" type="button" hidden data-copy="git clone https://github.com/samir777-eng/huntsman-for-mac.git&#10;cd huntsman-for-mac">Copy</button></div><pre><code>git clone https://github.com/samir777-eng/huntsman-for-mac.git
+          <div class="code"><div class="code-bar"><span>Terminal</span><button class="copy" type="button" hidden aria-label="Copy clone commands" data-copy="git clone https://github.com/samir777-eng/huntsman-for-mac.git&#10;cd huntsman-for-mac">Copy</button></div><pre><code>git clone https://github.com/samir777-eng/huntsman-for-mac.git
 cd huntsman-for-mac</code></pre></div>
         </li>
         <li class="step">
           <h3>Install it</h3>
-          <div class="code"><div class="code-bar"><span>Terminal</span><button class="copy" type="button" hidden data-copy="./install.sh">Copy</button></div><pre><code>./install.sh</code></pre></div>
+          <div class="code"><div class="code-bar"><span>Terminal</span><button class="copy" type="button" hidden aria-label="Copy install command" data-copy="./install.sh">Copy</button></div><pre><code>./install.sh</code></pre></div>
           <p>Installs the app in <code>~/Applications</code>, libusb through Homebrew if it's missing, and the lighting service.</p>
         </li>
         <li class="step">

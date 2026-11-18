@@ -20,3 +20,9 @@ A one-page site at https://samir777-eng.github.io/huntsman-for-mac/ so people se
 tests/test_site.py: every local asset referenced by index.html exists; version in JSON-LD equals __version__;
 canonical/OG URLs absolute on the Pages domain; FAQPage JSON-LD parses; no external <script src>; robots/sitemap
 present and point at the site; SPDX header (tests/test_repo.py rules).
+
+## Review (independent Opus)
+No Critical. Fixed: "Six more on the way" → "Six more, looking for testers"; alt text fits both GIF and reduced-motion
+still; copy buttons labelled; models table keeps table roles on mobile. Accepted: FAQ JSON-LD won't give rich results
+(harmless); 1.5 MB hero GIF; plans in docs/ are published as raw Markdown (already public; kept where the workflow
+puts them).

@@ -208,6 +208,23 @@ def test_on_frame_gets_the_preview_while_paused():
     assert len(got) == 1 and kb.frames == []
 
 
+def test_preview_composes_for_the_window_without_touching_the_keyboard():
+    """Studio off: the window still previews edits. Nothing is connected or sent."""
+    kb, made = FakeKb(), []
+    eng = Engine(lambda: made.append(1) or kb, KM)
+    got = []
+    eng.on_frame(got.append)
+    assert eng.preview(1.0) is False            # no preset yet
+    eng.set_preset(preset())
+    assert eng.preview(1.0) is True
+    assert len(got) == 1 and set(got[0]) == set(KM.ids)
+    eng.preview(2.0)                            # unchanged: not sent again
+    assert len(got) == 1
+    eng.preview(3.0, fresh=True)                # a window that just opened Studio gets it again
+    assert len(got) == 2
+    assert made == [] and kb.frames == [] and kb.modes == 0
+
+
 def test_thread_runs_at_the_target_fps_and_stop_restores():
     restored = []
     eng, kb = make(fps=20, restore=lambda: restored.append(1))

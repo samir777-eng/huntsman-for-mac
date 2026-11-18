@@ -244,6 +244,29 @@ class Engine:
             return False
         return True
 
+    def preview(self, now=None, fresh=False):
+        """Compose the current preset for the on_frame callbacks only: no keyboard is connected and nothing is sent
+        (Studio off, the window still previews edits). Pending key events are left for step(). fresh=True hands
+        over the frame even if unchanged, for a window that has just started showing it. True if a frame was
+        composed."""
+        now = self._clock() if now is None else now
+        with self._lock:
+            preset = self._preset
+            ctx = RenderContext(keymap=self.keymap, keys=self.keymap.ids, params={}, audio=self._audio,
+                                events=[], heat=dict(self._heat))
+            brightness = self._brightness
+        if preset is None:
+            return False
+        try:
+            frame = compose(preset.layers, now, ctx, brightness=brightness * preset.brightness)
+        except Exception as e:
+            self._report(e)
+            return False
+        if fresh:
+            self._preview_at = self._preview_frame = None
+        self._preview(now, frame)
+        return True
+
     # ---------- helpers ----------
 
     def _rows(self, frame, keymap):

@@ -904,6 +904,10 @@ class Api:
     def update_layers(self, layers):
         return self._studio("update_layers", layers=layers)
 
+    def studio_preview(self, seconds):
+        """Studio off: the window's board previews the working preset for `seconds` (nothing reaches the keys)."""
+        return self._studio("studio_preview", seconds=seconds)
+
     def set_studio_brightness(self, level):
         return self._studio("set_studio_brightness", level=level)
 

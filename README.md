@@ -510,7 +510,8 @@ Huntsman for Mac, and has **Quit lighting service**, which stops Studio and puts
 - The service starts at login and when the installer finishes. When it starts, it sends per-key colours, Rapid
   Trigger and Snap Tap to the keyboard again and starts Studio if it was on.
 - It's set up to restart if it crashes (not checked on hardware yet). After *Quit lighting service* it stays off
-  until the next login, or until you use Studio in the app, which starts it again.
+  until the next login or the next time you open the app: the window starts it again when it opens (it reads
+  Studio's state from the service).
 - Quitting the app window (red button, Cmd-Q) just closes the window; the lighting keeps running.
 - While the app changes the keyboard (actuation, keyboard effects, per-key colours, brightness, the key tester), the
   service pauses its frames.

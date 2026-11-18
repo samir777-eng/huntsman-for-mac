@@ -21,7 +21,7 @@ Windows (experimental, untested on a Windows PC): the same service runs as `Hunt
 service.py from source), started at login by the HKCU Run value (platforms/win_autostart.py) and by the app when
 it isn't answering; a pystray tray icon (platforms/win_tray.py) shows the same menu; logoff/shutdown arrive as
 WM_ENDSESSION on a hidden window. Quitting leaves start at login on, so, as on the Mac, it stays off until the next
-login or until Studio is used. While Razer Synapse runs the keyboard isn't opened at all (platforms/win_guard.py):
+login or until the app's window opens (it asks the service for Studio's state, starting it). While Razer Synapse runs the keyboard isn't opened at all (platforms/win_guard.py):
 Studio stays off, the tray says why, and check_guard() (every few seconds) turns Studio back on once Synapse quits if it
 was on before.
 """

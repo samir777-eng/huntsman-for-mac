@@ -6,7 +6,7 @@ Current state of Huntsman for Mac, updated 2026-11-18.
 - **Released:** v0.3.0 "More models" (https://github.com/samir777-eng/huntsman-for-mac/releases/tag/v0.3.0).
   v0.1.0 and v0.2.0 are also tagged. `master` = v0.3.0 (merge of branch `v3-models`, kept for history).
 - **Repo:** public, GitHub `samir777-eng/huntsman-for-mac`, default branch `master`, SEO description + 18 topics.
-- **Tests:** 1310 passing (7 skipped) on the Mac (branch `windows`): `python -m pytest -q tests` (simulated keyboard, fake transports,
+- **Tests:** 1321 passing (7 skipped) on the Mac (branch `windows`): `python -m pytest -q tests` (simulated keyboard, fake transports,
   headless Chromium UI tests in demo mode). Dev env: `requirements.txt` + `requirements-dev.txt`, then
   `playwright install chromium`. GitHub Actions `CI` (.github/workflows/ci.yml) runs it on macos-latest and
   windows-latest (Windows: `requirements-win.txt`; 37 `mac_only` tests skipped, see tests/conftest.py).
@@ -62,7 +62,11 @@ venv into the bundle and signs it ad hoc; unsigned apps can't read ~/Downloads):
   built-ins. Batch B: Keyboard label on the gear, disabled key tester with the reason, one folded Synapse notice
   (lock note hidden while Synapse runs), Select bar only where selection applies + "Applying to N selected keys ·
   Clear", Snap Tap switch/Apply/dirty/board picking (same `set_snap`), 32 px layer buttons, Solid colour over layers
-  Normal 50 %, "Onboard profile". Needs the independent review and a hardware check (actuation, Snap Tap, preview).
+  Normal 50 %, "Onboard profile". Review fixes: the Apply confirm names only the keys that will change ("99 keys will
+  change from 2.0 mm to 1.0 mm"; skipped when the scope is at one depth), no preset pressed while Mixed, Snap Tap pick
+  order resets on leaving the tab/Reconnect, focus moves to the stage Reconnect when panes/board go inert, disabled Snap Tap
+  button reads "Apply", `Studio._previewing` resets if the preview loop or its spawn raises. Needs a hardware check
+  (actuation, Snap Tap, preview).
 - Layouts: `layout.json` (02A6) + `layouts/<PID>.json`; LED positions for experimental models are guesses
   (reasoning in the models.py docstring) until testers send LED check results.
 - Gate (`huntsman_core.gate`, `Keyboard.check_write`, `_check_command`): experimental models get reads only until

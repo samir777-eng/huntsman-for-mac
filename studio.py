@@ -519,20 +519,34 @@ class Studio:
             if self._previewing or self._preview_until is None or self.settings["enabled"]:
                 return
             self._previewing = True
-            self._apply()   # the engine composes what the window would show
-        self._spawn(self._preview_loop)
+            try:
+                self._apply()   # the engine composes what the window would show
+            except BaseException:
+                self._previewing = False
+                raise
+        try:
+            self._spawn(self._preview_loop)
+        except BaseException:
+            with self._lock:
+                self._previewing = False   # no loop started, so a later request may start one
+            raise
 
     def _preview_loop(self):
         fresh = True
-        while True:
+        try:
+            while True:
+                with self._lock:
+                    if (self.settings["enabled"] or self._preview_until is None
+                            or self._clock() >= self._preview_until):
+                        self._previewing = False   # with the check, so a request arriving now starts a new loop
+                        return
+                self.engine.preview(fresh=fresh)   # the engine's own lock; Studio's isn't held while composing
+                fresh = False
+                self._sleep(1.0 / PREVIEW_FPS)
+        except BaseException:
             with self._lock:
-                if (self.settings["enabled"] or self._preview_until is None
-                        or self._clock() >= self._preview_until):
-                    self._previewing = False
-                    return
-            self.engine.preview(fresh=fresh)   # the engine's own lock; Studio's isn't held while composing
-            fresh = False
-            self._sleep(1.0 / PREVIEW_FPS)
+                self._previewing = False   # composing raised: the next request starts a loop again
+            raise
 
     def gui_ready(self):
         """The Cocoa loop is running: smart lighting can observe sleep, lock and app switches now."""

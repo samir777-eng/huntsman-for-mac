@@ -259,7 +259,7 @@ function refreshButtons() {
       : `Rapid Trigger is on for ${plural((r.keys || []).length, "key")}, marked with a bar. Select keys to change which ones it covers.`);
   }
   const [a, b] = snapPair(), snapOn = $("#snapOn").checked, sd = snapDirty();
-  $("#applySnap").textContent = !snapOn ? (state.snap ? "Turn off Snap Tap" : "Snap Tap is off")
+  $("#applySnap").textContent = !snapOn ? (state.snap ? "Turn off Snap Tap" : "Apply")   // #snapState says it's off
     : a === b ? "Choose two different keys" : `Apply to ${label(a)} and ${label(b)}`;
   $("#applySnap").disabled = !sd || (snapOn && a === b);
   $("#snapDirty").hidden = !sd;
@@ -323,10 +323,13 @@ function platformUi() {
 // No keyboard: the stage says so with a Reconnect button, and the panes (all but Keyboard) are off, not merely idle
 function noKbUi() {
   const none = !model && !platform.blocked;
+  // focus in a pane that goes inert would drop to the page: it moves to the stage's Reconnect instead
+  const lost = none && $("#noKb").hidden && document.activeElement?.closest?.('.pane:not([data-pane="device"]), #kbWrap, #dock');
   $("#noKb").hidden = !none; $("#kbWrap").hidden = $("#dock").hidden = none;
   $$(".pane").forEach(p => { const off = none && p.dataset.pane !== "device"; p.inert = off; p.classList.toggle("dimmed", off); });
   $(".device-name").textContent = model ? model.name : "No keyboard";
   $("#noKbWhy").textContent = none && modelError ? modelError : "";
+  if (lost) $("#emptyReconnect").focus();
 }
 // The key tester shows on every model with Actuation, disabled with the reason where it isn't offered
 function testerWhy() {
@@ -482,6 +485,7 @@ async function show(v) {
   if (!viewShown(v)) v = "lighting";   // a tab this model doesn't have
   if (testing && v !== "actuation") await stopTest();   // the key tester lives in Actuation
   if (v !== view) hideToast();
+  if (v !== view && view === "snap") snapNext = 0;   // picking a pair starts over at the first key
   view = v;
   $$("button[data-view]").forEach(b => { if (b.dataset.view === v) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   $$(".pane").forEach(p => p.hidden = p.dataset.pane !== v);
@@ -532,7 +536,7 @@ function depthUi() {
   const rel = $("#rel"); rel.max = relTop().toFixed(act.decimals);
   if (+rel.value > +rel.max) rel.value = rel.max;
   $("#relOut").textContent = mm(rel.value); valueText("rel", mm(rel.value));
-  $$("#presets button").forEach(b => b.setAttribute("aria-pressed", +b.dataset.v === depth()));
+  $$("#presets button").forEach(b => b.setAttribute("aria-pressed", !mix && +b.dataset.v === depth()));   // none while Mixed
   fillAll(); meterLines(); dirtyUi();
 }
 $("#depth").oninput = edited; $("#rel").oninput = edited;
@@ -558,18 +562,33 @@ function setAct(next) {
   lo.textContent = `${act.min.toFixed(act.decimals)} mm, lightest`; hi.textContent = `${act.max.toFixed(act.decimals)} mm, deepest`;
   fillPresets(); depthUi(); paint();
 }
-// Keys in scope at other depths (usually ones set on purpose, like WASD) are named and confirmed before they change
+// While the keys in scope are at different depths (usually some set on purpose, like WASD), the readout said
+// "Mixed", so Apply says which keys will change and which already match before writing. Keys at one depth (the one
+// the readout showed) are applied without asking.
+const near = (x, y) => Math.abs(x - y) < 0.001;
+function keyNames(ids, many) { return ids.length <= 8 ? ids.map(label).join(", ") : many; }
 function confirmApply() {
-  const groups = scopeDepths();
-  if (groups.length < 2) return Promise.resolve(true);
-  const odd = groups.slice(1).flatMap(([, ids]) => ids);
-  const names = odd.slice(0, 8).map(label).join(", ") + (odd.length > 8 ? ` and ${odd.length - 8} more` : "");
-  const at = groups.length === 2 ? `${odd.length === 1 ? "is" : "are"} at ${mm(groups[1][0])} now` : "use other depths now";
-  const all = scopeIds().length, d = $("#confirmApply");
-  $("#caBody").textContent = `${names} ${at}. Applying sets ${selected.size ? `all ${plural(all, "selected key")}` : `all ${all} keys`} to ${mm(depth())}.`;
+  if (scopeDepths().length < 2) return Promise.resolve(true);
+  const d = depth(), custom = $("#relMode").value === "custom", r = relValue();
+  const changes = id => !near(points[id][0], d) || (custom && !near(points[id][1], r));
+  const ids = scopeIds(), change = ids.filter(changes), keep = ids.filter(id => !changes(id));
+  if (!change.length) return Promise.resolve(true);
+  const from = new Map();
+  change.filter(id => !near(points[id][0], d)).forEach(id => { const x = points[id][0]; from.set(x, [...(from.get(x) || []), id]); });
+  const groups = [...from.entries()].sort((a, b) => b[1].length - a[1].length || a[0] - b[0]);
+  const resetOnly = change.filter(id => near(points[id][0], d));   // at the depth already, a new custom reset point
+  const n = groups.reduce((t, [, g]) => t + g.length, 0), resetting = custom ? `, resetting at ${mm(r)}` : "";
+  const who = g => keyNames(g, plural(g.length, "key"));
+  let text = groups.length === 1 ? `${who(groups[0][1])} will change from ${mm(groups[0][0])} to ${mm(d)}${resetting}.`
+    : `${plural(n, "key")} will change to ${mm(d)}${resetting}: ` + groups.map(([x, g]) => `${who(g)} from ${mm(x)}`).join("; ") + ".";
+  if (resetOnly.length) text += ` ${who(resetOnly)} ${resetOnly.length === 1 ? "keeps" : "keep"} ${mm(d)} and get${resetOnly.length === 1 ? "s" : ""} a new reset point at ${mm(r)}.`;
+  const one = keep.length === 1;
+  if (keep.length) text += ` ${keyNames(keep, `The other ${keep.length} keys`)} already ${custom ? (one ? "matches" : "match") : `${one ? "types" : "type"} at ${mm(d)}`}.`;
+  const dlg = $("#confirmApply");
+  $("#caBody").textContent = text;
   $("#caOk").textContent = $("#applyDepth").textContent;
-  d.returnValue = ""; d.showModal();
-  return new Promise(res => d.addEventListener("close", () => { res(d.returnValue === "apply"); $("#applyDepth").focus(); }, { once: true }));
+  dlg.returnValue = ""; dlg.showModal();
+  return new Promise(res => dlg.addEventListener("close", () => { res(dlg.returnValue === "apply"); $("#applyDepth").focus(); }, { once: true }));
 }
 $("#applyDepth").onclick = async e => {
   const btn = e.currentTarget;
@@ -866,6 +885,7 @@ window.onProgress = (done, total) => {
 // Reconnect (Keyboard pane, and the stage while no keyboard answers): says which keyboard answered, or why none did
 async function reconnect(btn) {
   const fromStage = btn.id === "emptyReconnect";
+  snapNext = 0; $("#stageNote").textContent = stageNote(view);
   await busy(btn, async () => {
     const done = await call("reconnect");
     if (!(await load())) { if (!model && !platform.blocked) toast(modelError || "No keyboard answered.", true); return; }

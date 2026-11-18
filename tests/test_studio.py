@@ -732,3 +732,32 @@ def test_preview_seconds_are_checked(preview_api):
     assert not preview_api.studio_preview("soon")["ok"]
     ok(preview_api.studio_preview(3600))                   # capped, so a lost window can't keep it running
     assert len(preview_api.svc.studio.engine.previews) <= 31 * 15
+
+
+def test_preview_flag_resets_if_the_loop_raises(preview_api):
+    st, eng = preview_api.svc.studio, preview_api.svc.studio.engine
+    real = eng.preview
+
+    def boom(**_):
+        raise RuntimeError("compose failed")
+    eng.preview = boom
+    with pytest.raises(RuntimeError):
+        st.preview(1.0)
+    assert st._previewing is False
+    eng.preview = real
+    st.preview(1.0)                                         # a later request starts a loop again
+    assert len(eng.previews) >= 14
+
+
+def test_preview_flag_resets_if_the_loop_cannot_start(preview_api):
+    st, eng = preview_api.svc.studio, preview_api.svc.studio.engine
+
+    def no_thread(fn):
+        raise RuntimeError("can't start a thread")
+    spawn, st._spawn = st._spawn, no_thread
+    with pytest.raises(RuntimeError):
+        st.preview(1.0)
+    assert st._previewing is False
+    st._spawn = spawn
+    st.preview(1.0)
+    assert len(eng.previews) >= 14

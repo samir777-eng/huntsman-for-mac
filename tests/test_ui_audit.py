@@ -362,7 +362,8 @@ def test_snap_tap_switch_apply_and_state(page):  # noqa: F811
     page.click('.tabs button[data-view="snap"]')
     on, btn, dirty = page.locator("#snapOn"), page.locator("#applySnap"), page.locator("#snapDirty")
     expect(on).not_to_be_checked()
-    expect(btn).to_have_text("Snap Tap is off")
+    expect(btn).to_have_text("Apply")                                          # the status line says it's off
+    expect(page.locator("#snapState")).to_have_text("Off")
     expect(btn).to_be_disabled()
     expect(dirty).to_be_hidden()
     page.check("#snapOn")
@@ -441,3 +442,97 @@ def test_device_info_says_onboard_profile(page):  # noqa: F811
     page.locator("header .gear").click()
     expect(page.locator("#devInfo")).to_contain_text("Onboard profile")
     expect(page.locator("#devInfo")).not_to_contain_text("Stored profile")
+
+
+# ---------- review fixes ----------
+
+def test_apply_to_the_minority_depth_names_the_keys_that_change(page):  # noqa: F811
+    set_depth(page, "1.0")                                                     # WASD are at 1.0, the rest at 2.0
+    page.click("#applyDepth")
+    body = page.locator("#caBody")
+    expect(page.locator("#confirmApply")).to_be_visible()
+    expect(body).to_contain_text("99 keys will change from 2.0 mm to 1.0 mm")
+    expect(body).to_contain_text("W, A, S, D already type at 1.0 mm")
+    expect(body).not_to_contain_text("are at 1.0 mm now")
+    page.locator('#confirmApply button[value="apply"]').click()
+    (args,) = wait_for_call(page, "set_depth")
+    assert args[0] == [] and args[1] == 1.0
+    assert page.errors == []
+
+
+def test_apply_to_the_majority_depth_names_the_few_keys_that_change(page):  # noqa: F811
+    page.click("#applyDepth")                                                  # untouched: 2.0, the most keys
+    body = page.locator("#caBody")
+    expect(body).to_contain_text("W, A, S, D will change from 1.0 mm to 2.0 mm")
+    expect(body).to_contain_text("The other 99 keys already type at 2.0 mm")
+    page.locator('#confirmApply button[value="cancel"]').click()
+    assert calls(page, "set_depth") == []
+
+
+def test_apply_does_not_ask_once_every_key_shares_the_depth_shown(page):  # noqa: F811
+    page.click("#applyDepth")
+    page.locator('#confirmApply button[value="apply"]').click()
+    wait_for_call(page, "set_depth")
+    expect(page.locator("#depthNum")).to_have_text("2.0")                      # one depth now
+    set_depth(page, "1.0")
+    page.click("#applyDepth")
+    page.wait_for_function("() => window.__calls.filter(c => c[0] === 'set_depth').length === 2")
+    expect(page.locator("#confirmApply")).to_be_hidden()
+    assert calls(page, "set_depth")[-1][1] == 1.0
+
+
+def test_no_depth_preset_is_pressed_while_the_readout_says_mixed(page):  # noqa: F811
+    expect(page.locator("#depthNum")).to_have_text("Mixed")
+    expect(page.locator('#presets button[aria-pressed="true"]')).to_have_count(0)
+    page.click('#selectTools [data-sel="wasd"]')                               # WASD alone: 1.0, Gaming
+    expect(page.locator('#presets button[aria-pressed="true"]')).to_have_count(1)
+    expect(page.locator('#presets button[aria-pressed="true"]')).to_have_attribute("data-v", "1")
+
+
+def test_snap_tap_pick_order_starts_over_after_leaving_the_tab_or_reconnecting(page):  # noqa: F811
+    page.click('.tabs button[data-view="snap"]')
+    cap(page, "Q").click()
+    expect(page.locator("#stageNote")).to_contain_text("second key")
+    page.click('.tabs button[data-view="lighting"]')
+    page.click('.tabs button[data-view="snap"]')
+    expect(page.locator("#stageNote")).not_to_contain_text("Now click the second key")
+    cap(page, "E").click()
+    expect(page.locator("#snapA")).to_have_value(str(IDS["E"]))               # the first key again
+    page.evaluate('reconnect($("#reload"))')
+    expect(page.locator("#toast")).to_have_text("Connected to Huntsman V3 Pro")
+    expect(page.locator("#stageNote")).not_to_contain_text("Now click the second key")
+    cap(page, "R").click()
+    expect(page.locator("#snapA")).to_have_value(str(IDS["R"]))
+    assert page.errors == []
+
+
+def test_focus_moves_to_reconnect_when_the_keyboard_goes_away(page):  # noqa: F811
+    page.locator("#applyDepth").focus()                                        # in the Actuation pane
+    expect(page.locator("#applyDepth")).to_be_focused()
+    page.evaluate("model = null; noKbUi()")
+    expect(page.locator("#emptyReconnect")).to_be_focused()
+    assert page.errors == []
+
+
+def test_focus_stays_put_when_it_was_outside_the_panes(page):  # noqa: F811
+    page.locator('.tabs button[data-view="lighting"]').focus()
+    page.evaluate("model = null; noKbUi()")
+    expect(page.locator('.tabs button[data-view="lighting"]')).to_be_focused()
+
+
+def test_apply_with_a_custom_reset_names_keys_that_only_get_a_new_reset_point(page):  # noqa: F811
+    page.select_option("#relMode", "custom")
+    set_depth(page, "1.0")
+    page.locator("#rel").evaluate("e => { e.value = 0.5; e.dispatchEvent(new Event('input', {bubbles: true})); }")
+    page.click("#applyDepth")
+    body = page.locator("#caBody")
+    expect(body).to_contain_text("99 keys will change from 2.0 mm to 1.0 mm, resetting at 0.5 mm.")
+    expect(body).to_contain_text("W, A, S, D keep 1.0 mm and get a new reset point at 0.5 mm.")
+    expect(body).not_to_contain_text("already")
+    page.locator('#confirmApply button[value="cancel"]').click()
+
+
+def test_focus_on_the_board_moves_to_reconnect_when_the_keyboard_goes_away(page):  # noqa: F811
+    cap(page, "W").focus()
+    page.evaluate("model = null; noKbUi()")
+    expect(page.locator("#emptyReconnect")).to_be_focused()

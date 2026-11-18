@@ -11,7 +11,8 @@ All notable changes to this project are listed here. Versions follow [Semantic V
     Reconnect says "Connected to {model}" and clears an earlier error toast.
   - Actuation: keys at different depths read "Mixed (1.0–2.0 mm)", the slider follows the selected keys until you
     move a control, and "Not applied yet" shows only after an edit. Apply asks first when keys in its scope use
-    other depths (it names them, e.g. W, A, S, D).
+    different depths, naming only the keys that will change and how ("99 keys will change from 2.0 mm to 1.0 mm.
+    W, A, S, D already type at 1.0 mm."). No depth preset shows as chosen while the readout says Mixed.
   - Small windows: legends scale with the keys; below about 27 px per key the depths show in place of the legend
     when you point at or focus a key, instead of over it.
   - The primary Apply of Actuation, Rapid Trigger, Snap Tap and Lighting effects stays in view at the bottom of the
@@ -33,12 +34,16 @@ All notable changes to this project are listed here. Versions follow [Semantic V
     Lighting's Per key and a Static effect, Studio's Layers). The panel names a selection made on another tab:
     "Applying to 4 selected keys · Clear".
   - Snap Tap has a switch and Apply like Rapid Trigger, "Not applied yet" while the panel differs from the keyboard,
-    and "On for A and D" once applied. Click two keys on the keyboard to make the pair, or use the lists. The
-    keyboard gets the same command as before.
+    and "On for A and D" once applied (the Apply button stays "Apply", disabled, while Snap Tap is off and
+    unchanged). Click two keys on the keyboard to make the pair, or use the lists; leaving the tab or Reconnect starts
+    the pick over at the first key. The keyboard gets the same command as before.
+  - When the keyboard goes away, focus in a pane that switches off (or on the hidden keyboard) moves to the stage's Reconnect button.
   - Studio: the layer up and down buttons are 32 px; a Solid colour added on top of other layers mixes in at 50 %
     (Normal) instead of covering them all. The Keyboard pane says "Onboard profile" instead of "Stored profile".
 
 ### Fixed
+- Studio's preview while off starts again after an error: if composing a frame or starting the preview thread
+  failed, later preview requests were ignored until the service restarted.
 - Windows: while Razer Synapse runs, nothing at all reaches the keyboard, reads included (two programs on the same
   HID interface swap each other's replies). The hidapi transport refuses to open the keyboard or send a report, the
   app and the lighting service let go of an open handle, the window shows the last model it saw (locked) and polls

@@ -350,3 +350,33 @@ def test_cli_factory_is_refused(plugged):
     with pytest.raises(hc.FeatureUnavailable, match="factory"):
         huntsman.main(["factory"])
     assert writes(plugged.t) == []
+
+
+def test_a_stored_release_that_still_fits_is_kept():
+    """Like easyrazer: without a reset point only the actuation byte changes, when the stored release still fits."""
+    hc.set_experimental(True)
+    t = FakeTransport()
+    for p in (0, 1):
+        t.keys[(p, A)] = bytearray([p, A, 0, 200, 20, 0x02, 0x02, 0x00, 0x04])
+    analog(t).set_actuation([A], 2.0)
+    for p in (0, 1):
+        assert tuple(t.keys[(p, A)][3:5]) == (scale().threshold(2.0), 20)
+
+
+def test_keys_already_at_the_target_are_not_written_again():
+    hc.set_experimental(True)
+    t = FakeTransport()
+    thr = scale().threshold(2.0)
+    rel = scale().release(thr)
+    for p in (0, 1):
+        t.keys[(p, A)] = bytearray([p, A, 0, thr, rel, 0x02, 0x02, 0x00, 0x04])
+    assert analog(t).set_actuation([A], 2.0) == []
+    assert writes(t) == []
+
+
+def test_the_v3_pro_still_writes_keys_already_at_the_target():
+    t = FakeTransport()
+    for p in (0, 1):
+        t.keys[(p, A)] = bytearray([p, A, 0, 76, 70, 0x02, 0x02, 0x00, 0x04])
+    hc.Keyboard(t).set_actuation([A], 1.2)   # 1.2 mm is the factory 76/70
+    assert len(writes(t)) == 2

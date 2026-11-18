@@ -9,7 +9,9 @@ All notable changes to this project are listed here. Versions follow [Semantic V
   write to it. Its own scale from easyrazer (mm = byte / 255 × 2.1 + 1.5): 1.62 to 3.56 mm (bytes 15 to 250, the
   range its firmware keeps to), in 0.01 mm steps, with its own presets. The reset point follows 0.1 mm above, at least
   1.54 mm (byte 5); a custom one must sit at least 0.08 mm (10 bytes) above the actuation point (the release rules are
-  unverified). Each write changes only the two depth bytes of the normal layer, keeps the key's assignment, goes to the
+  unverified). Without a reset point only the actuation byte changes when the stored reset byte still fits (as easyrazer
+  does), and keys already at the target aren't written again, to spare flash. Each write changes at most the two depth
+  bytes of the normal layer, keeps the key's assignment, goes to the
   active saved profile first and then the live one, and is read back. Reads show the depth the keyboard acts on, so a
   key Synapse left at 0/0 shows as 1.62 mm. Key ids are easyrazer's 0266 key map; all 104 keys of the layout match.
 - The V2 Analog gets the first-launch snapshot, and `huntsman.py restore-snapshot` works on it.

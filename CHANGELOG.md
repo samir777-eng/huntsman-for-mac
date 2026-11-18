@@ -4,6 +4,25 @@ All notable changes to this project are listed here. Versions follow [Semantic V
 
 ## Unreleased
 
+### Changed
+- From the UX audit (docs/plans/2026-11-18-ux-audit-fixes.md, items 1–6):
+  - No keyboard: the stage says "Plug in your Huntsman by USB" with a Reconnect button, the panes other than Keyboard
+    are switched off, the header says "No keyboard" instead of a model name, and there's no red toast at start.
+    Reconnect says "Connected to {model}" and clears an earlier error toast.
+  - Actuation: keys at different depths read "Mixed (1.0–2.0 mm)", the slider follows the selected keys until you
+    move a control, and "Not applied yet" shows only after an edit. Apply asks first when keys in its scope use
+    other depths (it names them, e.g. W, A, S, D).
+  - Small windows: legends scale with the keys; below about 27 px per key the depths show in place of the legend
+    when you point at or focus a key, instead of over it.
+  - The primary Apply of Actuation, Rapid Trigger, Snap Tap and Lighting effects stays in view at the bottom of the
+    panel; the tester's readings and warning show only while testing.
+  - Studio: with Studio off, its tab previews the preset on the on-screen board ("Preview, Studio off", Turn on).
+    The lighting service composes the frames without sending anything to the keyboard (`studio_preview`, asked again
+    every few seconds while the tab shows, 30 s at most per request).
+  - Built-in presets show Save as… as the main button with "Built-in preset: save a copy to keep your changes."
+    instead of a disabled Save.
+  - The live tester readout is announced to screen readers when it changes; switching tabs drops the last toast.
+
 ### Fixed
 - Windows: while Razer Synapse runs, nothing at all reaches the keyboard, reads included (two programs on the same
   HID interface swap each other's replies). The hidapi transport refuses to open the keyboard or send a report, the

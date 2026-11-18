@@ -94,6 +94,7 @@ def test_apply_depth_sends_only_selected(page):
 
 def test_apply_depth_no_selection_sends_empty(page):
     page.click("#applyDepth")
+    page.click('#confirmApply button[value="apply"]')   # W, A, S and D use another depth: asked first
     (args,) = wait_for_call(page, "set_depth")
     assert args[0] == []
 
@@ -147,8 +148,7 @@ def quiet_tester(page):
 def test_actuation_test_button_starts_and_stops_one_session(page):
     banner, btn = page.locator("#testBanner"), page.locator("#actTest")
     sync_api.expect(btn).to_have_text("Test with a key press")
-    sync_api.expect(page.locator("#actReadings")).to_be_visible()
-    sync_api.expect(page.locator("#actReadings")).to_contain_text("sends travel readings instead of typing")
+    sync_api.expect(page.locator("#actReadings")).to_be_hidden()      # readings and the warning only while testing
     sync_api.expect(banner).to_be_hidden()
     sync_api.expect(page.locator("#traceWrap")).to_be_hidden()
     btn.click()
@@ -156,6 +156,7 @@ def test_actuation_test_button_starts_and_stops_one_session(page):
     sync_api.expect(banner).to_be_visible()
     sync_api.expect(btn).to_have_text("Stop testing")
     sync_api.expect(page.locator("#traceWrap")).to_be_visible()
+    sync_api.expect(page.locator("#actReadings")).to_contain_text("sends travel readings instead of typing")
     btn.click()
     wait_for_call(page, "stop_test")
     sync_api.expect(banner).to_be_hidden()

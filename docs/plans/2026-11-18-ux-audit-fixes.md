@@ -21,3 +21,9 @@ Quick wins: aria-live on the live readout, bigger reorder targets, new Solid lay
 
 Tests first (UI tests in demo mode for each); 02A6 bytes unchanged (golden tests); then independent review and a
 hardware check of actuation, Snap Tap and Studio preview on the owner's keyboard.
+
+## Progress
+- Batch A done (branch `windows`): items 1–6, aria-live on the live readout, no stale toasts across tabs. Tests in
+  `tests/test_ui_audit.py` (demo mode) and the Studio preview in `tests/test_studio.py` / `tests/test_lighting_engine.py`
+  (`Engine.preview`, `Studio.preview`, IPC `studio_preview`). Still open: items 7–10 and the other quick wins, the
+  independent review and the hardware check.

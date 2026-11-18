@@ -136,6 +136,7 @@
         heat: { enabled: st.heat, keys: st.heat ? 42 : 0 }, smart: copy(smart), action: { brightness: 1, off: false, preset: null },
         errors: { keys: null, audio: null, presets: null } }),
       studio_enable: on => { st.enabled = on; return ok(null); },
+      studio_preview: secs => { if (!(secs >= 0)) return fail("seconds must be a number, 0 or more"); st.previewUntil = secs > 0 ? performance.now() + Math.min(secs, 30) * 1000 : 0; return ok(null); },
       set_active_preset: n => { const p = find(n); if (!p) return fail(`there's no preset called '${n}'`); activate(p); return ok(null); },
       update_layers: ls => { const p = { ...working, layers: copy(ls) }, e = check(p); if (e) return fail(e); working = p; dirty = true; return ok(needs(p)); },
       save_preset: p => {
@@ -220,7 +221,7 @@
     window.__frames = 0;
     setInterval(() => {
       const s = settings(), p = preset(), t = (performance.now() - t0) / 1000;
-      if (!s.enabled || typeof window.onStudioFrame !== "function") return;
+      if (!(s.enabled || performance.now() < (s.previewUntil || 0)) || typeof window.onStudioFrame !== "function") return;   // on, or previewing
       if (t - (presses.length ? presses[presses.length - 1].t : -1) > 0.45) { const k = byName(seq[pi++ % seq.length]); if (k) presses.push({ k, t }); if (presses.length > 12) presses.shift(); }
       const audio = { level: 0.5 + 0.45 * Math.sin(t * 3.1) * Math.sin(t * 1.3), bands: Array.from({ length: 16 }, (_, i) => Math.max(0, 0.75 - i * 0.035 + 0.25 * Math.sin(t * (3 + i * .4) + i))) };
       const hears = p.layers.some(l => l.enabled && window.DEMO_STUDIO.effects.find(e => e.name === l.effect).needs.includes("audio"));

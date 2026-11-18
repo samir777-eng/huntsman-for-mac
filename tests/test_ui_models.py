@@ -262,7 +262,8 @@ def test_v3_actuation_controls_are_unchanged(open_model):
                              ["Balanced", "1.5", "1.5"], ["Typing", "2.0", "2"], ["Firm", "3.0", "3"]]
     r = page.locator("#rel")
     assert [r.get_attribute(a) for a in ("min", "step")] == ["0", "0.1"]
-    expect(page.locator("#depthNum")).to_have_text("2.0")
+    expect(page.locator("#depthNum")).to_have_text("Mixed")      # the demo's W, A, S and D type at 1.0 mm, the rest at 2.0
+    expect(page.locator("#depth")).to_have_value("2")
     page.click('button[data-view="device"]')
     expect(page.locator("#restore")).to_be_visible()
     assert page.errors == []
@@ -278,7 +279,7 @@ def test_v2_analog_offers_actuation_on_its_own_scale(open_model):
     p = presets(page)
     assert "Factory" not in [n for n, _, _ in p] and all(1.62 <= float(v) <= 3.56 for _, _, v in p)
     assert all(len(t.split(".")[1]) == 2 for _, t, _ in p)
-    expect(page.locator("#depthNum")).to_have_text("2.00")
+    expect(page.locator("#depthNum")).to_have_text("Mixed")
     expect(page.locator("#applyDepth")).to_be_disabled()                # experimental: locked until the switch
     page.click('button[data-view="device"]')
     expect(page.locator("#restore")).to_be_hidden()                    # no known factory point
@@ -292,6 +293,7 @@ def test_v2_analog_offers_actuation_on_its_own_scale(open_model):
     r = page.locator("#rel")
     assert [r.get_attribute(a) for a in ("min", "step")] == ["1.54", "0.01"]
     page.click("#applyDepth")
+    page.click('#confirmApply button[value="apply"]')
     assert wait_for_call(page, "set_depth")[-1][1:] == [1.62, 1.54]
     expect(page.locator('.cap[data-id="31"] .front')).to_have_text("1.62")   # A
     expect(page.locator("#actDirty")).to_be_hidden()

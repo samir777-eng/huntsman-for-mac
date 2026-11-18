@@ -6,6 +6,7 @@ const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAl
 const TITLES = { actuation: "Actuation", rapid: "Rapid Trigger", snap: "Snap Tap", lighting: "Lighting", studio: "Studio", device: "Keyboard" };
 const NOTES = {
   actuation: "Click a key to select it, or drag across several. The number on each key is the depth it types at, in mm.",
+  actuationSmall: "Click a key to select it, or drag across several. To see the depth a key types at, point at it.",
   rapid: "Select keys to limit Rapid Trigger to them, or leave nothing selected for all keys.",
   snap: "The two outlined keys are the pair. Choose them in the panel on the left.",
   lighting: "Each key shows the colour its LED is set to.",
@@ -71,6 +72,12 @@ function toast(msg, err) {
   const t = $("#toast"); t.textContent = msg; t.className = "toast show" + (err ? " err" : "");
   clearTimeout(t._h); t._h = setTimeout(() => t.className = "toast" + (err ? " err" : ""), err ? 6000 : 2400);
 }
+// A toast belongs to what was just done: gone on another tab, and an error gone once the keyboard answers again
+function hideToast(errOnly) {
+  const t = $("#toast"); if (errOnly && !t.classList.contains("err")) return;
+  clearTimeout(t._h); t.classList.remove("show");
+}
+const setText = (el, t) => { if (el.textContent !== t) el.textContent = t; };   // live regions speak only on change
 function setConn(ok, text) { $("#led").className = "led " + (ok ? "on" : "err"); if (text) $("#conn").textContent = text; }
 async function call(name, ...args) {
   const r = await api[name](...args);
@@ -122,12 +129,20 @@ function fit() {
   const reserved = (traceShown() ? 280 : 0) + $("#dock").offsetHeight + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + 64;
   zoom = Math.max(0.5, Math.min(1.6, stage.clientWidth * 0.9 / nw, (stage.clientHeight - reserved) / nh));
   kb.style.zoom = zoom;
-  // keep small type at or above ~9.5 px on screen whatever the zoom
-  kb.style.setProperty("--legend-fs", Math.max(11, 10.5 / zoom).toFixed(2) + "px");
-  kb.style.setProperty("--legend-long", Math.max(8.5, 8.5 / zoom).toFixed(2) + "px");
-  kb.style.setProperty("--front-fs", (9.5 / zoom).toFixed(2) + "px");
-  // the skirt is 10 px tall; when the number would not fit there, it moves onto the keycap
-  kb.classList.toggle("num-on-top", 9.5 / zoom > 10.5);
+  // Type follows the size of a key on screen (a 1u cap is 41 px at zoom 1) and stays readable: legends
+  // 9-10.5 px, long ones 7.5-8.5 px.
+  const capPx = (U - GAP) * zoom;
+  const legendPx = Math.max(9, Math.min(10.5, capPx * 0.36)), longPx = Math.max(7.5, Math.min(8.5, capPx * 0.29));
+  kb.style.setProperty("--legend-fs", Math.max(11, legendPx / zoom).toFixed(2) + "px");
+  kb.style.setProperty("--legend-long", Math.max(8.5, longPx / zoom).toFixed(2) + "px");
+  // Small keys have no room for both a legend and a depth: the depth shows in the legend's place while the key is
+  // pointed at or focused (its name and tooltip always carry it). Otherwise the number sits on the 10 px skirt,
+  // or on the keycap when it would not fit there.
+  const small = capPx < 27;
+  kb.classList.toggle("depths-on-demand", small);
+  kb.style.setProperty("--front-fs", (small ? Math.max(11, legendPx / zoom) : 9.5 / zoom).toFixed(2) + "px");
+  kb.classList.toggle("num-on-top", !small && 9.5 / zoom > 10.5);
+  if (view === "actuation" && !testing) $("#stageNote").textContent = stageNote(view);
 }
 
 /* What each key's LED shows, so legends glow like the real keyboard */
@@ -142,8 +157,10 @@ function fxColour(id) {
   return f.c1 || "#e9e9ee";
 }
 const studioOn = () => typeof studioLive === "function" && studioLive();
+// Studio's frames on the board: what the keys show while it's on, and a preview of the edits on its tab while it's off
+const studioShowing = () => studioOn() || (view === "studio" && typeof studioPreviewing === "function" && studioPreviewing());
 function ledColour(id) {
-  if (studioOn()) return studioColour(id);   // Studio streams frames: show what the keys really show
+  if (studioShowing()) return studioColour(id);
   if (custom) return rgb2hex(custom.keys[id] || custom.base);
   return fxColour(id);
 }
@@ -168,7 +185,7 @@ const snapPair = () => [+$("#snapA").value, +$("#snapB").value];
 function paint() {
   const showSel = selecting(), [sa, sb] = snapPair(), kb = $("#kb");
   kb.dataset.view = view;
-  kb.dataset.fx = !custom && fxShown && !studioOn() ? fxShown.name : "";
+  kb.dataset.fx = !custom && fxShown && !studioShowing() ? fxShown.name : "";
   for (const c of $$(".cap")) {
     const id = +c.dataset.id, p = points[id], front = c.querySelector(".front");
     const led = ledColour(id), dark = unlit(led);
@@ -197,7 +214,7 @@ function paint() {
   }
   refreshButtons();
 }
-const fxAnimated = () => !custom && !studioOn() && fxShown && /spectrum|wave|random|fire/.test(fxShown.name);
+const fxAnimated = () => !custom && !studioShowing() && fxShown && /spectrum|wave|random|fire/.test(fxShown.name);
 function fxDuration(f) {
   if (f.name === "wave") return (1.5 + (f.speed ?? 40) / 255 * 9).toFixed(2);   // lower value = faster
   if (f.name.startsWith("starlight")) return [0, 1.4, 2.4, 3.6][f.speed ?? 2];
@@ -207,6 +224,7 @@ function fxDuration(f) {
 
 // Labels and enabled states that depend on the selection and on what is applied
 function refreshButtons() {
+  syncDepth();
   const n = selected.size, scope = n ? `${plural(n, "key")} selected` : "All keys";
   $("#actScope").textContent = scope; $("#rtScope").textContent = scope;
   $("#applyDepth").textContent = n ? `Apply to ${plural(n, "key")}` : "Apply to all keys";
@@ -271,12 +289,21 @@ function platformUi() {
     refreshButtons();
   }, 5000);
 }
+// No keyboard: the stage says so with a Reconnect button, and the panes (all but Keyboard) are off, not merely idle
+function noKbUi() {
+  const none = !model && !platform.blocked;
+  $("#noKb").hidden = !none; $("#kbWrap").hidden = $("#dock").hidden = none;
+  $$(".pane").forEach(p => { const off = none && p.dataset.pane !== "device"; p.inert = off; p.classList.toggle("dimmed", off); });
+  $(".device-name").textContent = model ? model.name : "No keyboard";
+  $("#noKbWhy").textContent = none && modelError ? modelError : "";
+}
 function applyModel() {
-  if (model) $(".device-name").textContent = model.name;
+  noKbUi();
   $("#expBadge").hidden = !experimentalModel();
   platformUi();
   Object.keys(FEATURE_TABS).forEach(v => { $(`#sources button[data-view="${v}"]`).hidden = !viewShown(v); });
-  $("#actTest").hidden = $("#actReadings").hidden = !hasFeature("key_tester");
+  $("#actTest").hidden = !hasFeature("key_tester");
+  $("#actReadings").hidden = !hasFeature("key_tester") || !testing;   // readings and the warning while testing only
   if (testing && !hasFeature("key_tester")) stopTest();
   setAct(hasFeature("actuation") && model.actuation || V3_ACT);
   $("#restore").hidden = $("#restoreHint").hidden = !hasFeature("actuation") || act.factory == null;
@@ -406,10 +433,12 @@ $$("#selectTools button").forEach(b => b.onclick = () => {
 /* ---------- navigation ---------- */
 // The key tester runs from Actuation: while it runs, the stage shows the travel trace under the keyboard
 const traceShown = () => testing && view === "actuation";
-const stageNote = v => v === "actuation" && testing ? NOTES.testing : NOTES[v];
+const depthsOnDemand = () => $("#kb").classList.contains("depths-on-demand");
+const stageNote = v => v === "actuation" && testing ? NOTES.testing : v === "actuation" && depthsOnDemand() ? NOTES.actuationSmall : NOTES[v];
 async function show(v) {
   if (!viewShown(v)) v = "lighting";   // a tab this model doesn't have
   if (testing && v !== "actuation") await stopTest();   // the key tester lives in Actuation
+  if (v !== view) hideToast();
   view = v;
   $$("button[data-view]").forEach(b => { if (b.dataset.view === v) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   $$(".pane").forEach(p => p.hidden = p.dataset.pane !== v);
@@ -433,27 +462,47 @@ function fillAll() { $$('input[type="range"]').forEach(fillRange); }
 const valueText = (id, t) => { $("#" + id).setAttribute("aria-valuetext", t); };
 
 /* ---------- actuation ---------- */
+// Until the user moves a control, the slider follows the keys in scope (the selection, or all keys), and keys at
+// different depths read "Mixed (a–b)". Nothing is "Not applied yet" before an edit.
+let actEdited = false;
 const depth = () => +(+$("#depth").value).toFixed(act.decimals);
+const scopeIds = () => (selected.size ? [...selected] : keyIds()).filter(id => points[id]);
+function scopeDepths() {   // [[depth, [ids]], ...], most keys first
+  const g = new Map();
+  scopeIds().forEach(id => { const d = points[id][0]; g.set(d, [...(g.get(d) || []), id]); });
+  return [...g.entries()].sort((a, b) => b[1].length - a[1].length || a[0] - b[0]);
+}
+const mixed = () => !actEdited && scopeDepths().length > 1;
+function syncDepth() {
+  if (actEdited || !layout.length) return;
+  const top = scopeDepths()[0];
+  if (top && Math.abs(depth() - top[0]) > 0.0001) $("#depth").value = top[0];
+  depthUi();
+}
+function edited() { actEdited = true; depthUi(); }
 const relTop = () => Math.max(act.release_min, depth() - act.reset_gap);   // "Just above", and the custom maximum
 const relValue = () => +($("#relMode").value === "custom" ? +$("#rel").value : relTop()).toFixed(act.decimals);
 function depthUi() {
-  $("#depthNum").textContent = depth().toFixed(act.decimals);
-  valueText("depth", mm(depth()));
+  const ds = scopeDepths().map(([d]) => d), mix = mixed(), lo = Math.min(...ds), hi = Math.max(...ds);
+  $("#depthNum").textContent = mix ? "Mixed" : depth().toFixed(act.decimals);
+  $("#depthUnit").textContent = mix ? `${lo.toFixed(act.decimals)}–${hi.toFixed(act.decimals)} mm` : "mm";
+  $("#readout").classList.toggle("mixed", mix);
+  valueText("depth", mix ? `Mixed, ${mm(lo)} to ${mm(hi)}` : mm(depth()));
   const rel = $("#rel"); rel.max = relTop().toFixed(act.decimals);
   if (+rel.value > +rel.max) rel.value = rel.max;
   $("#relOut").textContent = mm(rel.value); valueText("rel", mm(rel.value));
   $$("#presets button").forEach(b => b.setAttribute("aria-pressed", +b.dataset.v === depth()));
   fillAll(); meterLines(); dirtyUi();
 }
-$("#depth").oninput = depthUi; $("#rel").oninput = depthUi;
-$("#relMode").onchange = () => { $("#relRow").hidden = $("#relMode").value !== "custom"; depthUi(); };
+$("#depth").oninput = edited; $("#rel").oninput = edited;
+$("#relMode").onchange = () => { $("#relRow").hidden = $("#relMode").value !== "custom"; edited(); };
 function fillPresets() {
   $("#presets").innerHTML = "";
   act.presets.forEach(([n, v]) => {
     const b = document.createElement("button"); b.dataset.v = v;
     b.innerHTML = "<b></b><span></span>"; b.children[0].textContent = v.toFixed(act.decimals); b.children[1].textContent = n;
     b.setAttribute("aria-label", `${n}, ${mm(v)}`);
-    b.onclick = () => { $("#depth").value = v; depthUi(); }; $("#presets").appendChild(b);
+    b.onclick = () => { $("#depth").value = v; edited(); }; $("#presets").appendChild(b);
   });
 }
 fillPresets();
@@ -468,20 +517,38 @@ function setAct(next) {
   lo.textContent = `${act.min.toFixed(act.decimals)} mm, lightest`; hi.textContent = `${act.max.toFixed(act.decimals)} mm, deepest`;
   fillPresets(); depthUi(); paint();
 }
-$("#applyDepth").onclick = e => busy(e.target, async () => {
-  const rel = $("#relMode").value === "custom" ? relValue() : null;
-  const r = await call("set_depth", [...selected], depth(), rel);
-  Object.entries(r.done).forEach(([k, p]) => points[k] = p); paint();
-  const n = Object.keys(r.done).length;
-  if (r.failed.length) toast(`${n} keys set. ${r.failed.length} didn't confirm: ${r.failed.map(label).join(", ")}`, true);
-  else toast(`${plural(n, "key")} now type at ${mm(depth())}`);
-});
+// Keys in scope at other depths (usually ones set on purpose, like WASD) are named and confirmed before they change
+function confirmApply() {
+  const groups = scopeDepths();
+  if (groups.length < 2) return Promise.resolve(true);
+  const odd = groups.slice(1).flatMap(([, ids]) => ids);
+  const names = odd.slice(0, 8).map(label).join(", ") + (odd.length > 8 ? ` and ${odd.length - 8} more` : "");
+  const at = groups.length === 2 ? `${odd.length === 1 ? "is" : "are"} at ${mm(groups[1][0])} now` : "use other depths now";
+  const all = scopeIds().length, d = $("#confirmApply");
+  $("#caBody").textContent = `${names} ${at}. Applying sets ${selected.size ? `all ${plural(all, "selected key")}` : `all ${all} keys`} to ${mm(depth())}.`;
+  $("#caOk").textContent = $("#applyDepth").textContent;
+  d.returnValue = ""; d.showModal();
+  return new Promise(res => d.addEventListener("close", () => { res(d.returnValue === "apply"); $("#applyDepth").focus(); }, { once: true }));
+}
+$("#applyDepth").onclick = async e => {
+  const btn = e.currentTarget;
+  if (!(await confirmApply())) return;
+  busy(btn, async () => {
+    const rel = $("#relMode").value === "custom" ? relValue() : null, d = depth();
+    const r = await call("set_depth", [...selected], d, rel);
+    Object.entries(r.done).forEach(([k, p]) => points[k] = p);
+    actEdited = false; paint();
+    const n = Object.keys(r.done).length;
+    if (r.failed.length) toast(`${n} keys set. ${r.failed.length} didn't confirm: ${r.failed.map(label).join(", ")}`, true);
+    else toast(`${plural(n, "key")} now type at ${mm(d)}`);
+  });
+};
 
 // "Not applied yet" when the controls differ from what the keyboard has
 function dirtyUi() {
   if (!layout.length) return;
   const ids = selected.size ? [...selected] : keyIds(), d = depth(), r = relValue();
-  const actDirty = Object.keys(points).length > 0 && ids.some(id => { const p = points[id]; return p && (Math.abs(p[0] - d) > 0.001 || Math.abs(p[1] - r) > 0.001); });
+  const actDirty = actEdited && Object.keys(points).length > 0 && ids.some(id => { const p = points[id]; return p && (Math.abs(p[0] - d) > 0.001 || Math.abs(p[1] - r) > 0.001); });
   $("#actDirty").hidden = !actDirty;
   const a = state.rapid || {}, want = rtForm();
   const sameKeys = (x, y) => x === "all" || y === "all" ? x === y : x.length === y.length && x.every(v => y.map(Number).includes(+v));
@@ -642,9 +709,11 @@ window.onDepth = batch => {            // batch: [[keyId, mm], ...] from the app
     $("#mLive").dataset.idle = "false";
     $("#mKey").textContent = `Key ${label(trace.key)}`;
     $("#mNum").textContent = d.toFixed(2);
-    const hit = d >= depth(), applied = p[0] != null && Math.abs(p[0] - depth()) < 0.001;
-    $("#mHit").textContent = applied ? `Types at ${mm(depth())}: ${hit ? "reached" : "not reached"}`
-      : `With ${mm(depth())} (not applied yet): ${hit ? "reached" : "not reached"}`;
+    // against the slider once it's moved; before that, against the depth this key has
+    const ref = actEdited || p[0] == null ? depth() : p[0];
+    const hit = d >= ref, applied = p[0] != null && Math.abs(p[0] - ref) < 0.001;
+    setText($("#mHit"), applied ? `Types at ${mm(ref)}: ${hit ? "reached" : "not reached"}`
+      : `With ${mm(ref)} (not applied yet): ${hit ? "reached" : "not reached"}`);
     $("#mHit").classList.toggle("on", hit);
     meterKey(d, hit);
   }
@@ -709,7 +778,8 @@ function testerUi() {
   $("#actTest").classList.toggle("on", testing);
   $("#testBanner").hidden = !testing;
   $("#stage").classList.toggle("testing", testing);
-  if (testing) { $("#mLive").dataset.idle = "true"; $("#mKey").textContent = "Press a key on the Huntsman"; $("#mNum").textContent = "0.00"; $("#mHit").textContent = `Types at ${mm(depth())}`; }
+  if (testing) { $("#mLive").dataset.idle = "true"; $("#mKey").textContent = "Press a key on the Huntsman"; $("#mNum").textContent = "0.00"; setText($("#mHit"), mixed() ? "Each key types at its own depth" : `Types at ${mm(depth())}`); }
+  $("#actReadings").hidden = !testing || !hasFeature("key_tester");
   $("#mLive").classList.toggle("active", testing);
   $("#traceWrap").hidden = !traceShown();
   if (view === "actuation") $("#stageNote").textContent = stageNote(view);
@@ -736,7 +806,18 @@ window.onProgress = (done, total) => {
 };
 
 /* ---------- keyboard info ---------- */
-$("#reload").onclick = e => busy(e.target, async () => { const done = await call("reconnect"); if (done.length) toast("Sent again: " + done.join(", ")); await load(); });
+// Reconnect (Keyboard pane, and the stage while no keyboard answers): says which keyboard answered, or why none did
+async function reconnect(btn) {
+  const fromStage = btn.id === "emptyReconnect";
+  await busy(btn, async () => {
+    const done = await call("reconnect");
+    if (!(await load())) { if (!model && !platform.blocked) toast(modelError || "No keyboard answered.", true); return; }
+    toast(`Connected to ${model.name}` + (done.length ? `. Sent again: ${done.join(", ")}` : ""));
+    if (fromStage) $(".tabs button[aria-current]")?.focus();
+  });
+}
+$("#reload").onclick = e => reconnect(e.currentTarget);
+$("#emptyReconnect").onclick = e => reconnect(e.currentTarget);
 $("#restore").onclick = () => { $("#confirmRestore").returnValue = ""; $("#confirmRestore").showModal(); };
 $("#confirmRestore").addEventListener("close", () => {
   if ($("#confirmRestore").returnValue !== "restore") { $("#restore").focus(); return; }
@@ -750,7 +831,8 @@ async function readPoints() {
   const count = {};
   Object.values(points).forEach(p => count[p[0]] = (count[p[0]] || 0) + 1);
   const common = Object.entries(count).sort((a, b) => b[1] - a[1])[0];
-  if (common) { $("#depth").value = common[0]; depthUi(); }
+  if (common) $("#depth").value = common[0];
+  actEdited = false; depthUi();
   paint();
 }
 /* ---------- accent colour (the app's own, separate from the LED colours on the keys) ---------- */
@@ -816,9 +898,14 @@ function fillEffects() {
 }
 // The connected model, again: on Reconnect a keyboard may have appeared, or another model replaced it. A new
 // PID (or the first one after none) brings its layout and effects; the same one keeps the board as drawn.
+let modelError = null;      // why no keyboard answered, for the empty stage and a Reconnect that finds none
+async function readModel() {   // connects, so layout and effects follow it. No toast: the stage shows "no keyboard"
+  try { const r = await api.model(); modelError = r.ok ? null : r.error; return r.ok ? r.data : null; }
+  catch (e) { modelError = String(e); return null; }
+}
 async function followModel() {
   const before = model?.pid ?? null;
-  try { model = await call("model"); } catch (e) { model = null; }   // connects, so layout and effects follow it
+  model = await readModel();
   if (model && model.pid !== before) {
     layout = await api.layout(); effects = await api.effects();
     selected = new Set([...selected].filter(id => keyOf(id)));
@@ -832,8 +919,8 @@ const SYNAPSE_CONN = "Paused: Razer Synapse is running";
 async function load(again = true) {
   if (again) await readPlatform();
   const found = again ? await followModel() : !!model;
-  if (platform.blocked) { setConn(false, SYNAPSE_CONN); return; }   // nothing is read while Synapse runs
-  if (!found) { setConn(false, "Not connected"); return; }
+  if (platform.blocked) { setConn(false, SYNAPSE_CONN); return false; }   // nothing is read while Synapse runs
+  if (!found) { setConn(false, "Not connected"); return false; }
   setConn(true, "Reading");
   try {
     const i = await call("info");
@@ -848,14 +935,16 @@ async function load(again = true) {
     if (hasFeature("actuation")) await readPoints();
     ledUi();
     setConn(true, `Connected, firmware ${i.firmware}`);
-  } catch (e) { setConn(false, "Not connected"); }
+    hideToast(true);   // an error from before doesn't stand next to "Connected"
+    return true;
+  } catch (e) { setConn(false, "Not connected"); return false; }
 }
 
 /* ---------- start ---------- */
 async function start() {
   api = window.pywebview.api;
   await readPlatform();
-  try { model = await call("model"); } catch (e) { model = null; }   // connects, so layout and effects follow it
+  model = await readModel();
   layout = await api.layout(); effects = await api.effects();
   fillEffects(); fillSnap(); drawBoard(); effectUi(); depthUi(); rtUi(); testerUi(); wellsUi(); applyModel(); show(view);
   if (platform.blocked) setConn(false, SYNAPSE_CONN);

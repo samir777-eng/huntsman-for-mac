@@ -6,7 +6,7 @@ Current state of Huntsman for Mac, updated 2026-11-18.
 - **Released:** v0.3.0 "More models" (https://github.com/samir777-eng/huntsman-for-mac/releases/tag/v0.3.0).
   v0.1.0 and v0.2.0 are also tagged. `master` = v0.3.0 (merge of branch `v3-models`, kept for history).
 - **Repo:** public, GitHub `samir777-eng/huntsman-for-mac`, default branch `master`, SEO description + 18 topics.
-- **Tests:** 1275 passing (7 skipped) on the Mac (branch `windows`): `python -m pytest -q tests` (simulated keyboard, fake transports,
+- **Tests:** 1294 passing (7 skipped) on the Mac (branch `windows`): `python -m pytest -q tests` (simulated keyboard, fake transports,
   headless Chromium UI tests in demo mode). Dev env: `requirements.txt` + `requirements-dev.txt`, then
   `playwright install chromium`. GitHub Actions `CI` (.github/workflows/ci.yml) runs it on macos-latest and
   windows-latest (Windows: `requirements-win.txt`; 37 `mac_only` tests skipped, see tests/conftest.py).
@@ -56,6 +56,10 @@ venv into the bundle and signs it ad hoc; unsigned apps can't read ~/Downloads):
 - Six more built-in Studio presets (0.4.0, CHANGELOG "Added"): Plasma, Starfield, Ripple, Spectrum bars, Sunset,
   Neon cycle, appended after the original eight in `lighting/presets.py` (never reorder: the active preset is stored by
   name; `golden_02a6.json` pins every preset's packets). `tests/test_site.py` checks the preset count on the page/README.
+- UX audit batch A (CHANGELOG "Changed", plan docs/plans/2026-11-18-ux-audit-fixes.md): no-keyboard stage, Mixed
+  depths + confirm before overwriting other depths, small-window depth labels on hover, sticky Apply, Studio preview
+  while off (service composes frames only: `Studio.preview`/`Engine.preview`, IPC `studio_preview`), Save as… for
+  built-ins. Items 7–10 still open; needs the independent review and a hardware check of the Studio preview.
 - Layouts: `layout.json` (02A6) + `layouts/<PID>.json`; LED positions for experimental models are guesses
   (reasoning in the models.py docstring) until testers send LED check results.
 - Gate (`huntsman_core.gate`, `Keyboard.check_write`, `_check_command`): experimental models get reads only until

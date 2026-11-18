@@ -14,7 +14,7 @@
 
   <header class="head">
     <div class="device">
-      <span class="device-title"><span class="device-name">Huntsman V3 Pro</span><span class="badge" id="expBadge" title="Support for this model is experimental: it hasn't been tested with this app" hidden>Experimental</span></span>
+      <span class="device-title"><span class="device-name">Huntsman</span><span class="badge" id="expBadge" title="Support for this model is experimental: it hasn't been tested with this app" hidden>Experimental</span></span>
       <span class="device-state"><span class="led" id="led"></span><span id="conn">Connecting</span></span>
     </div>
     <nav class="tabs" id="sources" aria-label="Sections">
@@ -39,12 +39,12 @@
       <p class="scope" id="actScope">All keys</p>
       <div class="act-top">
         <div>
-          <div class="readout"><span class="num" id="depthNum">2.0</span><span class="unit">mm</span></div>
+          <div class="readout" id="readout"><span class="num" id="depthNum">2.0</span><span class="unit" id="depthUnit">mm</span></div>
           <p class="readout-sub">Pressed this far, a key types.</p>
           <div class="live" id="mLive" data-idle="true">
             <span class="live-key" id="mKey">Press a key</span>
             <span class="live-num"><span id="mNum">0.00</span> mm</span>
-            <span class="live-hit" id="mHit">Not typed yet</span>
+            <span class="live-hit" id="mHit" aria-live="polite">Not typed yet</span>
           </div>
         </div>
         <div class="meter" aria-hidden="true" title="Key travel: the bright line is where keys will type, the faint line where they reset">
@@ -72,7 +72,7 @@
         <div class="row" id="relRow" hidden><label for="rel">Resets at</label><span class="row-ctl"><input type="range" id="rel" min="0" max="3.9" step="0.1" value="1.5" aria-label="Reset point"><output id="relOut" aria-hidden="true"></output></span></div>
       </div>
       <p class="hint">A key types once pressed past the actuation point, and is ready again after rising above the reset point.</p>
-      <button class="primary" id="applyDepth" data-write>Apply to all keys</button>
+      <div class="pane-foot"><button class="primary" id="applyDepth" data-write>Apply to all keys</button></div>
     </div>
 
     <div class="pane" data-pane="rapid" hidden>
@@ -87,7 +87,7 @@
       </div>
       <p class="hint">The key fires again as soon as it moves down by the press distance after rising by the release distance, anywhere in its travel.</p>
       <p class="hint">Sent again by the lighting service when it starts, because the keyboard forgets it when unplugged.</p>
-      <button class="primary" id="applyRt" data-write>Apply to all keys</button>
+      <div class="pane-foot"><button class="primary" id="applyRt" data-write>Apply to all keys</button></div>
     </div>
 
     <div class="pane" data-pane="snap" hidden>
@@ -100,7 +100,7 @@
       </div>
       <p class="hint">While both keys are held, only the one pressed last counts. Usually A and D.</p>
       <p class="status" id="snapState" role="status"></p>
-      <div class="buttons"><button class="primary" id="applySnap" data-write>Turn on</button><button id="offSnap" data-write>Turn off Snap Tap</button></div>
+      <div class="pane-foot buttons"><button class="primary" id="applySnap" data-write>Turn on</button><button id="offSnap" data-write>Turn off Snap Tap</button></div>
     </div>
 
     <div class="pane" data-pane="lighting" hidden>
@@ -131,7 +131,7 @@
           <label class="row" id="dirRow"><span>Direction</span><select id="dir"><option value="right">Left to right</option><option value="left">Right to left</option></select></label>
         </div>
         <p class="hint" id="fxNote">Effects run on the keyboard and are saved on it. For a real ripple, typing trails and more, use Studio.</p>
-        <button class="primary" id="applyFx" data-write>Apply to whole keyboard</button>
+        <div class="pane-foot"><button class="primary" id="applyFx" data-write>Apply to whole keyboard</button></div>
       </div>
       <div class="group"><div class="row"><label for="bright">Brightness</label><span class="row-ctl"><input type="range" id="bright" min="0" max="100" aria-label="Brightness" data-write><output id="brightOut" aria-hidden="true"></output></span></div></div>
     </div>
@@ -162,6 +162,7 @@
           </div>
         </div>
         <input type="file" id="stImportFile" accept=".json,application/json" hidden>
+        <p class="hint" id="stBuiltinHint" role="status" hidden>Built-in preset: save a copy to keep your changes.</p>
       </div>
 
       <div class="group">
@@ -291,6 +292,13 @@
       <button id="bannerStop">Stop testing</button>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <section class="no-kb" id="noKb" aria-labelledby="noKbTitle" hidden>
+      <svg class="no-kb-art" viewBox="0 0 120 64" width="120" height="64" aria-hidden="true"><rect x="2" y="14" width="96" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M14 26h8M28 26h8M42 26h8M56 26h8M70 26h8M14 36h8M28 36h8M42 36h8M56 36h8M70 36h8M24 46h52" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M98 34h10a6 6 0 0 0 6-6V4" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 3"/></svg>
+      <h2 id="noKbTitle">Plug in your Huntsman by USB</h2>
+      <p>Then choose Reconnect. Its settings show here once it answers.</p>
+      <button class="primary" id="emptyReconnect">Reconnect</button>
+      <p class="no-kb-why" id="noKbWhy"></p>
+    </section>
     <div class="kb-wrap" id="kbWrap">
       <div class="kb" id="kb">
         <div class="kb-extras" aria-hidden="true">
@@ -301,6 +309,7 @@
     </div>
     <div class="trace-wrap" id="traceWrap" hidden><canvas id="trace" height="200" role="img" aria-label="Travel trace. No key pressed yet."></canvas></div>
     <div class="dock" id="dock">
+      <div class="preview-chip" id="stPreview" role="status" hidden><span class="preview-dot" aria-hidden="true"></span><span>Preview, Studio off</span><button id="stPreviewOn" data-write>Turn on</button></div>
       <p class="stage-note" id="stageNote"></p>
       <div class="select-tools" id="selectTools" role="group" aria-label="Select keys">
         <span class="select-label" aria-hidden="true">Select</span>
@@ -317,6 +326,14 @@
   <form method="dialog" class="buttons">
     <button value="cancel" class="secondary" autofocus>Cancel</button>
     <button value="restore" class="danger">Restore</button>
+  </form>
+</dialog>
+<dialog class="confirm" id="confirmApply" aria-labelledby="caTitle" aria-describedby="caBody">
+  <h2 id="caTitle">Change keys with other depths?</h2>
+  <p id="caBody"></p>
+  <form method="dialog" class="buttons">
+    <button value="cancel" class="secondary" autofocus>Cancel</button>
+    <button value="apply" class="primary" id="caOk">Apply</button>
   </form>
 </dialog>
 <dialog class="confirm gallery" id="gallery" aria-labelledby="galTitle">

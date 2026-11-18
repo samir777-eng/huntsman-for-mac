@@ -23,11 +23,24 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
 
 /* ---------- live frames on the board ---------- */
 function studioLive() { return !!(ST.data && ST.data.enabled && ST.frame); }
+// Studio off, its tab open: the board previews the working preset (frames composed by the service, nothing sent to the
+// keys), asked for every few seconds while the tab shows so a closed window doesn't keep it running.
+function studioPreviewing() { return !!(ST.data && !ST.data.enabled && ST.frame); }
+const PREVIEW_ASK_S = 10, PREVIEW_EVERY_MS = 4000;
+let previewTimer = null;
+const askPreview = s => { try { api.studio_preview(s).catch(() => {}); } catch (e) { /* an older app without it */ } };
+function previewUi() {
+  const want = view === "studio" && !!ST.data && !ST.data.enabled;
+  $("#stPreview").hidden = !want;
+  if (want && !previewTimer) { askPreview(PREVIEW_ASK_S); previewTimer = setInterval(() => askPreview(PREVIEW_ASK_S), PREVIEW_EVERY_MS); }
+  else if (!want && previewTimer) { clearInterval(previewTimer); previewTimer = null; if (!ST.data?.enabled) askPreview(0); }
+}
+$("#stPreviewOn").onclick = () => { $("#stOn").click(); $("#stOn").focus(); };
 function studioColour(id) { const c = ST.frame && ST.frame[id]; return c ? rgb2hex(c) : "#000000"; }
 let capEls = null;
 window.onStudioFrame = frame => {
   ST.frame = frame;
-  if (!studioLive()) return;
+  if (!studioLive() && !(view === "studio" && studioPreviewing())) return;
   if (!capEls || !capEls.length || !capEls[0].isConnected) capEls = $$(".cap").map(c => [c, c.dataset.id]);
   let r = 0, g = 0, b = 0, n = 0;
   for (const [c, id] of capEls) {
@@ -71,12 +84,14 @@ function renderStudio() {
   sliderOuts();
   presetsUi(); stackUi(); editorUi(); soundUi(); typingUi(); smartUi(); noticesUi();
   if (view === "studio") $("#stageNote").textContent = studioNote();
-  if (!d.enabled) { ST.frame = null; paint(); }
+  if (!d.enabled && view !== "studio") ST.frame = null;   // on its tab the last frame stays until the preview's next one
+  if (!d.enabled) paint();
+  previewUi();
   fillAll();
 }
 function studioNote() {
   return ST.data && ST.data.enabled ? "Live: what the keys show now. Select keys on the board to limit a layer to them."
-    : "Studio is off. Turn it on to light the keyboard and watch it here.";
+    : "Studio is off, so this is a preview: the keys don't show it until you turn Studio on. Select keys on the board to limit a layer to them.";
 }
 function sliderOuts() {
   const b = $("#stBright").value + "%", f = $("#stFps").value + " fps";
@@ -94,9 +109,12 @@ function presetsUi() {
     s.appendChild(g);
   }
   s.value = ST.data.active;
+  // A built-in preset can't be changed: no dead Save, Save as… is the way to keep edits
   const built = isBuiltin(ST.data.active);
-  $("#stSave").disabled = built || !ST.data.dirty;
-  $("#stSave").title = built ? "Built-in presets can't be changed. Use Save as." : "";
+  if (built && document.activeElement === $("#stSave")) $("#stSaveAs").focus();
+  $("#stSave").hidden = built; $("#stSave").disabled = !ST.data.dirty;
+  $("#stSaveAs").classList.toggle("primary", built);
+  $("#stBuiltinHint").hidden = !built;
   $$("#stMenu [data-act='rename'], #stMenu [data-act='delete']").forEach(b => b.disabled = built);
   stDirtyUi();
 }
@@ -554,5 +572,5 @@ $("#smAdd").onclick = () => {
 };
 
 /* ---------- hooks used by app.js ---------- */
-window.studioShown = v => { if (v === "studio") appRuleUi(); if (v === "studio" && ST.data) { $("#stageNote").textContent = studioNote(); keysUi(); } };
+window.studioShown = v => { if (v === "studio") appRuleUi(); if (v === "studio" && ST.data) { $("#stageNote").textContent = studioNote(); keysUi(); } previewUi(); };
 window.studioStart = async () => { await studioRefresh(); };

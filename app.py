@@ -942,11 +942,58 @@ def main(argv=None):
     api.shutdown()
 
 
+def self_test(out=None):
+    """`Huntsman.exe --self-test`: the build's smoke test. Imports every module the build must contain
+    (platforms/bundle.py) and reads the data files and every model's layout, without opening the keyboard or a
+    window. Windows-only modules are skipped elsewhere. Returns 0 when everything is there, 1 otherwise."""
+    import importlib
+    from platforms import bundle
+    out = out or (lambda line: print(line, flush=True))
+    failed = 0
+    for name in bundle.HIDDEN_IMPORTS:
+        if name in bundle.WINDOWS_ONLY and not platforms.is_windows():
+            out(f"skip {name} (Windows only)")
+            continue
+        try:
+            importlib.import_module(name)
+            out(f"ok   {name}")
+        except Exception as e:  # noqa: BLE001  (report every failure, then exit 1)
+            failed += 1
+            out(f"FAIL {name}: {type(e).__name__}: {e}")
+    for rel in bundle.REQUIRED_FILES:
+        path = os.path.join(HERE, *rel.split("/"))
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+            if rel.endswith(".json"):
+                json.loads(data)
+            out(f"ok   {rel}")
+        except Exception as e:  # noqa: BLE001
+            failed += 1
+            out(f"FAIL {rel}: {type(e).__name__}: {e}")
+    for m in hc.models.MODELS.values():
+        try:
+            assert hc.load_layout(m), "empty layout"
+            out(f"ok   layout {m.pid:04X}")
+        except Exception as e:  # noqa: BLE001
+            failed += 1
+            out(f"FAIL layout {m.pid:04X} ({m.layout}): {type(e).__name__}: {e}")
+    out(f"Huntsman for Mac {hc.__version__} self-test {'passed' if not failed else 'FAILED'}"
+        f" ({platforms.current()}, frozen={bool(getattr(sys, 'frozen', False))})")
+    return 1 if failed else 0
+
+
 def entry(argv=None):
     """The program's entry point. The packaged Windows build is one Huntsman.exe: with --service it runs the
-    lighting service (its start-at-login command), without it the window."""
+    lighting service (its start-at-login command), without it the window. --version and --self-test (the build's
+    smoke test, app.self_test) print to stdout, or to the log file in the windowed build."""
     argv = sys.argv if argv is None else argv
     platforms.redirect_output()
+    if "--version" in argv[1:]:
+        print(f"Huntsman for Mac {hc.__version__}", flush=True)
+        return 0
+    if "--self-test" in argv[1:]:
+        return self_test()
     if "--service" in argv[1:]:
         import service
         return service.main()

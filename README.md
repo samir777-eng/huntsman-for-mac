@@ -37,8 +37,6 @@ typing and your music.
 
 ### Synapse for Mac vs Huntsman for Mac
 
-At the time of writing, Razer Synapse for Mac doesn't support the Huntsman V3 Pro's settings.
-
 | On a Huntsman V3 Pro, from macOS | Synapse for Mac | Huntsman for Mac |
 |---|:---:|:---:|
 | 🎯 Change the actuation point (0.1 to 4.0 mm, per key) | ❌ | ✅ |
@@ -92,7 +90,7 @@ You need Python 3.11 or newer, and Homebrew if libusb isn't installed yet. Detai
   <tr>
     <td width="50%"><a href="#actuation-and-the-key-tester"><img src="docs/screenshot-actuation.png" alt="Huntsman for Mac in demo mode, Actuation tab: four keys set to 1.2 mm while the key tester shows the D key pressed to 2.8 mm"></a></td>
     <td width="50%">
-      <h3>🎯 Actuation, to a tenth of a millimetre</h3>
+      <p><b>🎯 Actuation, to a tenth of a millimetre</b></p>
       Every key, anywhere from <b>0.1 mm</b> (a feather) to <b>4.0 mm</b> (the whole way down). It's stored on the
       keyboard, so it goes with the keyboard to other computers. Then hit <b>Test with a key press</b> and watch the
       key sink. <a href="#actuation-and-the-key-tester">More →</a>
@@ -100,7 +98,7 @@ You need Python 3.11 or newer, and Homebrew if libusb isn't installed yet. Detai
   </tr>
   <tr>
     <td width="50%">
-      <h3>⚡ Rapid Trigger and 🥊 Snap Tap</h3>
+      <p><b>⚡ Rapid Trigger and 🥊 Snap Tap</b></p>
       Rapid Trigger fires a key again as soon as it moves down by the press distance after rising by the release
       distance, anywhere in its travel. Snap Tap: while both keys of a pair are held, only the one pressed last
       counts. Both confirmed on a Huntsman V3 Pro. <a href="#rapid-trigger-and-snap-tap">More →</a>
@@ -110,7 +108,7 @@ You need Python 3.11 or newer, and Homebrew if libusb isn't installed yet. Detai
   <tr>
     <td width="50%"><a href="#lighting-studio"><img src="docs/screenshot-studio.png" alt="Studio tab: the Aurora preset running, with its layer, palette and speed settings"></a></td>
     <td width="50%">
-      <h3>🌈 Lighting Studio</h3>
+      <p><b>🌈 Lighting Studio</b></p>
       Layers, 17 effects and eight built-in presets, reacting to your typing and your music. Studio runs in a small
       background lighting service, so close the app and your aurora keeps drifting.
       <a href="#lighting-studio">More →</a>
@@ -118,11 +116,12 @@ You need Python 3.11 or newer, and Homebrew if libusb isn't installed yet. Detai
   </tr>
   <tr>
     <td width="50%">
-      <h3>💡 Keyboard lighting and 🎨 per-key colours</h3>
+      <p><b>💡 Keyboard lighting and 🎨 per-key colours</b></p>
       Static, breathing, spectrum, wave, reactive and starlight run on the keyboard and are saved on it. Or select
       keys and paint them. <a href="#keyboard-lighting">More →</a>
-      <h3>🧪 Six more models, looking for testers</h3>
-      Experimental support for six more Huntsman models, plus an LED check to map their keys.
+      <p><b>🧪 Six more models, looking for testers</b></p>
+      Experimental support for six more Huntsman models: untested so far, with guessed LED positions, plus an LED check
+      to map their keys.
       <a href="#more-models-and-a-call-for-testers">More →</a>
     </td>
     <td width="50%"><a href="#more-models-and-a-call-for-testers"><img src="docs/screenshot-keyboard.png" alt="Keyboard tab for a Huntsman V3 Pro Mini in demo mode: Experimental badge, Experimental support switched on, and the LED check panel"></a></td>

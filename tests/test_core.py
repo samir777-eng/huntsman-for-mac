@@ -625,6 +625,7 @@ def test_stop_unregisters_atexit(monkeypatch):
     assert reg == [s.stop] and unreg == [s.stop]
 
 
+@pytest.mark.mac_only   # SIGHUP
 def test_signal_stops_running_sessions_then_exits(monkeypatch):
     # The handler work happens on a watcher thread fed by signal.set_wakeup_fd: under the Cocoa run
     # loop the main thread may never run Python-level handlers, and a swallowed SIGTERM would hang.

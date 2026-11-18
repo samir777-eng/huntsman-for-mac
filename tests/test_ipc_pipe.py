@@ -68,6 +68,7 @@ def test_round_trip_over_the_pipe_endpoint(folder):
         srv.close()
 
 
+@pytest.mark.mac_only   # restarts on a fixed name; a Windows pipe lingers until its accept thread ends, so the service takes a new random name at every start (covered below)
 def test_the_authkey_file_is_private_and_new_at_every_start(folder):
     ep = endpoint(folder)
     srv, _ = start(ep)
@@ -168,6 +169,7 @@ def test_concurrent_clients(folder):
         srv.close()
 
 
+@pytest.mark.mac_only   # restarts on a fixed name; a Windows pipe lingers until its accept thread ends, so the service takes a new random name at every start (covered below)
 def test_client_reconnects_after_a_service_restart(folder):
     ep = endpoint(folder)
     srv, _ = start(ep)
@@ -209,6 +211,7 @@ def test_subscription_carries_events_and_unsubscribes_on_hangup(folder):
 
 # ---------- the endpoint per platform ----------
 
+@pytest.mark.mac_only   # the Mac endpoint (the endpoint follows the real host in tests)
 def test_the_mac_endpoint_is_the_unix_socket(tmp_path):
     ep = ipc.service_endpoint(str(tmp_path))
     assert isinstance(ep, ipc.UnixEndpoint) and ep.path == os.path.join(str(tmp_path), "service.sock")
@@ -225,6 +228,7 @@ def test_the_windows_endpoint_is_a_named_pipe_per_user(tmp_path, monkeypatch):
     assert ep.key_path == os.path.join(str(tmp_path / "Local"), "Huntsman for Mac", "service.key")
 
 
+@pytest.mark.mac_only   # the Mac endpoint (the endpoint follows the real host in tests)
 def test_app_and_service_use_the_platform_endpoint(tmp_path, monkeypatch):
     import app as appmod
     import huntsman_core as hc

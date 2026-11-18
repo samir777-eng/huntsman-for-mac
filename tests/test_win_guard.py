@@ -88,6 +88,7 @@ def test_tasklist_output_is_parsed():
     assert wg.parse_tasklist("INFO: No tasks are running which match the specified criteria.\r\n") == []
 
 
+@pytest.mark.mac_only   # needs a host that is not Windows
 def test_process_listing_off_windows_is_empty():
     assert wg.list_processes() == []   # this Mac: nothing to list (tests that pretend to be Windows stay usable)
 

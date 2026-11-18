@@ -40,6 +40,7 @@ def test_the_package_does_not_shadow_the_stdlib_platform_module():
 
 # ---------- folders ----------
 
+@pytest.mark.mac_only   # POSIX paths
 def test_mac_folders_are_unchanged(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
     assert platforms.data_dir() == str(tmp_path / "Library" / "Application Support" / "Huntsman for Mac")

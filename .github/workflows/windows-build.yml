@@ -37,8 +37,7 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          $v = python -c "import re; print(re.search(r'^__version__ = \"([0-9.]+)\"', open('huntsman_core.py', encoding='utf-8').read(), re.M).group(1))"
-          "version=$v" >> $env:GITHUB_OUTPUT
+          "version=$(python -c 'import huntsman_core; print(huntsman_core.__version__)')" >> $env:GITHUB_OUTPUT
           "log=$(python -c 'import platforms; print(platforms.log_path())')" >> $env:GITHUB_OUTPUT
       - name: Build
         run: pyinstaller --noconfirm --clean packaging/windows/huntsman.spec

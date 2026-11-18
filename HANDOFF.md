@@ -83,7 +83,7 @@ Studio layers/params/presets/Sound/Typing/Smart panels, effects continuing after
   with the owner, then merge to master and release.
 
 ## Next (pick with the owner)
-1. GitHub social preview image (Settings → Social preview; `docs/banner.png` suits it) — owner's manual step.
+1. (Done 2026-11-18) GitHub social preview set to `docs/social-preview.png` (1280×640, from the README banner).
 2. Optional GitHub Pages landing page for search visibility.
 3. Collect tester reports for the experimental models (issue template new_model.md); promote a model to `verified`
    in models.py only after a tester confirms it, and fix its LED map from the LED check.

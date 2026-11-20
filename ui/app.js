@@ -329,6 +329,7 @@ function noKbUi() {
   $$(".pane").forEach(p => { const off = none && p.dataset.pane !== "device"; p.inert = off; p.classList.toggle("dimmed", off); });
   $(".device-name").textContent = model ? model.name : "No keyboard";
   $("#noKbWhy").textContent = none && modelError ? modelError : "";
+  if (none) $("#studioOnNote").hidden = true;   // "Studio is lighting the keyboard" is false with no keyboard
   if (lost) $("#emptyReconnect").focus();
 }
 // The key tester shows on every model with Actuation, disabled with the reason where it isn't offered

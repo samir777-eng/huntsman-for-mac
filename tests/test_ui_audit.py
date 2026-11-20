@@ -51,6 +51,15 @@ def test_no_keyboard_shows_a_plug_in_state_instead_of_a_dead_panel(unplugged):  
     assert page.errors == []
 
 
+def test_no_keyboard_hides_the_studio_is_lighting_note(unplugged):  # noqa: F811
+    """With nothing plugged in, "Studio is lighting the keyboard now" would be false even if Studio is on."""
+    page = unplugged()
+    page.goto(page.url + "&studio")                       # Studio on, as the owner's service had it
+    expect(page.locator("#conn")).to_have_text("Not connected")
+    page.click('#sources button[data-view="lighting"]')
+    expect(page.locator("#studioOnNote")).to_be_hidden()
+
+
 def test_reconnect_from_the_empty_state_clears_errors_and_says_connected(unplugged):  # noqa: F811
     page = unplugged()
     page.evaluate("toast('No reply', true)")

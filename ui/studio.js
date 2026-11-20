@@ -79,7 +79,7 @@ window.onStudioLevel = level => {
 function renderStudio() {
   const d = ST.data;
   $("#stOn").checked = d.enabled; $("#stOnLabel").textContent = d.enabled ? "On" : "Off";
-  $("#studioOnNote").hidden = !d.enabled; $("#stCloseHint").hidden = !d.enabled;
+  $("#studioOnNote").hidden = !d.enabled || typeof model === "undefined" || !model; $("#stCloseHint").hidden = !d.enabled;
   $("#stBright").value = Math.round(d.brightness * 100); $("#stFps").value = d.fps;
   sliderOuts();
   presetsUi(); stackUi(); editorUi(); soundUi(); typingUi(); smartUi(); noticesUi();

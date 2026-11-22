@@ -3,16 +3,22 @@
 Current state of Huntsman for Mac, updated 2026-11-22.
 
 ## Status
+- **0.4.1 ready on branch `auto-key-tester`** (not pushed): the live key tester ("live view", no Test button) plus its
+  UX-audit and review fixes, version bumped (`__version__`, both Info.plists 0.4.1 build 5), CHANGELOG "0.4.1 –
+  2026-11-22", README/landing page/CONTRIBUTING updated, fresh `docs/screenshot-actuation.png` and
+  `docs/demo-key-tester.gif` (made by `tools/make_media.py` from demo mode). **Waiting on the owner's hardware check
+  of the live view on the V3 Pro** (start/stop as the real window comes to the front or goes behind, the Input
+  Monitoring prompt, the 5-minute pause). Then: PR `auto-key-tester` → `master`, tag `v0.4.1`, publish the release
+  (the Windows workflow attaches `Huntsman-for-Windows-0.4.1.zip` itself). Record only verified results.
 - **Released:** v0.4.0 (2026-11-22, https://github.com/samir777-eng/huntsman-for-mac/releases/tag/v0.4.0), with
   `Huntsman-for-Windows-0.4.0.zip` attached by `.github/workflows/windows-build.yml`. `master` = v0.4.0 (merge of
   branch `windows`, kept for history). v0.1.0–v0.3.0 are also tagged.
-- **Released at the owner's request before the planned hardware check** (keyboard unavailable after the move). Still
-  to check on the V3 Pro, one at a time: actuation with the Mixed readout + Apply confirmation, Snap Tap switch/board
-  picking, Studio preview while off, the 6 new presets, key tester (ask first: it stops typing). Record results
-  (verified only) in README/CHANGELOG/HANDOFF; fix anything found in a 0.4.1. The Windows build has still never run on
-  a Windows PC with a keyboard.
+- **v0.4.0 was released at the owner's request before the planned hardware check.** Still to check on the V3 Pro, one
+  at a time: actuation with the Mixed readout + Apply confirmation, Snap Tap switch/board picking, Studio preview
+  while off, the 6 new presets, the live view (ask first: it stops typing). Record results (verified only) in
+  README/CHANGELOG/HANDOFF. The Windows build has still never run on a Windows PC with a keyboard.
 - **Repo:** public, GitHub `samir777-eng/huntsman-for-mac`, default branch `master`, SEO description + 18 topics.
-- **Tests:** 1322 passing (7 skipped) on the Mac: `python -m pytest -q tests` (simulated keyboard, fake transports,
+- **Tests:** 1372 passing (2 skipped) on the Mac: `python -m pytest -q tests` (simulated keyboard, fake transports,
   headless Chromium UI tests in demo mode). Dev env: `requirements.txt` + `requirements-dev.txt`, then
   `playwright install chromium`. GitHub Actions `CI` (.github/workflows/ci.yml) runs it on macos-latest and
   windows-latest (Windows: `requirements-win.txt`; 37 `mac_only` tests skipped, see tests/conftest.py).
@@ -81,12 +87,12 @@ venv into the bundle and signs it ad hoc; unsigned apps can't read ~/Downloads):
   `state.json["experimental"]` is on (Keyboard tab switch or `huntsman.py experimental on`); never driver mode;
   unknown commands refused. Golden-byte tests (`tests/golden_02a6.json`) pin every 02A6 packet.
 - First-launch snapshot records its PID; restore refuses another model's snapshot. One snapshot per Mac user.
-- Key tester lives in Actuation and runs live (Unreleased, branch `auto-key-tester`, plan
+- Key tester lives in Actuation and runs live (0.4.1, branch `auto-key-tester`, plan
   docs/plans/2026-11-22-live-key-tester.md): no button; starts while Actuation is in front, stops on tab/app change,
   hidden, close, disconnect, 5 min idle. UX-audit fixes: opens on the last tab (state.ui.tab; first launch Lighting),
-  one-time intro (state.ui.liveSeen), stable layout with a Resume chip, `Api.open_privacy`. docs/screenshot-actuation.png and docs/demo-key-tester.gif still show the old
-  banner/warning (no script makes them; redo by hand). Not yet checked on the
-  keyboard (pywebview focus/blur untested).
+  one-time intro (state.ui.liveSeen), stable layout with a Resume chip, `Api.open_privacy`. Media:
+  `tools/make_media.py` regenerates the Actuation screenshot and key-tester gif (fake clock, WASD at 1.2 mm). Not yet
+  checked on the keyboard (pywebview focus/blur untested).
 
 ## Code map
 - `huntsman_core.py`: protocol + USB transport (pyusb/libusb control transfers to interface 3, 90-byte reports, CRC,

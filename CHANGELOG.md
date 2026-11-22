@@ -2,27 +2,34 @@
 
 All notable changes to this project are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 0.4.1 – 2026-11-22
 
 ### Changed
-- The key tester runs live: no more *Test with a key press* button. It starts by itself while the Actuation tab is open
-  and the window is in front (focused and visible) on a model with the key tester, and stops, with the keyboard typing
-  again, on another tab, another app, a minimised or hidden window, close, quit, disconnect or Reconnect. Focus changes
-  are debounced (300 ms). A status line in Actuation says when it's live or paused; the banner's Stop button is gone.
-- The tester pauses after 5 minutes without key travel (was: 60 seconds after starting) and stays paused until the
-  window is focused again, the tab is opened again, or *Resume* / the board is clicked. A failed start shows its reason
-  once with *Try again* and isn't retried by itself.
-- Keys can be selected and Apply used while the tester runs; Apply writes as before and the tester keeps running.
-- UX audit of the live view: the app opens on the last tab used (first launch: Lighting), so it doesn't stop the
-  Huntsman typing at launch unless it was left on Actuation; a one-time explanation the first time it goes live. The
-  trace and readings keep their place while paused (dimmed, with a *Paused · Resume* chip on the trace), so nothing
-  jumps; the trace's height follows the window (110–200 px) and the presets sit above the readings. One message per
-  place: the banner says what's happening ("Click another window to type again"), the status line the state (live, it also says
-  once how to type again), and it's the only live region (the meter's line no longer speaks; its buttons sit outside
-  it, and a button that hides itself hands focus to the depth slider). Input Monitoring refused shows *Open Privacy
-  settings*. "Live view" wording throughout. Resuming is from the chip, focus or the tab only; clicking the board
-  selects keys. The readings say "Last key: W"; the trace names the key and asks for one while empty. Toasts sit
-  below the board while the trace shows. "Starting live view…" appears only if a start takes over 400 ms.
+- The key tester runs live ("live view"): the *Test with a key press* and *Stop testing* buttons are gone. On the
+  Huntsman V3 Pro it starts by itself while the Actuation tab is open and the window is in front, and the pressed key
+  sinks on the board, the meter follows it, and the trace names the key and draws its travel. A banner over the board
+  says the Huntsman doesn't type meanwhile ("Click another window to type again"); the first time, the panel explains
+  why once.
+- It stops, and the keyboard types again, when you open another tab, click another window or Cmd-Tab, minimise the
+  window or lock the screen, close the window or quit, and when the keyboard is disconnected or you click Reconnect.
+  Coming back to the window or the tab starts it again.
+- After 5 minutes without a key press it pauses (was: testing stopped 60 seconds after it started). The trace and
+  readings stay where they are, dimmed, with a *Paused · Resume* chip on the trace; *Resume*, or coming back to the
+  window or the tab, starts it again.
+- If it can't start, the panel says why once, with *Try again*, and *Open Privacy settings* when Input Monitoring
+  isn't allowed. It doesn't keep retrying.
+- You can pick keys and Apply while the live view runs; it keeps running.
+- The app opens on the tab you used last (the very first launch opens Lighting), so it only stops the Huntsman typing
+  at launch if you left it on Actuation.
+- Actuation panel: the presets sit above the readings, the readings say "Last key: W", the trace's height follows the
+  window, and messages appear below the board while the trace shows.
+- VoiceOver: one status line announces the live view's state (and once how to type again); the meter no longer speaks
+  every reading.
+
+### Not checked on hardware
+- The live view on the Huntsman V3 Pro: starting and stopping as the real app's window comes to the front or goes
+  behind, the Input Monitoring prompt, and the pause after 5 minutes. The owner is checking these now; until then only
+  the test suite (simulated keyboard, headless browser) has run them.
 
 ## 0.4.0 – 2026-11-22
 

@@ -90,7 +90,7 @@ What's different on Windows:
 - **Every model is experimental**, the Huntsman V3 Pro too: nothing that changes the keyboard is sent until you turn
   on **Keyboard → Experimental support** (see [Experimental support](#experimental-support)). Reads always work,
   except while Razer Synapse runs (below).
-- **No key tester.** It puts the keyboard into a mode where it stops typing, so it stays off on an untested platform.
+- **No key tester.** While it runs, the keyboard doesn't type, so it stays off on an untested platform.
 - **Hands off while Razer Synapse runs.** Synapse overwrites the keyboard's live settings, and two programs talking
   to it at once mix up the replies. While Synapse (`RazerAppEngine.exe`, or Synapse 3 or 2) is running, the app and the
   lighting service don't open the keyboard at all, not even to read it: the window shows the last model it saw and
@@ -164,7 +164,7 @@ Settings stored on the keyboard (actuation, keyboard effects) stay on it.
 | | Feature | Saved on the keyboard? |
 |---|---|---|
 | 🎯 | [Actuation point](#actuation-and-the-key-tester), per key, 0.1 to 4.0 mm, with its reset point | Yes |
-| 🔬 | [Key tester](#actuation-and-the-key-tester): watch each key's travel live, inside Actuation | – |
+| 🔬 | [Key tester](#actuation-and-the-key-tester): each key's travel, live, while Actuation is in front | – |
 | ⚡ | [Rapid Trigger](#rapid-trigger-and-snap-tap), with press and release distances | No, kept until unplugged and sent again |
 | 🥊 | [Snap Tap](#rapid-trigger-and-snap-tap) for one pair of keys | No, kept until unplugged and sent again |
 | 💡 | [Keyboard lighting](#keyboard-lighting): static, breathing, spectrum, wave, reactive, starlight, brightness | Yes |
@@ -179,7 +179,7 @@ Settings stored on the keyboard (actuation, keyboard effects) stay on it.
 
 <table>
   <tr>
-    <td width="50%"><a href="#actuation-and-the-key-tester"><img src="docs/screenshot-actuation.png" alt="Huntsman for Mac in demo mode, Actuation tab: four keys set to 1.2 mm while the key tester shows the D key pressed to 2.8 mm"></a></td>
+    <td width="50%"><a href="#actuation-and-the-key-tester"><img src="docs/screenshot-actuation.png" alt="Huntsman for Mac in demo mode, Actuation tab in live view: W, A, S and D set to 1.2 mm while the D key is pressed to 2.80 mm and the trace draws its travel"></a></td>
     <td width="50%">
       <p><b>🎯 Actuation, to a tenth of a millimetre</b></p>
       Every key, anywhere from <b>0.1 mm</b> (a feather) to <b>4.0 mm</b> (the whole way down). It's stored on the
@@ -224,9 +224,9 @@ Settings stored on the keyboard (actuation, keyboard effects) stay on it.
 ### Actuation and the key tester
 
 <p align="center">
-  <img src="docs/demo-key-tester.gif" width="900" alt="Demo mode, Actuation tab: the key tester running while W, A, S and D sink in turn, the travel meter follows each key and the trace draws its travel">
+  <img src="docs/demo-key-tester.gif" width="900" alt="Demo mode, Actuation tab in live view: W, A, S and D sink in turn; the board, the meter and the readings follow each key, and the trace names it and draws its travel">
   <br>
-  <sub>🔬 The key tester in Actuation, recorded in demo mode (simulated key presses, not a hardware recording).</sub>
+  <sub>🔬 Live view in Actuation, recorded in demo mode (simulated key presses, not a hardware recording).</sub>
 </p>
 
 Pick keys on the board (or none, for all of them), drag the slider anywhere from **0.1 mm** (a feather) to **4.0 mm**
@@ -420,6 +420,10 @@ Reconnect on 2026-11-20. Not checked on the keyboard yet: the Mixed readout and 
 and picking keys on the board, Studio's preview while off, the six new presets, and the key tester since the UX
 changes. The golden tests show every byte sent to the V3 Pro is unchanged. The Windows build and the V2 Analog's
 actuation are untested.
+
+**Version 0.4.1** (the live view) hasn't been checked on the keyboard yet: starting and stopping as the window comes
+to the front or goes behind, the Input Monitoring prompt, and the pause after 5 minutes. The test suite covers them
+with a simulated keyboard.
 
 ## Install
 
@@ -645,8 +649,9 @@ stops and restarts it.
 <details>
 <summary><b>The keyboard stopped typing</b></summary>
 
-It was left in test mode. Unplug it and plug it back in; opening the app, or running any `huntsman.py` command, also
-puts it back to typing.
+If the app is in front on the Actuation tab, that's the live view: click another window and the keyboard types again.
+Otherwise it was left in live view (for example, the app was killed). Unplug it and plug it back in; opening the app,
+or running any `huntsman.py` command, also puts it back to typing.
 
 </details>
 
@@ -749,7 +754,7 @@ Turn on Experimental support, run the LED check, and report what worked and what
 <details>
 <summary><b>Why is there no key tester on my model?</b></summary>
 
-The key tester switches the keyboard into a mode where it stops typing. It's only offered on a model that has been
+While the key tester runs, the keyboard doesn't type. It's only offered on a model that has been
 tested, so an untested keyboard can't be left unable to type. The V2 and V2 TKL also have no analog keys to test.
 
 </details>

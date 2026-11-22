@@ -67,7 +67,7 @@
     {"@type": "Question", "name": "I have one of the experimental models. How can I help?",
      "acceptedAnswer": {"@type": "Answer", "text": "Turn on Experimental support, run the LED check, and report what worked and what didn't. The steps are in CONTRIBUTING.md."}},
     {"@type": "Question", "name": "Why is there no key tester on my model?",
-     "acceptedAnswer": {"@type": "Answer", "text": "The key tester switches the keyboard into a mode where it stops typing. It's only offered on a model that has been tested, so an untested keyboard can't be left unable to type. The V2 and V2 TKL also have no analog keys to test."}}
+     "acceptedAnswer": {"@type": "Answer", "text": "While the key tester runs, the keyboard doesn't type. It's only offered on a model that has been tested, so an untested keyboard can't be left unable to type. The V2 and V2 TKL also have no analog keys to test."}}
   ]
 }
 </script>
@@ -351,7 +351,7 @@ footer p{margin:0 0 12px}
 
       <div class="bento">
         <article class="card span-3">
-          <div class="shot"><img src="screenshot-actuation.png" width="1280" height="900" loading="lazy" alt="Huntsman for Mac in demo mode, Actuation tab: four keys set to 1.2 mm while the key tester shows the D key pressed to 2.8 mm"></div>
+          <div class="shot"><img src="screenshot-actuation.png" width="1280" height="900" loading="lazy" alt="Huntsman for Mac in demo mode, Actuation tab in live view: W, A, S and D set to 1.2 mm while the D key is pressed to 2.80 mm and the trace draws its travel"></div>
           <h3>Actuation, to a tenth of a millimetre</h3>
           <p>Every key, anywhere from <strong>0.1 mm</strong> (a feather) to <strong>4.0 mm</strong> (the whole way down), with its reset point. It's stored on the keyboard, so it goes with the keyboard to other computers.</p>
           <span class="tag on">Saved on the keyboard</span>
@@ -361,11 +361,11 @@ footer p{margin:0 0 12px}
           <div class="shot">
             <picture>
               <source media="(prefers-reduced-motion: reduce)" srcset="screenshot-actuation.png">
-              <img src="demo-key-tester.gif" width="960" height="675" loading="lazy" alt="Demo mode, Actuation tab: the key tester showing key travel on the meter and in the readings">
+              <img src="demo-key-tester.gif" width="960" height="675" loading="lazy" alt="Demo mode, Actuation tab in live view: W, A, S and D sink in turn; the board, the meter and the readings follow each key, and the trace names it and draws its travel">
             </picture>
           </div>
           <h3>Key tester: watch each key's travel live</h3>
-          <p>Open Actuation and press a key on the Huntsman: it sinks on the board, a meter follows it, a trace draws its travel, and the panel shows where it typed, where it reset and how deep you pressed. Offered on the Huntsman V3 Pro (1532:02A6), the one model tested with this app.</p>
+          <p>Open Actuation and press a key on the Huntsman. No button to click: it sinks on the board, a meter follows it, a trace names it and draws its travel, and the panel shows where it typed, where it reset and how deep you pressed. While the window is in front on Actuation the Huntsman doesn't type; click another window and it types again. Offered on the Huntsman V3 Pro (1532:02A6), the one model tested with this app.</p>
           <p class="note">Recorded in demo mode (simulated key presses, not a hardware recording).</p>
         </article>
 
@@ -519,7 +519,7 @@ cd huntsman-for-mac</code></pre></div>
       </ol>
       <ul class="win-notes">
         <li>Every model is experimental on Windows, the V3 Pro too: nothing is changed until Experimental support is on.</li>
-        <li>No key tester on Windows.</li>
+        <li>No key tester on Windows: while it runs the keyboard doesn't type, so it stays off on an untested platform.</li>
         <li>Windows Dynamic Lighting can take over the lights; the window says how to turn it off for the keyboard.</li>
         <li>The window needs the Microsoft Edge WebView2 Runtime: built into Windows 11, may need installing on Windows 10.</li>
         <li>The lighting service lives in the tray and starts at sign-in (per-user, no admin rights).</li>
@@ -566,7 +566,7 @@ cd huntsman-for-mac</code></pre></div>
         <div class="card"><h3>Checked replies</h3><p>Every command checks that the keyboard's reply matches the request and passes its checksum. Actuation writes are also read back key by key.</p></div>
         <div class="card"><h3>Your settings saved</h3><p>On first launch the app copies every key's settings to a snapshot; <code>restore-snapshot</code> puts them back.</p></div>
         <div class="card"><h3>Factory reset</h3><p><em>Restore factory depth</em> puts every key back to 1.2 mm and turns off Rapid Trigger and Snap Tap.</p></div>
-        <div class="card"><h3>The tester lets go</h3><p>The tester only runs while Actuation is in front. The keyboard types again when you switch tab or app, after 5 minutes without a key press, when you close the window or when the app quits.</p></div>
+        <div class="card"><h3>The tester lets go</h3><p>The tester only runs while the window is in front on Actuation. The keyboard types again when you switch tab or app, minimise the window, after 5 minutes without a key press, when you close the window or when the app quits.</p></div>
       </div>
     </div>
   </section>
@@ -587,7 +587,7 @@ cd huntsman-for-mac</code></pre></div>
         <details><summary>Is it free?</summary><p>Yes. It's open source under GPL-3.0-or-later, with no account, no telemetry and no paid tier.</p></details>
         <details><summary>Which keyboards are supported?</summary><p>The Razer Huntsman V3 Pro (full size, USB ID 1532:02A6) is tested. The V3 Pro TKL, V3 Pro 8KHz, V3 Pro Mini, V2, V2 TKL and V2 Analog have experimental support: untested, and off until you turn on Experimental support. See <a href="#models">Supported hardware</a>.</p></details>
         <details><summary>I have one of the experimental models. How can I help?</summary><p>Turn on Experimental support, run the LED check, and report what worked and what didn't. The steps are in <a href="https://github.com/samir777-eng/huntsman-for-mac/blob/master/CONTRIBUTING.md#testing-an-experimental-model">CONTRIBUTING.md</a>.</p></details>
-        <details><summary>Why is there no key tester on my model?</summary><p>The key tester switches the keyboard into a mode where it stops typing. It's only offered on a model that has been tested, so an untested keyboard can't be left unable to type. The V2 and V2 TKL also have no analog keys to test.</p></details>
+        <details><summary>Why is there no key tester on my model?</summary><p>While the key tester runs, the keyboard doesn't type. It's only offered on a model that has been tested, so an untested keyboard can't be left unable to type. The V2 and V2 TKL also have no analog keys to test.</p></details>
       </div>
     </div>
   </section>

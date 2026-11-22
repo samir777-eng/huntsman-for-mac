@@ -17,8 +17,9 @@ All notable changes to this project are listed here. Versions follow [Semantic V
   Huntsman typing at launch unless it was left on Actuation; a one-time explanation the first time it goes live. The
   trace and readings keep their place while paused (dimmed, with a *Paused · Resume* chip on the trace), so nothing
   jumps; the trace's height follows the window (110–200 px) and the presets sit above the readings. One message per
-  place: the banner says what's happening ("Click another window to type again"), the status line only the state, and
-  it's the only live region (the meter's line no longer speaks). Input Monitoring refused shows *Open Privacy
+  place: the banner says what's happening ("Click another window to type again"), the status line the state (live, it also says
+  once how to type again), and it's the only live region (the meter's line no longer speaks; its buttons sit outside
+  it, and a button that hides itself hands focus to the depth slider). Input Monitoring refused shows *Open Privacy
   settings*. "Live view" wording throughout. Resuming is from the chip, focus or the tab only; clicking the board
   selects keys. The readings say "Last key: W"; the trace names the key and asks for one while empty. Toasts sit
   below the board while the trace shows. "Starting live view…" appears only if a start takes over 400 ms.

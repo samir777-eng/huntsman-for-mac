@@ -890,7 +890,7 @@ function liveUi() {
   $("#liveNote").hidden = !hasFeature("key_tester");
   $("#liveNote").classList.toggle("notice", fail);
   // the one live region: the state only, never "Starting" (the chip shows that, after a moment)
-  setText($("#liveText"), testing ? "Live view on."
+  setText($("#liveText"), testing ? "Live view on. Click another window to type again."   // spoken once per start
     : held ? (held.idle ? `${held.why} The Huntsman types normally.` : held.why)
     : liveStarting ? "" : !inFront() && liveWanted.ignoringFront() ? "Live view paused: this window isn't in front. The Huntsman types normally." : "");
   $("#liveGo").hidden = !fail || testing; $("#livePrivacy").hidden = !fail || !held.perm || testing;
@@ -914,10 +914,12 @@ async function stopTest() {
   if (!testing) return; testing = false; testerUi();
   try { await call("stop_test"); } catch (e) { liveHeld = { why: e.message }; liveUi(); }   // error toast already shown
 }
-const liveAgain = () => { liveHeld = null; liveSync(); };
+// A button that hides itself hands focus to the depth slider, not to the page
+const keepFocus = () => { if (document.activeElement?.closest?.("#traceChip, #liveNote, #liveIntro")) $("#depth").focus(); };
+const liveAgain = () => { keepFocus(); liveHeld = null; liveSync(); };
 $("#liveGo").onclick = $("#traceResume").onclick = liveAgain;   // board clicks only select keys
 $("#livePrivacy").onclick = () => call("open_privacy").catch(() => {});
-$("#liveIntro button").onclick = () => { $("#liveIntro").hidden = true; };
+$("#liveIntro button").onclick = () => { keepFocus(); $("#liveIntro").hidden = true; };
 addEventListener("blur", () => { liveUi(); liveSync(300); });
 addEventListener("focus", () => { if (liveHeld?.idle) liveHeld = null; liveUi(); liveSync(300); });   // a failure waits for Try again
 document.addEventListener("visibilitychange", () => { liveUi(); liveSync(document.visibilityState === "hidden" ? 0 : 300); });

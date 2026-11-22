@@ -837,7 +837,9 @@ class Api:
     def set_prefs(self, prefs):
         """Interface preferences (accent colour, the last tab, the live view's explanation seen), saved together.
         Not sent to the keyboard."""
-        prefs = {k: v for k, v in dict(prefs).items() if k in ("accent", "accentMatch", "tab", "liveSeen")}
+        if not isinstance(prefs, dict):
+            return {"ok": False, "error": "prefs must be an object"}
+        prefs = {k: v for k, v in prefs.items() if k in ("accent", "accentMatch", "tab", "liveSeen")}
         if "accent" in prefs and not (isinstance(prefs["accent"], str) and ACCENT.match(prefs["accent"])):
             return {"ok": False, "error": "accent must be a colour like #3ddc84"}
         for k in ("accentMatch", "liveSeen"):

@@ -84,7 +84,8 @@ venv into the bundle and signs it ad hoc; unsigned apps can't read ~/Downloads):
 - Key tester lives in Actuation and runs live (Unreleased, branch `auto-key-tester`, plan
   docs/plans/2026-11-22-live-key-tester.md): no button; starts while Actuation is in front, stops on tab/app change,
   hidden, close, disconnect, 5 min idle. UX-audit fixes: opens on the last tab (state.ui.tab; first launch Lighting),
-  one-time intro (state.ui.liveSeen), stable layout with a Resume chip, `Api.open_privacy`. Not yet checked on the
+  one-time intro (state.ui.liveSeen), stable layout with a Resume chip, `Api.open_privacy`. docs/screenshot-actuation.png and docs/demo-key-tester.gif still show the old
+  banner/warning (no script makes them; redo by hand). Not yet checked on the
   keyboard (pywebview focus/blur untested).
 
 ## Code map

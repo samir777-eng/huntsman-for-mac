@@ -373,3 +373,8 @@ def test_open_privacy_is_refused_on_windows(app, monkeypatch):
     monkeypatch.setattr(app.subprocess, "run", lambda cmd, **kw: ran.append(cmd))
     monkeypatch.setattr(app.platforms, "is_windows", lambda: True)
     assert app.Api().open_privacy()["ok"] is False and ran == []
+
+
+@pytest.mark.parametrize("prefs", [None, "tab", 3, ["tab"]])
+def test_set_prefs_refuses_what_isnt_an_object(app, prefs):
+    assert app.Api().set_prefs(prefs)["ok"] is False

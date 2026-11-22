@@ -106,13 +106,14 @@ def test_the_message_is_said_once(page):
     wait_for_call(page, "start_test")
     expect(page.locator("#testBanner")).to_contain_text("Click another window to type again")
     assert page.locator("#actReadings .warn").count() == 0
-    expect(page.locator("#liveText")).to_have_text("Live view on.")
+    expect(page.locator("#liveText")).to_have_text("Live view on. Click another window to type again.")   # spoken once per start
 
 
 def test_only_the_status_line_is_a_live_region(page):
     assert page.locator("#testBanner").get_attribute("role") is None
     assert page.locator("#mHit").get_attribute("aria-live") is None
-    assert page.locator("#liveNote").get_attribute("role") == "status"
+    assert page.locator("#liveText").get_attribute("role") == "status"
+    assert page.locator('#liveText button').count() == 0 and page.locator('#liveNote').get_attribute('role') is None   # buttons outside it
 
 
 def test_starting_shows_only_when_it_takes_a_while(opened):
@@ -188,3 +189,44 @@ def test_apply_toast_doesnt_cover_the_keys_while_live(page):
     expect(page.locator("#toast")).to_have_class(re.compile(r"\bshow\b"))
     t, b = box(page.locator("#toast")), box(page.locator("#board"))
     assert t[1] >= b[3], (t, b)                                # below the board, at the dock
+
+
+def test_unfocused_at_launch_on_actuation_doesnt_start(opened):
+    pg = opened(init="window.__ui = {tab: 'actuation', liveSeen: true}; window.__front = {focus: false, visible: true}")
+    expect(pg.locator('#sources button[data-view="actuation"]')).to_have_attribute("aria-current", "page")
+    pg.wait_for_timeout(700)
+    assert calls(pg, "start_test") == []
+
+
+def focused_id(pg):
+    return pg.evaluate("document.activeElement && document.activeElement.id")
+
+
+def test_resume_by_keyboard_keeps_focus_in_the_panel(page):
+    wait_for_call(page, "start_test")
+    page.evaluate("window.onTestEnded('Live view paused after 5 minutes without a key press.', true)")
+    page.focus("#traceResume")
+    page.keyboard.press("Enter")
+    page.wait_for_function("() => window.__calls.filter(c => c[0] === 'start_test').length === 2")
+    expect(page.locator("#traceResume")).to_be_hidden()
+    assert focused_id(page) == "depth"
+
+
+def test_try_again_by_keyboard_keeps_focus_in_the_panel(opened):
+    pg = opened(init="window.__override.start_test = () => Promise.resolve({ok: false, reason: 'unavailable', error: 'The keyboard is busy.'})")
+    wait_for_call(pg, "start_test")
+    pg.evaluate("window.__override.start_test = () => Promise.resolve({ok: true, data: true})")
+    pg.focus("#liveGo")
+    pg.keyboard.press("Enter")
+    pg.wait_for_function("() => window.__calls.filter(c => c[0] === 'start_test').length === 2")
+    expect(pg.locator("#liveGo")).to_be_hidden()
+    assert focused_id(pg) == "depth"
+
+
+def test_got_it_by_keyboard_keeps_focus_in_the_panel(opened):
+    pg = opened(init="window.__ui = {tab: 'actuation'}")
+    wait_for_call(pg, "start_test")
+    pg.focus("#liveIntro button")
+    pg.keyboard.press("Enter")
+    expect(pg.locator("#liveIntro")).to_be_hidden()
+    assert focused_id(pg) == "depth"

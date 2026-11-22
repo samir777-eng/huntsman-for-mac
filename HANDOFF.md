@@ -81,7 +81,9 @@ venv into the bundle and signs it ad hoc; unsigned apps can't read ~/Downloads):
   `state.json["experimental"]` is on (Keyboard tab switch or `huntsman.py experimental on`); never driver mode;
   unknown commands refused. Golden-byte tests (`tests/golden_02a6.json`) pin every 02A6 packet.
 - First-launch snapshot records its PID; restore refuses another model's snapshot. One snapshot per Mac user.
-- Key tester lives in Actuation ("Test with a key press"); the Key tester tab is gone.
+- Key tester lives in Actuation and runs live (Unreleased, branch `auto-key-tester`, plan
+  docs/plans/2026-11-22-live-key-tester.md): no button; starts while Actuation is in front, stops on tab/app change,
+  hidden, close, disconnect, 5 min idle. Not yet checked on the keyboard (pywebview focus/blur untested).
 
 ## Code map
 - `huntsman_core.py`: protocol + USB transport (pyusb/libusb control transfers to interface 3, 90-byte reports, CRC,

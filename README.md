@@ -183,8 +183,8 @@ Settings stored on the keyboard (actuation, keyboard effects) stay on it.
     <td width="50%">
       <p><b>🎯 Actuation, to a tenth of a millimetre</b></p>
       Every key, anywhere from <b>0.1 mm</b> (a feather) to <b>4.0 mm</b> (the whole way down). It's stored on the
-      keyboard, so it goes with the keyboard to other computers. Then hit <b>Test with a key press</b> and watch the
-      key sink. <a href="#actuation-and-the-key-tester">More →</a>
+      keyboard, so it goes with the keyboard to other computers. Press a key on the Huntsman and watch it sink: the key
+      tester runs live while Actuation is in front. <a href="#actuation-and-the-key-tester">More →</a>
     </td>
   </tr>
   <tr>
@@ -234,10 +234,17 @@ Pick keys on the board (or none, for all of them), drag the slider anywhere from
 balanced, 2.0 typing, 3.0 firm. The reset point follows 0.1 mm above, or set it yourself. It's stored on the keyboard,
 so it stays after unplugging and goes with the keyboard to other computers.
 
-Not sure what 1.2 mm feels like? Click **Test with a key press**. The Huntsman switches to sending travel readings
-instead of typing, the meter follows your key, a trace draws its travel, and the panel shows where the last key typed,
-where it reset and how deep you pressed. Testing stops by itself after 60 seconds, and the keyboard types again when
-you stop, close the window or quit. Meanwhile, use your Mac's built-in keyboard.
+Not sure what 1.2 mm feels like? Just press a key on the Huntsman. The key tester runs by itself while the Actuation
+tab is open and the window is in front: the Huntsman sends travel readings instead of typing, the pressed key sinks on
+the board, the meter follows it, a trace draws its travel, and the panel shows where the last key typed, where it reset
+and how deep you pressed. A line in the panel says when it's live. You can still pick keys and Apply while it runs.
+
+Because the Huntsman doesn't type while it's live, the tester stops, and the keyboard types again, as soon as you open
+another tab, switch to another app (Cmd-Tab, or click another window), minimise the window or lock the screen, close
+the window or quit, and when the keyboard is disconnected or you Reconnect. Coming back to the window or the tab starts
+it again. After 5 minutes without a key press it pauses: click **Resume** (or the board), or come back to the window,
+to start it again. If it can't start (for example, Input Monitoring isn't allowed), the panel says why once, with
+**Try again**; it doesn't keep retrying. Meanwhile, use your Mac's built-in keyboard.
 
 The key tester is only offered on the Huntsman V3 Pro (1532:02A6), the one model tested with this app.
 
@@ -572,8 +579,8 @@ Razer documentation. So it's careful:
   a second model plugged in later gets none. The V2 and V2 TKL have no actuation settings, so they get none either.
 - **Factory reset.** *Restore factory depth* (in the app, or `huntsman.py factory`) puts every key back to 1.2 mm and
   turns off Rapid Trigger and Snap Tap. Not on the V2 Analog, whose factory depth isn't known: use the snapshot.
-- **The key tester always lets go.** The keyboard goes back to typing when you stop, after 60 seconds, when you close
-  the window, when the app quits, and when macOS ends it (SIGTERM). If the app is killed outright, the next time the
+- **The key tester always lets go.** The keyboard goes back to typing when you leave the Actuation tab or the window
+  goes to the background, after 5 minutes without a key press, when you close the window, when the app quits, and when macOS ends it (SIGTERM). If the app is killed outright, the next time the
   app or the command line connects it puts the keyboard back to typing. Unplugging and replugging should also work,
   since test mode isn't stored.
 - **Experimental models** get only commands already checked on the Huntsman V3 Pro, and nothing that changes them is

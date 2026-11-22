@@ -84,7 +84,8 @@ async function call(name, ...args) {
   const r = await api[name](...args);
   // r.reason: the model refused it before anything was sent (experimental or missing feature), still connected
   if (!r.ok) {
-    toast(r.error, true); if (!r.reason) setConn(false, "Not connected");
+    toast(r.error, true);
+    if (!r.reason) { setConn(false, "Not connected"); if (testing) { liveHeld = { why: r.error }; liveQueue(stopTest); } }   // the app dropped the keyboard
     if (r.reason === "synapse" && !platform.blocked) { await readPlatform(); platformUi(); lockUi(); }   // Synapse started since
     throw new Error(r.error);
   }
@@ -143,7 +144,7 @@ function fit() {
   kb.classList.toggle("depths-on-demand", small);
   kb.style.setProperty("--front-fs", (small ? Math.max(11, legendPx / zoom) : 9.5 / zoom).toFixed(2) + "px");
   kb.classList.toggle("num-on-top", !small && 9.5 / zoom > 10.5);
-  if (view === "actuation" && !testing) $("#stageNote").textContent = stageNote(view);
+  if (view === "actuation") $("#stageNote").textContent = stageNote(view);
 }
 
 /* What each key's LED shows, so legends glow like the real keyboard */
@@ -263,7 +264,6 @@ function refreshButtons() {
     : a === b ? "Choose two different keys" : `Apply to ${label(a)} and ${label(b)}`;
   $("#applySnap").disabled = !sd || (snapOn && a === b);
   $("#snapDirty").hidden = !sd;
-  $("#actTest").disabled = !hasFeature("key_tester");
   fxScopeUi(); dirtyUi(); lockUi();
 }
 
@@ -332,7 +332,7 @@ function noKbUi() {
   if (none) $("#studioOnNote").hidden = true;   // "Studio is lighting the keyboard" is false with no keyboard
   if (lost) $("#emptyReconnect").focus();
 }
-// The key tester shows on every model with Actuation, disabled with the reason where it isn't offered
+// Models without the key tester say why in Actuation; it never starts there
 function testerWhy() {
   if (!model || hasFeature("key_tester")) return "";
   if (model.platform === "windows") return "Key tester isn't available on Windows yet.";
@@ -346,9 +346,9 @@ function applyModel() {
   Object.keys(FEATURE_TABS).forEach(v => { $(`#sources button[data-view="${v}"]`).hidden = !viewShown(v); });
   const why = testerWhy();
   $("#actTestWhy").textContent = why; $("#actTestWhy").hidden = !why;
-  if (why) $("#actTest").setAttribute("aria-describedby", "actTestWhy"); else $("#actTest").removeAttribute("aria-describedby");
   $("#actReadings").hidden = !hasFeature("key_tester") || !testing;   // readings and the warning while testing only
-  if (testing && !hasFeature("key_tester")) stopTest();
+  if (testing && !hasFeature("key_tester")) liveQueue(stopTest);
+  liveUi();
   setAct(hasFeature("actuation") && model.actuation || V3_ACT);
   $("#restore").hidden = $("#restoreHint").hidden = !hasFeature("actuation") || act.factory == null;
   $("#expBox").hidden = !experimentalModel();
@@ -426,7 +426,7 @@ $("#board").addEventListener("mousedown", e => {
   const c = e.target.closest(".cap"); if (!c) return;
   focusId = +c.dataset.id;
   if (view === "snap" && !c.classList.contains("off")) { e.preventDefault(); c.focus({ preventScroll: true }); pickSnap(focusId); return; }
-  if (!selecting() || c.classList.contains("off") || testing) { paint(); return; }
+  if (!selecting() || c.classList.contains("off")) { paint(); return; }
   e.preventDefault(); c.focus({ preventScroll: true });
   const id = +c.dataset.id; drag = selected.has(id) ? "remove" : "add"; toggle(id);
 });
@@ -461,7 +461,7 @@ $("#board").addEventListener("keydown", e => {
   } else if (e.key === " " || e.key === "Enter") {
     e.preventDefault();
     if (view === "snap" && !c.classList.contains("off")) pickSnap(id);
-    else if (selecting() && !c.classList.contains("off") && !testing) { selected.has(id) ? selected.delete(id) : selected.add(id); paint(); }
+    else if (selecting() && !c.classList.contains("off")) { selected.has(id) ? selected.delete(id) : selected.add(id); paint(); }
     return;
   } else return;
   e.preventDefault();
@@ -480,11 +480,12 @@ $$("#selectTools button").forEach(b => b.onclick = () => {
 // The key tester runs from Actuation: while it runs, the stage shows the travel trace under the keyboard
 const traceShown = () => testing && view === "actuation";
 const depthsOnDemand = () => $("#kb").classList.contains("depths-on-demand");
-const stageNote = v => v === "actuation" && testing ? NOTES.testing : v === "actuation" && depthsOnDemand() ? NOTES.actuationSmall
+const stageNote = v => v === "actuation" ? (depthsOnDemand() ? NOTES.actuationSmall : NOTES.actuation) + (testing ? " " + NOTES.testing : "")
   : v === "snap" && snapNext ? NOTES.snapSecond : NOTES[v];
 async function show(v) {
   if (!viewShown(v)) v = "lighting";   // a tab this model doesn't have
-  if (testing && v !== "actuation") await stopTest();   // the key tester lives in Actuation
+  if (testing && v !== "actuation") await liveQueue(stopTest);   // the key tester lives in Actuation
+  if (v !== view && v === "actuation") liveHeld = null;   // coming back to Actuation asks again
   if (v !== view) hideToast();
   if (v !== view && view === "snap") snapNext = 0;   // picking a pair starts over at the first key
   view = v;
@@ -497,6 +498,7 @@ async function show(v) {
   $$(".cap").forEach(c => c.classList.remove("pressed", "typed"));
   fit(); paint(); fillAll(); snapUi();
   if (traceShown()) drawTrace();
+  liveSync();
   if (window.studioShown) studioShown(v);
 }
 $$("button[data-view]").forEach(b => b.onclick = () => show(b.dataset.view));
@@ -796,7 +798,12 @@ window.onDepth = batch => {            // batch: [[keyId, mm], ...] from the app
   }
   drawTrace(); traceLabel();
 };
-window.onTestEnded = (reason, ok) => { testing = false; testerUi(); if (reason) toast(reason, ok === false); };
+// Pushed when the app ends a session by itself: 5 minutes without key travel (paused until asked again) or a failed
+// switch back to typing (said once, also as an error toast)
+window.onTestEnded = (reason, ok) => {
+  testing = false; liveHeld = ok === false ? { why: reason } : { idle: true, why: reason || "Testing stopped." }; testerUi();
+  if (ok === false) toast(reason, true);
+};
 function meterLines() {
   $("#mAct").style.setProperty("--p", (depth() / 4).toFixed(3));
   $("#mRel").style.setProperty("--p", (relValue() / 4).toFixed(3));
@@ -851,8 +858,6 @@ function drawTrace() {
 }
 
 function testerUi() {
-  $("#actTest").textContent = testing ? "Stop testing" : "Test with a key press";
-  $("#actTest").classList.toggle("on", testing);
   $("#testBanner").hidden = !testing;
   $("#stage").classList.toggle("testing", testing);
   if (testing) { $("#mLive").dataset.idle = "true"; $("#mKey").textContent = "Press a key on the Huntsman"; $("#mNum").textContent = "0.00"; setText($("#mHit"), mixed() ? "Each key types at its own depth" : `Types at ${mm(depth())}`); }
@@ -862,15 +867,44 @@ function testerUi() {
   if (view === "actuation") $("#stageNote").textContent = stageNote(view);
   fit(); if (traceShown()) drawTrace();
   if (!testing) { meterKey(0, false); $$(".cap").forEach(c => { c.classList.remove("pressed", "typed"); c.querySelector(".fill").style.height = 0; }); paint(); traceLabel(true); }
+  liveUi();
 }
-async function stopTest() { if (!testing) return; testing = false; testerUi(); try { await call("stop_test"); toast("Testing stopped. The keyboard types normally again."); } catch (e) { /* error toast already shown */ } }
-async function toggleTest() {
-  if (testing) return stopTest();
-  await call("start_test"); testing = true; trace.key = null; trace.samples = []; testerUi();
-  if (view !== "actuation") return stopTest();   // the tab changed while the test was starting
+// Live: the tester runs while Actuation is in front (window focused and visible) on a model with the key tester, and
+// stops when any of that changes. Starts and stops are queued so they never overlap; focus changes are debounced.
+let liveHeld = null;        // paused until focus, coming back to Actuation or the button: {idle, why} or {why} (a failure)
+let liveStarting = false, liveTimer = null, liveOp = Promise.resolve();
+const inFront = () => document.hasFocus() && document.visibilityState === "visible";
+const liveWanted = () => view === "actuation" && hasFeature("key_tester") && !writesLocked() && inFront() && !liveHeld;
+const liveQueue = f => (liveOp = liveOp.then(f, f));
+function liveSync(delay = 0) { clearTimeout(liveTimer); liveTimer = setTimeout(() => liveQueue(liveStep), delay); }
+async function liveStep() { const want = liveWanted(); if (want && !testing) await startTest(); else if (!want && testing) await stopTest(); }
+function liveUi() {
+  const held = liveHeld;
+  $("#liveNote").hidden = !hasFeature("key_tester");
+  setText($("#liveText"), testing ? "Live: the Huntsman's typing is paused while this window is in front."
+    : held ? (held.idle ? `${held.why} The Huntsman types normally.` : held.why)
+    : liveStarting || inFront() ? "Starting the key tester…" : "Paused while this window isn't in front. The Huntsman types normally.");
+  $("#liveGo").hidden = !held || testing; $("#liveGo").textContent = held?.idle ? "Resume" : "Try again";
 }
-$("#actTest").onclick = e => busy(e.target, toggleTest);
-$("#bannerStop").onclick = e => busy(e.target, stopTest);
+async function startTest() {
+  liveStarting = true; liveUi();
+  let r; try { r = await api.start_test(); } catch (e) { r = { ok: false, error: String(e) }; }
+  liveStarting = false;
+  if (!r.ok) { liveHeld = { why: r.error }; if (!r.reason) setConn(false, "Not connected"); liveUi(); return; }   // said once, no retry
+  if (!r.data) { liveUi(); return; }   // cancelled
+  testing = true; trace.key = null; trace.samples = []; testerUi();
+  if (!liveWanted()) await stopTest();   // the tab or the window changed while it started
+}
+async function stopTest() {
+  if (!testing) return; testing = false; testerUi();
+  try { await call("stop_test"); } catch (e) { liveHeld = { why: e.message }; liveUi(); }   // error toast already shown
+}
+const liveAgain = () => { liveHeld = null; liveSync(); };
+$("#liveGo").onclick = liveAgain;
+$("#stage").addEventListener("click", e => { if (liveHeld?.idle && view === "actuation" && !e.target.closest("button")) liveAgain(); });
+addEventListener("blur", () => { liveUi(); liveSync(300); });
+addEventListener("focus", () => { liveHeld = null; liveUi(); liveSync(300); });
+document.addEventListener("visibilitychange", () => { liveUi(); liveSync(document.visibilityState === "hidden" ? 0 : 300); });
 addEventListener("beforeunload", () => { if (testing) api.stop_test(); });
 
 /* ---------- progress of long reads and writes (app.py calls window.onProgress) ---------- */
@@ -888,6 +922,7 @@ async function reconnect(btn) {
   const fromStage = btn.id === "emptyReconnect";
   snapNext = 0; $("#stageNote").textContent = stageNote(view);
   await busy(btn, async () => {
+    await liveQueue(stopTest);   // the app stops it too; the window shouldn't think it still runs
     const done = await call("reconnect");
     if (!(await load())) { if (!model && !platform.blocked) toast(modelError || "No keyboard answered.", true); return; }
     toast(`Connected to ${model.name}` + (done.length ? `. Sent again: ${done.join(", ")}` : ""));

@@ -2,6 +2,18 @@
 
 All notable changes to this project are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Changed
+- The key tester runs live: no more *Test with a key press* button. It starts by itself while the Actuation tab is open
+  and the window is in front (focused and visible) on a model with the key tester, and stops, with the keyboard typing
+  again, on another tab, another app, a minimised or hidden window, close, quit, disconnect or Reconnect. Focus changes
+  are debounced (300 ms). A status line in Actuation says when it's live or paused; the banner's Stop button is gone.
+- The tester pauses after 5 minutes without key travel (was: 60 seconds after starting) and stays paused until the
+  window is focused again, the tab is opened again, or *Resume* / the board is clicked. A failed start shows its reason
+  once with *Try again* and isn't retried by itself.
+- Keys can be selected and Apply used while the tester runs; Apply writes as before and the tester keeps running.
+
 ## 0.4.0 – 2026-11-22
 
 ### Added

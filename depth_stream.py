@@ -197,13 +197,18 @@ class _IOKit:
         return list(arr)
 
 
-class DepthSession:
-    """One key-tester session. on_batch receives [(key_id, mm), ...] about 30 times a second."""
+def _duration(sec):
+    return f"{sec / 60:g} minutes" if sec >= 120 else f"{sec:g} seconds"
 
-    def __init__(self, keyboard, on_batch, on_end, time_limit=60.0):
+
+class DepthSession:
+    """One key-tester session. on_batch receives [(key_id, mm), ...] about 30 times a second.
+    It stops by itself after idle_limit seconds without key travel (the window also stops it when it goes away)."""
+
+    def __init__(self, keyboard, on_batch, on_end, idle_limit=300.0):
         # Device access is serialized by the transport itself, so stop() never waits on app-level locks
         # (stop() can run on the main thread while the window closes).
-        self.kb, self.on_batch, self.on_end, self.limit = keyboard, on_batch, on_end, time_limit
+        self.kb, self.on_batch, self.on_end, self.limit = keyboard, on_batch, on_end, idle_limit
         self._stop = threading.Event()
         self._thread = None
         self._latest = []
@@ -282,19 +287,21 @@ class DepthSession:
         try:
             if failure:
                 return
-            started, last_sent = time.monotonic(), None
+            last_travel, last_sent = time.monotonic(), None
             while not self._stop.is_set():
                 io.cf.CFRunLoopRunInMode(io.mode, 0.033, False)
                 with self._lock:
                     batch = list(self._latest)
+                if batch:
+                    last_travel = time.monotonic()
                 if batch != last_sent:
                     try:
                         self.on_batch(batch)
                     except Exception:
                         pass  # the window may be gone; the time limit and stop below still apply
                     last_sent = batch
-                if time.monotonic() - started > self.limit:
-                    reason = f"Testing stopped after {self.limit:g} seconds."
+                if time.monotonic() - last_travel > self.limit:
+                    reason = f"Testing stopped after {_duration(self.limit)} without a key press."
                     break
         finally:
             for dev in opened:

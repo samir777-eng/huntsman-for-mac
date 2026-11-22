@@ -21,9 +21,14 @@ with open(ROOT / "layout.json") as f:
 
 # Runs before the page's own scripts: its pywebviewready listener is registered first, so every api
 # method is wrapped before app.js calls any of them. window.__override[name] replaces a method's result.
+# The key tester starts by itself on Actuation, so start_test answers without the demo's simulated presses (a test
+# feeds its own depth readings), and window.__front = {focus, visible} stands in for the window being in front.
 RECORDER = """
 window.__calls = [];
-window.__override = {};
+window.__override = { start_test: () => Promise.resolve({ok: true, data: true}) };
+window.__front = { focus: true, visible: true };
+Document.prototype.hasFocus = () => window.__front.focus;
+Object.defineProperty(Document.prototype, "visibilityState", { get: () => window.__front.visible ? "visible" : "hidden" });
 addEventListener("pywebviewready", () => {
   const api = window.pywebview.api;
   for (const name of Object.keys(api)) {
@@ -144,35 +149,50 @@ def test_key_tester_tab_is_gone(page):
     assert page.locator("#testToggle").count() == 0
 
 
-def quiet_tester(page):
-    """start_test succeeds without the demo's simulated presses, so a test feeds its own depth readings."""
-    page.evaluate("window.__override.start_test = () => Promise.resolve({ok: true, data: true})")
+def front(page, focus=True, visible=True):
+    """The window comes to the front or goes away: focus/blur and visibilitychange, as WebKit sends them."""
+    page.evaluate("""([f, v]) => { const was = window.__front; window.__front = {focus: f, visible: v};
+      if (was.visible !== v) document.dispatchEvent(new Event("visibilitychange"));
+      if (was.focus !== f) window.dispatchEvent(new Event(f ? "focus" : "blur")); }""", [focus, visible])
 
 
-def test_actuation_test_button_starts_and_stops_one_session(page):
-    banner, btn = page.locator("#testBanner"), page.locator("#actTest")
-    sync_api.expect(btn).to_have_text("Test with a key press")
-    sync_api.expect(page.locator("#actReadings")).to_be_hidden()      # readings and the warning only while testing
-    sync_api.expect(banner).to_be_hidden()
-    sync_api.expect(page.locator("#traceWrap")).to_be_hidden()
-    btn.click()
+def count(page, name):
+    return len(calls(page, name))
+
+
+def test_no_test_button(page):
+    assert page.locator("#actTest").count() == 0 and page.locator("#bannerStop").count() == 0
+
+
+def test_key_tester_starts_by_itself_on_actuation(page):
     wait_for_call(page, "start_test")
-    sync_api.expect(banner).to_be_visible()
-    sync_api.expect(btn).to_have_text("Stop testing")
+    sync_api.expect(page.locator("#testBanner")).to_be_visible()
     sync_api.expect(page.locator("#traceWrap")).to_be_visible()
+    sync_api.expect(page.locator("#liveNote")).to_contain_text("Live: the Huntsman's typing is paused while this window is in front")
     sync_api.expect(page.locator("#actReadings")).to_contain_text("sends travel readings instead of typing")
-    btn.click()
-    wait_for_call(page, "stop_test")
-    sync_api.expect(banner).to_be_hidden()
-    sync_api.expect(btn).to_have_text("Test with a key press")
-    sync_api.expect(page.locator("#traceWrap")).to_be_hidden()
-    assert len(calls(page, "start_test")) == 1 and len(calls(page, "stop_test")) == 1
+    page.wait_for_timeout(600)
+    assert count(page, "start_test") == 1 and count(page, "stop_test") == 0   # no repeats
     assert page.errors == []
 
 
+def test_keys_stay_selectable_while_live(page):
+    wait_for_call(page, "start_test")
+    cap(page, "W").click()
+    sync_api.expect(cap(page, "W")).to_have_class(re.compile(r"\bsel\b"))
+    sync_api.expect(page.locator("#actScope")).to_contain_text("1 selected key")
+
+
+def test_apply_while_live_keeps_testing(page):
+    """Today's behaviour, kept: Apply writes while the tester runs and the tester carries on."""
+    wait_for_call(page, "start_test")
+    page.click("#applyDepth")
+    page.click('#confirmApply button[value="apply"]')   # W, A, S and D use another depth: asked first
+    wait_for_call(page, "set_depth")
+    sync_api.expect(page.locator("#testBanner")).to_be_visible()
+    assert count(page, "stop_test") == 0
+
+
 def test_readings_follow_the_last_key(page):
-    quiet_tester(page)
-    page.click("#actTest")
     wait_for_call(page, "start_test")
     w = IDS["W"]
     page.evaluate(f"window.onDepth([[{w}, 1.2]])")
@@ -190,25 +210,119 @@ def test_readings_follow_the_last_key(page):
     assert page.errors == []
 
 
-def test_switching_tab_stops_the_test(page):
-    page.click("#actTest")
+def test_switching_tab_stops_and_coming_back_restarts(page):
     wait_for_call(page, "start_test")
     page.click('button[data-view="lighting"]')
     wait_for_call(page, "stop_test")
     sync_api.expect(page.locator("#testBanner")).to_be_hidden()
     sync_api.expect(page.locator("#traceWrap")).to_be_hidden()
+    page.wait_for_timeout(500)
+    assert count(page, "start_test") == 1
     page.click('button[data-view="actuation"]')
-    sync_api.expect(page.locator("#actTest")).to_have_text("Test with a key press")
-    assert len(calls(page, "start_test")) == 1
+    page.wait_for_function("() => window.__calls.filter(c => c[0] === 'start_test').length === 2")
+    sync_api.expect(page.locator("#testBanner")).to_be_visible()
 
 
-def test_tab_change_while_the_test_starts_stops_it(page):
+def test_tab_change_while_the_test_starts_stops_it(browser):
     """start_test is slow; the user opens Lighting before it answers. The test must not keep running there."""
-    page.evaluate("window.__override.start_test = () => new Promise(r => setTimeout(() => r({ok: true, data: true}), 300))")
-    page.click("#actTest")
-    page.click('button[data-view="lighting"]')
+    pg = browser.new_page()
+    pg.add_init_script(RECORDER)
+    pg.add_init_script("window.__override.start_test = () => new Promise(r => setTimeout(() => r({ok: true, data: true}), 600))")
+    pg.goto(URL)
+    wait_for_call(pg, "start_test")
+    pg.click('button[data-view="lighting"]')
+    wait_for_call(pg, "stop_test")
+    sync_api.expect(pg.locator("#testBanner")).to_be_hidden()
+    pg.close()
+
+
+def test_no_start_while_the_window_is_not_in_front(browser):
+    for f, v in [(False, True), (True, False)]:
+        pg = browser.new_page()
+        pg.add_init_script(RECORDER)
+        pg.add_init_script(f"window.__front = {{focus: {str(f).lower()}, visible: {str(v).lower()}}}")
+        pg.goto(URL)
+        sync_api.expect(pg.locator("#conn")).to_have_text("Connected, firmware 1.03")
+        pg.wait_for_timeout(700)
+        assert count(pg, "start_test") == 0
+        sync_api.expect(pg.locator("#liveNote")).to_contain_text("isn't in front")
+        front(pg)                                           # comes to the front: starts
+        wait_for_call(pg, "start_test")
+        pg.close()
+
+
+def test_blur_stops_and_focus_restarts(page):
+    wait_for_call(page, "start_test")
+    front(page, focus=False)
     wait_for_call(page, "stop_test")
     sync_api.expect(page.locator("#testBanner")).to_be_hidden()
+    sync_api.expect(page.locator("#liveNote")).to_contain_text("The Huntsman types normally")
+    front(page)
+    page.wait_for_function("() => window.__calls.filter(c => c[0] === 'start_test').length === 2")
+
+
+def test_quick_blur_and_focus_switch_nothing(page):
+    wait_for_call(page, "start_test")
+    page.wait_for_timeout(100)
+    for _ in range(3):
+        front(page, focus=False)
+        page.wait_for_timeout(50)
+        front(page)
+    page.wait_for_timeout(800)
+    assert count(page, "start_test") == 1 and count(page, "stop_test") == 0
+
+
+def test_hidden_stops_at_once_and_visible_restarts(page):
+    wait_for_call(page, "start_test")
+    front(page, visible=False)
+    wait_for_call(page, "stop_test")
+    front(page)
+    page.wait_for_function("() => window.__calls.filter(c => c[0] === 'start_test').length === 2")
+
+
+def test_idle_stop_waits_for_focus_or_a_click(page):
+    wait_for_call(page, "start_test")
+    page.evaluate("window.onTestEnded('Testing stopped after 5 minutes without a key press.', true)")
+    sync_api.expect(page.locator("#testBanner")).to_be_hidden()
+    sync_api.expect(page.locator("#liveNote")).to_contain_text("5 minutes without a key press")
+    go = page.locator("#liveGo")
+    sync_api.expect(go).to_have_text("Resume")
+    page.click('button[data-view="lighting"]')         # coming back to the tab counts as asking again
+    page.click('button[data-view="actuation"]')
+    page.wait_for_function("() => window.__calls.filter(c => c[0] === 'start_test').length === 2")
+    page.evaluate("window.onTestEnded('Testing stopped after 5 minutes without a key press.', true)")
+    page.wait_for_timeout(700)
+    assert count(page, "start_test") == 2                # paused: no restart by itself
+    go.click()
+    page.wait_for_function("() => window.__calls.filter(c => c[0] === 'start_test').length === 3")
+    page.evaluate("window.onTestEnded('Testing stopped after 5 minutes without a key press.', true)")
+    front(page, focus=False)
+    front(page)                                          # focus again also resumes
+    page.wait_for_function("() => window.__calls.filter(c => c[0] === 'start_test').length === 4")
+
+
+def test_start_failure_shows_try_again_and_no_retry_loop(browser):
+    pg = browser.new_page()
+    pg.add_init_script(RECORDER)
+    pg.add_init_script("window.__override.start_test = () => Promise.resolve({ok: false, error: 'Allow Input Monitoring for this app.'})")
+    pg.goto(URL)
+    wait_for_call(pg, "start_test")
+    sync_api.expect(pg.locator("#liveNote")).to_contain_text("Allow Input Monitoring for this app.")
+    sync_api.expect(pg.locator("#liveGo")).to_have_text("Try again")
+    pg.wait_for_timeout(1000)
+    assert count(pg, "start_test") == 1
+    sync_api.expect(pg.locator("#toast")).not_to_contain_text("Allow Input Monitoring")   # the panel says it, once
+    pg.click("#liveGo")
+    pg.wait_for_function("() => window.__calls.filter(c => c[0] === 'start_test').length === 2")
+    pg.wait_for_timeout(700)
+    assert count(pg, "start_test") == 2
+    pg.close()
+
+
+def test_close_stops_the_tester(page):
+    wait_for_call(page, "start_test")
+    page.evaluate("dispatchEvent(new Event('beforeunload'))")
+    wait_for_call(page, "stop_test")
 
 
 def test_failed_paint_keeps_previous_colours(page):

@@ -1,27 +1,24 @@
 # HANDOFF
 
-Current state of Huntsman for Mac, updated 2026-11-18.
+Current state of Huntsman for Mac, updated 2026-11-22.
 
 ## Status
-- **Released:** v0.3.0 "More models" (https://github.com/samir777-eng/huntsman-for-mac/releases/tag/v0.3.0).
-  v0.1.0 and v0.2.0 are also tagged. `master` = v0.3.0 (merge of branch `v3-models`, kept for history).
+- **Released:** v0.4.0 (2026-11-22, https://github.com/samir777-eng/huntsman-for-mac/releases/tag/v0.4.0), with
+  `Huntsman-for-Windows-0.4.0.zip` attached by `.github/workflows/windows-build.yml`. `master` = v0.4.0 (merge of
+  branch `windows`, kept for history). v0.1.0–v0.3.0 are also tagged.
+- **Released at the owner's request before the planned hardware check** (keyboard unavailable after the move). Still
+  to check on the V3 Pro, one at a time: actuation with the Mixed readout + Apply confirmation, Snap Tap switch/board
+  picking, Studio preview while off, the 6 new presets, key tester (ask first: it stops typing). Record results
+  (verified only) in README/CHANGELOG/HANDOFF; fix anything found in a 0.4.1. The Windows build has still never run on
+  a Windows PC with a keyboard.
 - **Repo:** public, GitHub `samir777-eng/huntsman-for-mac`, default branch `master`, SEO description + 18 topics.
-- **Tests:** 1321 passing (7 skipped) on the Mac (branch `windows`): `python -m pytest -q tests` (simulated keyboard, fake transports,
+- **Tests:** 1322 passing (7 skipped) on the Mac: `python -m pytest -q tests` (simulated keyboard, fake transports,
   headless Chromium UI tests in demo mode). Dev env: `requirements.txt` + `requirements-dev.txt`, then
   `playwright install chromium`. GitHub Actions `CI` (.github/workflows/ci.yml) runs it on macos-latest and
   windows-latest (Windows: `requirements-win.txt`; 37 `mac_only` tests skipped, see tests/conftest.py).
 - **Installed on the maintainer's Mac:** branch `windows` at 0.4.0 pre-UX-fixes (owner checked window, menu bar,
-  actuation, lighting, Studio after quit, key tester: all passed, 2026-11-18).
-- **PAUSED 2026-11-18 (owner moving), resume here:** branch `windows` (pushed, CI green at 4399325) holds 0.4.0:
-  Windows build (experimental, untested on a PC), V2 Analog actuation, 6 new Studio presets, all UX-audit fixes,
-  all reviews done (no Critical/Important open). Remaining, in order:
-  1. (2026-11-20: no-keyboard screen + Reconnect checked OK by the owner; keyboard not available after the move.)
-     Owner plugs the keyboard in and quits the app → `./install.sh` → hardware check one at a time: actuation with the new Mixed readout +
-     Apply confirmation, Snap Tap switch/board picking, Studio preview while off, the 6 new presets, key tester
-     (ask first: it stops typing).
-  2. Record results in README/CHANGELOG/HANDOFF (verified only), open PR `windows` → master, merge (no migration).
-  3. Tag v0.4.0 and publish the release; `.github/workflows/windows-build.yml` then builds and attaches
-     `Huntsman-for-Windows-0.4.0.zip` (release job checks tag == __version__). Confirm the asset appears.
+  actuation, lighting, Studio after quit, key tester: all passed, 2026-11-18; no-keyboard screen + Reconnect
+  2026-11-20).
 
 ## What the product is
 Unofficial macOS control app for the Razer Huntsman V3 Pro (USB 1532:02A6), which Razer Synapse for Mac doesn't
@@ -34,31 +31,31 @@ venv into the bundle and signs it ad hoc; unsigned apps can't read ~/Downloads):
    owns the menu bar icon and the Studio engine, so app-drawn effects keep running after the app quits. The app talks
    to it over `ipc.py` (UNIX socket `data_dir()/service.sock`, JSON lines, pause leases around every keyboard op).
 
-## Models (0.3.0)
+## Models (0.4.0)
 - `models.py`: table of 7 models (PID, name, matrix, layout file, effects, features, status). Only 02A6 is
   `verified`. Experimental: V3 Pro TKL 02A7, V3 Pro 8KHz 02CF, V3 Pro Mini 02B0 (5×15), V2 026C, V2 TKL 026B (6×18),
   V2 Analog 0266 (8×23, frame size 74). V2/V2 TKL: lighting/per-key/Studio only. Key tester only on verified models.
-- 0.4.0 (unreleased, branch `windows`): V2 Analog gets experimental actuation on its own `models.Scale`
+- 0.4.0: V2 Analog gets experimental actuation on its own `models.Scale`
   (`V2_ANALOG_SCALE`: mm = thr/255×2.1+1.5, offered 1.62–3.56 mm = thr 15–250, 0.01 mm steps, release ≥5 and
   ≤ thr−10, reads show the firmware-clamped point; no factory point, so restore-factory refuses; snapshot works).
   V3 models use `V3_SCALE` (the old constants; golden bytes unchanged). `Model.info()["actuation"]` drives the UI
   slider/presets/reset/restore button. No Rapid Trigger/Snap Tap on the V2 Analog (host-side in Synapse).
   Tests: tests/test_v2_analog.py, UI in tests/test_ui_models.py. Plan: docs/plans/2026-11-18-v2-analog-actuation.md.
-- 0.4.0 (unreleased, branch `windows`): Windows build, step W1 "core" done (docs/plans/2026-11-18-windows.md):
+- 0.4.0: Windows build, step W1 "core" done (docs/plans/2026-11-18-windows.md):
   `platforms/` (selector, %APPDATA%/%LOCALAPPDATA% folders, fcntl/msvcrt locks, hidapi `HidTransport`), IPC
   endpoints (UNIX socket on the Mac, named pipe + authkey file on Windows), Windows gate (every model experimental,
   no key tester), `requirements-win.txt`. Nothing run on a Windows PC.
-- 0.4.0 (unreleased, branch `windows`): step W2 "front-end" done (same plan, "W2" section): shared menu model
+- 0.4.0: step W2 "front-end" done (same plan, "W2" section): shared menu model
   (`menubar.MenuState`, pystray `platforms/win_tray.py`), start at login via HKCU Run (`win_autostart.py`; the app
   starts the service itself), Raw Input typing reactions (`win_keys.py`), smart-lighting adapters
   (`win_smart.py`), Synapse guard + Dynamic Lighting notice (`win_guard.py`, `hc.SynapseRunning`), random pipe
   name + key in %LOCALAPPDATA%. Depth stream deliberately not implemented on Windows.
-- 0.4.0 (unreleased, branch `windows`): step W3 "packaging + CI" done (same plan, "W3" section):
+- 0.4.0: step W3 "packaging + CI" done (same plan, "W3" section):
   `packaging/windows/huntsman.spec` (PyInstaller one-folder `Huntsman.exe`, manifest `platforms/bundle.py`),
   `Huntsman.exe --version` / `--self-test`, workflow `Windows build` (dispatch, packaging pushes, release published →
   `Huntsman-for-Windows-<version>.zip` attached). Frozen self-test passes on windows-latest; nothing run on a real
   Windows PC with a keyboard. Next: W4 docs (README/landing Windows section, SmartScreen, CHANGELOG).
-- Review fixes after 0.4.0 (branch `windows`, CHANGELOG "Unreleased"): while Synapse runs nothing reaches the keyboard
+- Review fixes in 0.4.0: while Synapse runs nothing reaches the keyboard
   (`HidTransport` refuses to open/exchange, `hc.synapse_block()`, app/service drop handles, `Api.platform_status()`
   is the window's only poll, `model()` answers from the last model with `offline`); build workflow `contents: read`
   with a separate `release` job (tag minus v must equal the built version); V2 Analog "Just above" always uses

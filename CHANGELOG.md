@@ -2,9 +2,55 @@
 
 All notable changes to this project are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 0.4.0 – 2026-11-22
+
+### Added
+- A Windows build, experimental and untested: `Huntsman-for-Windows-<version>.zip` on the release, a one-folder
+  PyInstaller build with one `Huntsman.exe` (the window; `Huntsman.exe --service` runs the lighting service). Unsigned,
+  so SmartScreen asks first. Everything the Mac app does, except the key tester, through a small platform layer
+  (`platforms/`): hidapi feature reports on interface 3 (the keyboard's normal driver), a tray icon instead of the menu
+  bar icon, start at login through the per-user Run key (value "Huntsman for Mac lighting", no admin rights; added once and
+  kept up to date if `Huntsman.exe` moves, not added back if you delete it, until you turn Studio on in the app), a named
+  pipe between the app and the service (random name and key at every start, mutual HMAC handshake), Raw Input for
+  typing reactions, and idle, sleep, lock and front-program events for smart lighting (app rules use program names
+  such as `steam.exe`). Settings in `%APPDATA%\Huntsman for Mac`, the log in
+  `%LOCALAPPDATA%\Huntsman for Mac\Logs`.
+- On Windows every model is experimental (writes need the Experimental support switch, the V3 Pro too) and the key
+  tester is never offered; pointing at the header's Experimental badge says Windows support is experimental.
+- Windows: while Razer Synapse runs (RazerAppEngine.exe, Synapse 3 or 2), nothing at all reaches the keyboard, reads
+  included (two programs on the same HID interface swap each other's replies): the app and the lighting service let go
+  of the keyboard, the window shows the last model it saw (locked) with "Paused: Razer Synapse is running", and the
+  tray menu says why. Studio switched off while Synapse runs stays off when Synapse quits; everything else comes back
+  within a few seconds. When Windows
+  Dynamic Lighting is on, the window says how to turn it off for the keyboard (the app never changes it).
+- `Huntsman.exe --version` and `--self-test` (imports every module and reads every data file and layout the build
+  needs, without opening the keyboard or a window; it writes to the log, since a windowed exe has no console).
+- CI: GitHub Actions runs the test suite on macOS and Windows for every push and pull request, and builds,
+  smoke-tests and zips the Windows app (attached to a release when it's published).
+- Huntsman V2 Analog (1532:0266): actuation, experimental and untested, behind Experimental support like every other
+  write to it. Its own scale from easyrazer (mm = byte / 255 × 2.1 + 1.5): 1.62 to 3.56 mm (bytes 15 to 250, the
+  range its firmware keeps to), in 0.01 mm steps, with its own presets. Without a reset point (the window's *Just above*,
+  `huntsman.py depth`) the reset point follows 0.1 mm above, at least 1.54 mm (byte 5), in the saved and the live
+  profile alike; a custom one must sit at least 0.08 mm (10 bytes) above the actuation point (the release rules are
+  unverified). Keys already at the target aren't written again, to spare flash. Each write changes at most the two depth
+  bytes of the normal layer, keeps the key's assignment, goes to the
+  active saved profile first and then the live one, and is read back. Reads show the depth the keyboard acts on, so a
+  key Synapse left at 0/0 shows as 1.62 mm. Key ids are easyrazer's 0266 key map; all 104 keys of the layout match.
+- The V2 Analog gets the first-launch snapshot, and `huntsman.py restore-snapshot` works on it.
+- Six more built-in Studio presets, after the original eight (fourteen in all): Plasma (a vivid flowing plasma),
+  Starfield (twinkling stars on a deep blue sky), Ripple (colour rings from each key press over a dim base),
+  Spectrum bars (sound bars in blue to pink over a slowly drifting base), Sunset (a slow warm gradient) and Neon
+  cycle (the whole keyboard fading through neon colours). They work on every model's layout.
 
 ### Changed
+- Every JSON and text file the app reads or writes is opened as UTF-8 (found by CI on Windows, where the locale
+  encoding broke layouts with non-ASCII names). On the Mac this was already the default.
+- The macOS app bundles say 0.4.0 (build 4).
+- The actuation slider, its labels, the presets and the custom reset point follow the connected model's range and
+  step (the window gets them with the model). The V3 Pro family is unchanged: 0.1 to 4.0 mm in 0.1 mm steps, and every
+  byte sent to the V3 Pro is the same (golden tests).
+- `huntsman.py depth` checks the connected model's range.
+
 - From the UX audit (docs/plans/2026-11-18-ux-audit-fixes.md, items 1–6):
   - No keyboard: the stage says "Plug in your Huntsman by USB" with a Reconnect button, the panes other than Keyboard
     are switched off, the header says "No keyboard" instead of a model name, and there's no red toast at start.
@@ -41,72 +87,6 @@ All notable changes to this project are listed here. Versions follow [Semantic V
   - Studio: the layer up and down buttons are 32 px; a Solid colour added on top of other layers mixes in at 50 %
     (Normal) instead of covering them all. The Keyboard pane says "Onboard profile" instead of "Stored profile".
 
-### Fixed
-- Studio's preview while off starts again after an error: if composing a frame or starting the preview thread
-  failed, later preview requests were ignored until the service restarted.
-- Windows: while Razer Synapse runs, nothing at all reaches the keyboard, reads included (two programs on the same
-  HID interface swap each other's replies). The hidapi transport refuses to open the keyboard or send a report, the
-  app and the lighting service let go of an open handle, the window shows the last model it saw (locked) and polls
-  only the Synapse check, not the keyboard. The connection line says "Paused: Razer Synapse is running". A write
-  refused because of Synapse no longer switches Studio off first, and Studio switched off while Synapse runs stays
-  off when Synapse quits. If Synapse starts while the window is open, the first refused change shows the notice.
-- V2 Analog: without a reset point (the window's *Just above*, `huntsman.py depth`) the reset point now always follows
-  0.1 mm above the new actuation point, in the saved and the live profile alike. 0.4.0 kept the stored reset byte
-  when it still fitted, so saved and live could end up different and the reset point didn't match the window. Keys
-  already at the target are still not written again.
-- Windows: start at login (the Run value) is added once and follows a moved `Huntsman.exe`, but a value you deleted
-  is no longer added back every time the service or the app starts; turning Studio on in the app adds it back.
-  `state.json` remembers that it was added (`autostart_added`).
-- Windows: the "request too large" reply on the service's pipe is documented (multiprocessing keeps the connection
-  writable after dropping an over-long message, so the reply still arrives before it closes).
-- Windows: a hidden message window that starts only after its start timed out is destroyed at once instead of
-  running a message loop nothing could stop (each start has its own stop flag).
-
-## 0.4.0 – 2026-11-18
-
-### Added
-- A Windows build, experimental and untested: `Huntsman-for-Windows-<version>.zip` on the release, a one-folder
-  PyInstaller build with one `Huntsman.exe` (the window; `Huntsman.exe --service` runs the lighting service). Unsigned,
-  so SmartScreen asks first. Everything the Mac app does, except the key tester, through a small platform layer
-  (`platforms/`): hidapi feature reports on interface 3 (the keyboard's normal driver), a tray icon instead of the menu
-  bar icon, start at login through the per-user Run key (value "Huntsman for Mac lighting", no admin rights), a named
-  pipe between the app and the service (random name and key at every start, mutual HMAC handshake), Raw Input for
-  typing reactions, and idle, sleep, lock and front-program events for smart lighting (app rules use program names
-  such as `steam.exe`). Settings in `%APPDATA%\Huntsman for Mac`, the log in
-  `%LOCALAPPDATA%\Huntsman for Mac\Logs`.
-- On Windows every model is experimental (writes need the Experimental support switch, the V3 Pro too) and the key
-  tester is never offered; pointing at the header's Experimental badge says Windows support is experimental.
-- Windows: while Razer Synapse runs (RazerAppEngine.exe, Synapse 3 or 2), the app and the lighting service only read,
-  and the window and the tray menu say why; writes come back within a few seconds after Synapse quits. When Windows
-  Dynamic Lighting is on, the window says how to turn it off for the keyboard (the app never changes it).
-- `Huntsman.exe --version` and `--self-test` (imports every module and reads every data file and layout the build
-  needs, without opening the keyboard or a window; it writes to the log, since a windowed exe has no console).
-- CI: GitHub Actions runs the test suite on macOS and Windows for every push and pull request, and builds,
-  smoke-tests and zips the Windows app (attached to a release when it's published).
-- Huntsman V2 Analog (1532:0266): actuation, experimental and untested, behind Experimental support like every other
-  write to it. Its own scale from easyrazer (mm = byte / 255 × 2.1 + 1.5): 1.62 to 3.56 mm (bytes 15 to 250, the
-  range its firmware keeps to), in 0.01 mm steps, with its own presets. The reset point follows 0.1 mm above, at least
-  1.54 mm (byte 5); a custom one must sit at least 0.08 mm (10 bytes) above the actuation point (the release rules are
-  unverified). Without a reset point only the actuation byte changes when the stored reset byte still fits (as easyrazer
-  does), and keys already at the target aren't written again, to spare flash. Each write changes at most the two depth
-  bytes of the normal layer, keeps the key's assignment, goes to the
-  active saved profile first and then the live one, and is read back. Reads show the depth the keyboard acts on, so a
-  key Synapse left at 0/0 shows as 1.62 mm. Key ids are easyrazer's 0266 key map; all 104 keys of the layout match.
-- The V2 Analog gets the first-launch snapshot, and `huntsman.py restore-snapshot` works on it.
-- Six more built-in Studio presets, after the original eight (fourteen in all): Plasma (a vivid flowing plasma),
-  Starfield (twinkling stars on a deep blue sky), Ripple (colour rings from each key press over a dim base),
-  Spectrum bars (sound bars in blue to pink over a slowly drifting base), Sunset (a slow warm gradient) and Neon
-  cycle (the whole keyboard fading through neon colours). They work on every model's layout.
-
-### Changed
-- Every JSON and text file the app reads or writes is opened as UTF-8 (found by CI on Windows, where the locale
-  encoding broke layouts with non-ASCII names). On the Mac this was already the default.
-- The macOS app bundles say 0.4.0 (build 4).
-- The actuation slider, its labels, the presets and the custom reset point follow the connected model's range and
-  step (the window gets them with the model). The V3 Pro family is unchanged: 0.1 to 4.0 mm in 0.1 mm steps, and every
-  byte sent to the V3 Pro is the same (golden tests).
-- `huntsman.py depth` checks the connected model's range.
-
 ### Not offered on the V2 Analog
 - Rapid Trigger and Snap Tap (Razer's software runs them on the computer; the keyboard has no command for them), the
   key tester, and *Restore factory depth* / `huntsman.py factory` (its factory depth isn't known; they refuse before
@@ -119,8 +99,11 @@ All notable changes to this project are listed here. Versions follow [Semantic V
   Dynamic Lighting notice, SmartScreen, and every exchange with a keyboard.
 - Actuation on the V2 Analog: the 3.56 mm end was checked on this keyboard by easyrazer; the 1.62 mm end and the reset
   point rules come from its reading of the firmware.
-- The Mac app on the V3 Pro (02A6) hasn't been re-checked for this release yet; the golden tests show every byte sent
-  to it is unchanged.
+- The Mac app on the V3 Pro (02A6): the window, the menu bar icon, actuation, lighting, Studio after the app quits and
+  the key tester were checked on 2026-11-18, before the UX-audit changes; the no-keyboard screen and Reconnect on
+  2026-11-20. Not checked on the keyboard yet: the Mixed readout and the Apply confirmation, Snap Tap's switch and
+  picking keys on the board, Studio's preview while off, the six new presets, and the key tester since the UX-audit
+  changes. The golden tests show every byte sent to it is unchanged.
 
 ## 0.3.0 – 2026-11-17
 

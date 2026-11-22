@@ -364,3 +364,26 @@ def test_the_mac_shows_no_platform_notice(open_model):
     expect(page.locator("#platformNotice")).to_be_hidden()
     page.click('#sources button[data-view="studio"]')
     assert page.locator("#smBundle").get_attribute("placeholder") == "or bundle ID, e.g. com.valvesoftware.steam"
+
+
+def test_plugging_in_starts_the_tester_on_actuation(unplugged):
+    page = unplugged("02A6")
+    reconnect(page)
+    expect(page.locator("#conn")).to_have_text("Connected, firmware 1.03")
+    page.click('button[data-view="actuation"]')
+    wait_for_call(page, "start_test")
+    expect(page.locator("#liveNote")).to_contain_text("Live")
+    assert page.errors == []
+
+
+def test_reconnect_from_the_empty_stage_on_actuation_starts_the_tester(browser):  # noqa: F811
+    """No keyboard, the window still on Actuation (as the app left it): plugging in and Reconnect starts it there."""
+    pg = browser.new_page(viewport={"width": 1280, "height": 900})
+    pg.add_init_script(RECORDER)
+    pg.goto(BASE + "&model=none&plug=02A6")
+    expect(pg.locator("#conn")).to_have_text("Not connected")
+    pg.evaluate("view = 'actuation'")
+    pg.click("#emptyReconnect")
+    expect(pg.locator("#conn")).to_have_text("Connected, firmware 1.03")
+    wait_for_call(pg, "start_test")
+    pg.close()

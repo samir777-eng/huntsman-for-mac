@@ -197,6 +197,10 @@ class _IOKit:
         return list(arr)
 
 
+class PermissionNeeded(hc.DeviceError):
+    """macOS refused Input Monitoring: the keyboard itself is fine."""
+
+
 def _duration(sec):
     return f"{sec / 60:g} minutes" if sec >= 120 else f"{sec:g} seconds"
 
@@ -224,7 +228,7 @@ class DepthSession:
             raise hc.FeatureUnavailable("The key tester isn't offered on Windows: Windows support is experimental.")
         io = _IOKit()
         if not io.iokit.IOHIDRequestAccess(1):  # kIOHIDRequestTypeListenEvent: Input Monitoring
-            raise hc.DeviceError("Allow Input Monitoring for this app in System Settings, Privacy & Security, "
+            raise PermissionNeeded("Allow Input Monitoring for this app in System Settings, Privacy & Security, "
                                  "Input Monitoring, then try again.")
         ready, failure = threading.Event(), []
         self._thread = threading.Thread(target=self._run, args=(io, ready, failure), daemon=True)
@@ -232,6 +236,8 @@ class DepthSession:
         ready.wait(5)
         if failure or not ready.is_set():
             self._stop.set()
+            if failure and failure[0].startswith("macOS blocked"):
+                raise PermissionNeeded(failure[0])
             raise hc.DeviceError(failure[0] if failure else "The keyboard's travel stream didn't start.")
         # Mark running before switching, so any failure below (even a lost reply) still switches back.
         with self._state_lock:

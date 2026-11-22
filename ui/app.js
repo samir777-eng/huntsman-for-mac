@@ -286,6 +286,7 @@ function lockUi() {
   // while Razer Synapse runs, the Experimental switch wouldn't help: the Synapse notice says what will
   $$(".lock-note").forEach(n => n.hidden = !switchLocked() || !!platform.blocked || !!model?.blocked);
   const was = lockShown; lockShown = lk;
+  if (lk && testing) liveSync();   // locked while live: stop
   if (was && !lk) refreshButtons();
 }
 // Windows notices: why writes are off (Razer Synapse) and settings that get in the way (Dynamic Lighting). While
@@ -883,7 +884,7 @@ function liveUi() {
   $("#liveNote").hidden = !hasFeature("key_tester");
   setText($("#liveText"), testing ? "Live: the Huntsman's typing is paused while this window is in front."
     : held ? (held.idle ? `${held.why} The Huntsman types normally.` : held.why)
-    : liveStarting || inFront() ? "Starting the key tester…" : "Paused while this window isn't in front. The Huntsman types normally.");
+    : liveStarting || liveWanted() ? "Starting the key tester…" : !inFront() ? "Paused while this window isn't in front. The Huntsman types normally." : "");
   $("#liveGo").hidden = !held || testing; $("#liveGo").textContent = held?.idle ? "Resume" : "Try again";
 }
 async function startTest() {
@@ -903,7 +904,7 @@ const liveAgain = () => { liveHeld = null; liveSync(); };
 $("#liveGo").onclick = liveAgain;
 $("#stage").addEventListener("click", e => { if (liveHeld?.idle && view === "actuation" && !e.target.closest("button")) liveAgain(); });
 addEventListener("blur", () => { liveUi(); liveSync(300); });
-addEventListener("focus", () => { liveHeld = null; liveUi(); liveSync(300); });
+addEventListener("focus", () => { if (liveHeld?.idle) liveHeld = null; liveUi(); liveSync(300); });   // a failure waits for Try again
 document.addEventListener("visibilitychange", () => { liveUi(); liveSync(document.visibilityState === "hidden" ? 0 : 300); });
 addEventListener("beforeunload", () => { if (testing) api.stop_test(); });
 
@@ -1051,6 +1052,7 @@ async function load(again = true) {
     ledUi();
     setConn(true, `Connected, firmware ${i.firmware}`);
     hideToast(true);   // an error from before doesn't stand next to "Connected"
+    liveSync();        // connected again: start where it's wanted
     return true;
   } catch (e) { setConn(false, "Not connected"); return false; }
 }

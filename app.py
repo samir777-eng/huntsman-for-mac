@@ -575,6 +575,8 @@ class Api:
                 return {"ok": False, "error": str(e)}
             except (hc.ExperimentalLocked, hc.FeatureUnavailable) as e:   # refused before anything was sent
                 return refused(e)
+            except depth_stream.PermissionNeeded as e:   # Input Monitoring refused: the keyboard is fine, keep it
+                return {"ok": False, "error": str(e), "reason": "permission"}
             except Exception as e:
                 traceback.print_exc()
                 self._drop()
@@ -761,11 +763,12 @@ class Api:
                         traceback.print_exc()
                     finally:
                         release(stuck=not ok)
-                    if reason:
+                    if reason and self._test is session[0]:   # a newer session's window state isn't this one's
                         self._pusher.push("onTestEnded", reason, ok)
                 in_background(follow_up)
 
-            self._test = depth_stream.DepthSession(kb, batch, ended)
+            session = [None]
+            self._test = session[0] = depth_stream.DepthSession(kb, batch, ended)
             try:
                 started = self._test.start()
             except BaseException:

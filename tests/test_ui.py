@@ -304,11 +304,14 @@ def test_idle_stop_waits_for_focus_or_a_click(page):
 def test_start_failure_shows_try_again_and_no_retry_loop(browser):
     pg = browser.new_page()
     pg.add_init_script(RECORDER)
-    pg.add_init_script("window.__override.start_test = () => Promise.resolve({ok: false, error: 'Allow Input Monitoring for this app.'})")
+    pg.add_init_script("window.__override.start_test = () => Promise.resolve({ok: false, error: 'Allow Input Monitoring for this app.', reason: 'permission'})")
     pg.goto(URL)
     wait_for_call(pg, "start_test")
     sync_api.expect(pg.locator("#liveNote")).to_contain_text("Allow Input Monitoring for this app.")
     sync_api.expect(pg.locator("#liveGo")).to_have_text("Try again")
+    sync_api.expect(pg.locator("#conn")).to_have_text("Connected, firmware 1.03")   # not a lost connection
+    front(pg, focus=False)
+    front(pg)                                            # focus again: still held, no retry
     pg.wait_for_timeout(1000)
     assert count(pg, "start_test") == 1
     sync_api.expect(pg.locator("#toast")).not_to_contain_text("Allow Input Monitoring")   # the panel says it, once
@@ -360,3 +363,11 @@ def test_keyboard_pane_shows_the_app_version(page):
     page.click('button[data-view="device"]')
     version = re.search(r'__version__ = "([^"]+)"', (ROOT / "huntsman_core.py").read_text()).group(1)
     sync_api.expect(page.locator("#devInfo")).to_contain_text("App version" + version)
+
+
+def test_a_lock_while_live_stops_it_and_says_no_starting(page):
+    wait_for_call(page, "start_test")
+    page.evaluate("model.blocked = 'Quit Razer Synapse.'; lockUi()")   # writes become locked while live
+    wait_for_call(page, "stop_test")
+    sync_api.expect(page.locator("#testBanner")).to_be_hidden()
+    sync_api.expect(page.locator("#liveNote")).not_to_contain_text("Starting")

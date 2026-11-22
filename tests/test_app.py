@@ -72,7 +72,7 @@ def test_good_state_survives(app):
             "smart": {"idle": {"enabled": True, "minutes": 5, "action": "off", "dim_to": 0.3},
                       "sleep_off": False, "lock_off": True,
                       "app_rules": [{"bundle_id": "com.valve.steam", "preset": "Fire"}]},
-            "experimental": True}
+            "experimental": True, "autostart_added": True}
     write_state(app, good)
     assert app.load_state() == good
 
@@ -82,6 +82,7 @@ def test_save_state_leaves_no_tmp(app, tmp_path):
     assert sorted(os.listdir(tmp_path)) in (["state.json"], ["state.json", "state.lock"])
 
 
+@pytest.mark.mac_only   # checks the lock with fcntl
 def test_update_state_holds_the_file_lock(app, tmp_path):
     import fcntl
     with app.update_state() as st:

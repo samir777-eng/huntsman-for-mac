@@ -2,6 +2,109 @@
 
 All notable changes to this project are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 0.4.0 – 2026-11-22
+
+### Added
+- A Windows build, experimental and untested: `Huntsman-for-Windows-<version>.zip` on the release, a one-folder
+  PyInstaller build with one `Huntsman.exe` (the window; `Huntsman.exe --service` runs the lighting service). Unsigned,
+  so SmartScreen asks first. Everything the Mac app does, except the key tester, through a small platform layer
+  (`platforms/`): hidapi feature reports on interface 3 (the keyboard's normal driver), a tray icon instead of the menu
+  bar icon, start at login through the per-user Run key (value "Huntsman for Mac lighting", no admin rights; added once and
+  kept up to date if `Huntsman.exe` moves, not added back if you delete it, until you turn Studio on in the app), a named
+  pipe between the app and the service (random name and key at every start, mutual HMAC handshake), Raw Input for
+  typing reactions, and idle, sleep, lock and front-program events for smart lighting (app rules use program names
+  such as `steam.exe`). Settings in `%APPDATA%\Huntsman for Mac`, the log in
+  `%LOCALAPPDATA%\Huntsman for Mac\Logs`.
+- On Windows every model is experimental (writes need the Experimental support switch, the V3 Pro too) and the key
+  tester is never offered; pointing at the header's Experimental badge says Windows support is experimental.
+- Windows: while Razer Synapse runs (RazerAppEngine.exe, Synapse 3 or 2), nothing at all reaches the keyboard, reads
+  included (two programs on the same HID interface swap each other's replies): the app and the lighting service let go
+  of the keyboard, the window shows the last model it saw (locked) with "Paused: Razer Synapse is running", and the
+  tray menu says why. Studio switched off while Synapse runs stays off when Synapse quits; everything else comes back
+  within a few seconds. When Windows
+  Dynamic Lighting is on, the window says how to turn it off for the keyboard (the app never changes it).
+- `Huntsman.exe --version` and `--self-test` (imports every module and reads every data file and layout the build
+  needs, without opening the keyboard or a window; it writes to the log, since a windowed exe has no console).
+- CI: GitHub Actions runs the test suite on macOS and Windows for every push and pull request, and builds,
+  smoke-tests and zips the Windows app (attached to a release when it's published).
+- Huntsman V2 Analog (1532:0266): actuation, experimental and untested, behind Experimental support like every other
+  write to it. Its own scale from easyrazer (mm = byte / 255 × 2.1 + 1.5): 1.62 to 3.56 mm (bytes 15 to 250, the
+  range its firmware keeps to), in 0.01 mm steps, with its own presets. Without a reset point (the window's *Just above*,
+  `huntsman.py depth`) the reset point follows 0.1 mm above, at least 1.54 mm (byte 5), in the saved and the live
+  profile alike; a custom one must sit at least 0.08 mm (10 bytes) above the actuation point (the release rules are
+  unverified). Keys already at the target aren't written again, to spare flash. Each write changes at most the two depth
+  bytes of the normal layer, keeps the key's assignment, goes to the
+  active saved profile first and then the live one, and is read back. Reads show the depth the keyboard acts on, so a
+  key Synapse left at 0/0 shows as 1.62 mm. Key ids are easyrazer's 0266 key map; all 104 keys of the layout match.
+- The V2 Analog gets the first-launch snapshot, and `huntsman.py restore-snapshot` works on it.
+- Six more built-in Studio presets, after the original eight (fourteen in all): Plasma (a vivid flowing plasma),
+  Starfield (twinkling stars on a deep blue sky), Ripple (colour rings from each key press over a dim base),
+  Spectrum bars (sound bars in blue to pink over a slowly drifting base), Sunset (a slow warm gradient) and Neon
+  cycle (the whole keyboard fading through neon colours). They work on every model's layout.
+
+### Changed
+- Every JSON and text file the app reads or writes is opened as UTF-8 (found by CI on Windows, where the locale
+  encoding broke layouts with non-ASCII names). On the Mac this was already the default.
+- The macOS app bundles say 0.4.0 (build 4).
+- The actuation slider, its labels, the presets and the custom reset point follow the connected model's range and
+  step (the window gets them with the model). The V3 Pro family is unchanged: 0.1 to 4.0 mm in 0.1 mm steps, and every
+  byte sent to the V3 Pro is the same (golden tests).
+- `huntsman.py depth` checks the connected model's range.
+
+- From the UX audit (docs/plans/2026-11-18-ux-audit-fixes.md, items 1–6):
+  - No keyboard: the stage says "Plug in your Huntsman by USB" with a Reconnect button, the panes other than Keyboard
+    are switched off, the header says "No keyboard" instead of a model name, and there's no red toast at start.
+    Reconnect says "Connected to {model}" and clears an earlier error toast.
+  - Actuation: keys at different depths read "Mixed (1.0–2.0 mm)", the slider follows the selected keys until you
+    move a control, and "Not applied yet" shows only after an edit. Apply asks first when keys in its scope use
+    different depths, naming only the keys that will change and how ("99 keys will change from 2.0 mm to 1.0 mm.
+    W, A, S, D already type at 1.0 mm."). No depth preset shows as chosen while the readout says Mixed.
+  - Small windows: legends scale with the keys; below about 27 px per key the depths show in place of the legend
+    when you point at or focus a key, instead of over it.
+  - The primary Apply of Actuation, Rapid Trigger, Snap Tap and Lighting effects stays in view at the bottom of the
+    panel; the tester's readings and warning show only while testing.
+  - Studio: with Studio off, its tab previews the preset on the on-screen board ("Preview, Studio off", Turn on).
+    The lighting service composes the frames without sending anything to the keyboard (`studio_preview`, asked again
+    every few seconds while the tab shows, 30 s at most per request).
+  - Built-in presets show Save as… as the main button with "Built-in preset: save a copy to keep your changes."
+    instead of a disabled Save.
+  - The live tester readout is announced to screen readers when it changes; switching tabs drops the last toast.
+- From the same UX audit (items 7–10 and the other quick wins):
+  - The Keyboard pane's button in the header says "Keyboard" next to its gear, matching the notes that point to it.
+    On models without the key tester, "Test with a key press" shows disabled with the reason (experimental models,
+    the Huntsman V2 family, or Windows) instead of disappearing.
+  - Windows: while Razer Synapse runs, the panel shows one notice, "Quit Razer Synapse to use these controls", with
+    the reason folded under Why, and no "turn on Experimental support" note (it wouldn't help). The Dynamic Lighting
+    notice is one line with Details. The Synapse message says "this app" instead of "Huntsman for Mac".
+  - The Select bar and key outlines show only where the selection does something (Actuation, Rapid Trigger,
+    Lighting's Per key and a Static effect, Studio's Layers). The panel names a selection made on another tab:
+    "Applying to 4 selected keys · Clear".
+  - Snap Tap has a switch and Apply like Rapid Trigger, "Not applied yet" while the panel differs from the keyboard,
+    and "On for A and D" once applied (the Apply button stays "Apply", disabled, while Snap Tap is off and
+    unchanged). Click two keys on the keyboard to make the pair, or use the lists; leaving the tab or Reconnect starts
+    the pick over at the first key. The keyboard gets the same command as before.
+  - When the keyboard goes away, focus in a pane that switches off (or on the hidden keyboard) moves to the stage's Reconnect button.
+  - Studio: the layer up and down buttons are 32 px; a Solid colour added on top of other layers mixes in at 50 %
+    (Normal) instead of covering them all. The Keyboard pane says "Onboard profile" instead of "Stored profile".
+
+### Not offered on the V2 Analog
+- Rapid Trigger and Snap Tap (Razer's software runs them on the computer; the keyboard has no command for them), the
+  key tester, and *Restore factory depth* / `huntsman.py factory` (its factory depth isn't known; they refuse before
+  anything is sent).
+
+### Not checked on hardware
+- Everything on Windows: the build has never run on a Windows PC with a keyboard. Only the test suite (simulated
+  keyboard) and the built exe's `--version` and `--self-test` have run, on GitHub's windows-latest runners. Not seen
+  yet: the window (WebView2), the tray icon, start at login, typing reactions, smart lighting, the Synapse check, the
+  Dynamic Lighting notice, SmartScreen, and every exchange with a keyboard.
+- Actuation on the V2 Analog: the 3.56 mm end was checked on this keyboard by easyrazer; the 1.62 mm end and the reset
+  point rules come from its reading of the firmware.
+- The Mac app on the V3 Pro (02A6): the window, the menu bar icon, actuation, lighting, Studio after the app quits and
+  the key tester were checked on 2026-11-18, before the UX-audit changes; the no-keyboard screen and Reconnect on
+  2026-11-20. Not checked on the keyboard yet: the Mixed readout and the Apply confirmation, Snap Tap's switch and
+  picking keys on the board, Studio's preview while off, the six new presets, and the key tester since the UX-audit
+  changes. The golden tests show every byte sent to it is unchanged.
+
 ## 0.3.0 – 2026-11-17
 
 ### Added

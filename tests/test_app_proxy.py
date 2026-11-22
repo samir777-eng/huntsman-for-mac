@@ -195,6 +195,7 @@ def test_export_without_a_window_returns_the_text(app):
     assert make_api(app, FakeService()).export_preset("x") == {"ok": True, "data": {"json": '{"x": 1}'}}
 
 
+@pytest.mark.mac_only   # launchctl, os.getuid
 def test_default_starter_kickstarts_the_launch_agent(app, monkeypatch):
     ran = []
 

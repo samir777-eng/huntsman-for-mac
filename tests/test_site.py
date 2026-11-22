@@ -38,7 +38,7 @@ class _Page(html.parser.HTMLParser):
 
 
 def _html():
-    return (DOCS / "index.html").read_text()
+    return (DOCS / "index.html").read_text(encoding="utf-8")
 
 
 def _page():
@@ -48,7 +48,7 @@ def _page():
 
 
 def _version():
-    m = re.search(r'^__version__ = "([^"]+)"', (ROOT / "huntsman_core.py").read_text(), re.M)
+    m = re.search(r'^__version__ = "([^"]+)"', (ROOT / "huntsman_core.py").read_text(encoding="utf-8"), re.M)
     return m.group(1)
 
 
@@ -131,7 +131,7 @@ def test_software_application_json_ld_matches_the_code():
 
 def test_faq_json_ld_parses_and_uses_the_readme_questions():
     faq = _of_type("FAQPage")
-    readme = (ROOT / "README.md").read_text()
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
     qs = faq["mainEntity"]
     assert len(qs) >= 5
     for q in qs:
@@ -170,7 +170,7 @@ def test_page_basics_for_accessibility_and_layout():
 
 
 def test_robots_and_sitemap_point_at_the_site():
-    robots = (DOCS / "robots.txt").read_text()
+    robots = (DOCS / "robots.txt").read_text(encoding="utf-8")
     assert "User-agent: *" in robots and f"Sitemap: {SITE}sitemap.xml" in robots
     tree = ET.parse(DOCS / "sitemap.xml")
     ns = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
@@ -179,3 +179,32 @@ def test_robots_and_sitemap_point_at_the_site():
 
 def test_nojekyll_is_present():
     assert (DOCS / ".nojekyll").is_file()
+
+
+def test_page_says_the_windows_build_is_experimental_and_untested():
+    text = _html()
+    win = text[text.index('id="windows"'):]
+    win = win[:win.index("</section>")]
+    assert "experimental" in win.lower() and "Untested" in win
+    assert "never run on a Windows PC" in win
+    assert "Huntsman-for-Windows-&lt;version&gt;.zip" in win
+    assert "SmartScreen" in win and "Synapse" in win and "Dynamic Lighting" in win
+    assert 'href="#windows"' in text
+    assert "Does it work on Windows?" in text
+
+
+def test_preset_and_effect_counts_match_the_code():
+    """The landing page and README state how many built-in presets and effects Studio has; keep them true."""
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from lighting import effects as fx
+    from lighting.presets import builtin_presets
+    words = {8: "eight", 14: "fourteen", 17: "17"}
+    presets, effects = len(builtin_presets()), len(fx.REGISTRY)
+    text, readme = _html(), (ROOT / "README.md").read_text(encoding="utf-8")
+    assert f"<b>{presets}</b><span>built-in presets</span>" in text
+    claim = f"{effects} effects and {words[presets]} built-in presets"
+    assert claim in text and claim in readme
+    assert f"**Presets.** {words[presets].capitalize()} built in: " in readme
+    for p in builtin_presets():
+        assert p.name in readme.split("**Presets.**", 1)[1].split("\n- ", 1)[0], p.name

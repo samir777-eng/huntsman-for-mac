@@ -108,3 +108,49 @@ def test_gaming_wasd_highlights_wasd_and_ripples():
     ev = fx.RenderContext(keymap=KM, keys=KM.ids, params={}, audio=None,
                           events=[KeyEvent(KM.by_name("G").id, True, 1.0)], heat={})
     assert compose(p.layers, 1.1, ev) != f
+
+
+ORIGINAL = ["Rainbow wave", "Aurora", "Gaming WASD", "Typing glow", "Music", "Fire", "Matrix", "Calm breathing"]
+ADDED = {   # name -> the effect each new built-in is built around
+    "Plasma": "plasma", "Starfield": "starfield", "Ripple": "reactive_ripple",
+    "Spectrum bars": "audio_spectrum", "Sunset": "gradient", "Neon cycle": "colour_cycle",
+}
+
+
+def test_new_builtins_come_after_the_original_eight():
+    """The original eight keep their names and order (the active preset and the golden digests rely on them)."""
+    assert [p.name for p in pr.builtin_presets(KM)] == ORIGINAL + list(ADDED)
+
+
+@pytest.mark.parametrize("name", list(ADDED))
+def test_new_builtin_is_built_around_its_effect(name):
+    p = next(p for p in pr.builtin_presets(KM) if p.name == name)
+    assert ADDED[name] in [layer.effect for layer in p.layers]
+    # a layer that lights only some keys (stars, rings, bars) sits on a base it doesn't black out
+    for layer in p.layers[1:]:
+        assert layer.blend in ("add", "screen", "max"), (name, layer.id)
+
+
+def _model_keymaps():
+    import models
+    return [pytest.param(Keymap(hc.load_layout(m)), id=f"{m.pid:04X}") for m in models.MODELS.values()]
+
+
+@pytest.mark.parametrize("km", _model_keymaps())
+def test_every_builtin_lights_every_model_layout(km):
+    """Each built-in renders a full, changing, non-black frame on every model's layout (Mini 5 rows, TKLs, V2 Analog),
+    with typing and sound going."""
+    loud = fx.AudioState(level=0.8, bands=[0.9 - i * 0.03 for i in range(16)])
+    for p in pr.builtin_presets(km):
+        p.validate()
+        frames = []
+        for i, t in enumerate((1.0, 1.3, 2.2, 4.7)):
+            ev = [KeyEvent(km.ids[(i * 7) % len(km.ids)], True, t - 0.05)]
+            ctx = fx.RenderContext(keymap=km, keys=km.ids, params={}, audio=loud, events=ev, heat={})
+            f = compose(p.layers, t, ctx, brightness=p.brightness)
+            assert set(f) == set(km.ids), p.name
+            assert all(len(c) == 3 and all(0 <= v <= 255 for v in c) for c in f.values()), p.name
+            frames.append(f)
+        assert any(any(c != (0, 0, 0) for c in f.values()) for f in frames), p.name
+        if p.name in ADDED:
+            assert len({tuple(sorted(f.items())) for f in frames}) > 1, f"{p.name} doesn't move"

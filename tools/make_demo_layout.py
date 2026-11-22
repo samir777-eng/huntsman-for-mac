@@ -15,7 +15,7 @@ def read_models():
     import models
     out = []
     for m in models.MODELS.values():
-        with open(os.path.join(ROOT, m.layout)) as f:
+        with open(os.path.join(ROOT, m.layout), encoding="utf-8") as f:
             out.append({**m.info(), "layout": json.load(f)})
     return out
 
@@ -29,7 +29,7 @@ def render(data):
 
 
 def main():
-    with open(OUT, "w") as f:
+    with open(OUT, "w", encoding="utf-8") as f:
         f.write(render(read_models()))
 
 

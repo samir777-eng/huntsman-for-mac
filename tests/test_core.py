@@ -404,6 +404,7 @@ def test_exchange_keeps_polling_while_status_is_new_or_busy():
     assert resp[0] == hc.STATUS_OK and dev.reads == 4 and dev.writes == 1
 
 
+@pytest.mark.mac_only   # checks the lock with fcntl
 def test_usb_lock_is_shared_and_inter_process(tmp_path, monkeypatch):
     import fcntl
     monkeypatch.setattr(hc, "data_dir", lambda: str(tmp_path))
@@ -624,6 +625,7 @@ def test_stop_unregisters_atexit(monkeypatch):
     assert reg == [s.stop] and unreg == [s.stop]
 
 
+@pytest.mark.mac_only   # SIGHUP
 def test_signal_stops_running_sessions_then_exits(monkeypatch):
     # The handler work happens on a watcher thread fed by signal.set_wakeup_fd: under the Cocoa run
     # loop the main thread may never run Python-level handlers, and a swallowed SIGTERM would hang.

@@ -7,7 +7,9 @@ decide(config, inputs) is the pure rule set. SmartLighting gathers the inputs fr
 idle time and the frontmost app, plus sleep/wake and lock/unlock notifications) and calls on_change(action)
 whenever the resulting action changes. Actions are {"brightness": 0..1, "off": bool, "preset": name | None}:
 brightness multiplies the user's own brightness, preset None means "the preset the user picked".
-MacAdapters is the only part that touches macOS; tests pass fake adapters.
+MacAdapters is the only part that touches macOS; on Windows default_adapters() picks platforms/win_smart.WinAdapters
+(experimental), where the frontmost app is a program name ("steam.exe") in place of a bundle id. Tests pass fake
+adapters.
 """
 import copy
 import ctypes
@@ -102,7 +104,7 @@ class SmartLighting:
     def __init__(self, config, on_change, adapters=None):
         self.config = normalise_config(config)
         self.on_change = on_change
-        self.adapters = adapters if adapters is not None else MacAdapters()
+        self.adapters = adapters if adapters is not None else default_adapters()
         self.sleeping = self.locked = False
         self.action = None
         self._lock = threading.RLock()
@@ -162,6 +164,15 @@ class SmartLighting:
             t.join(2)
         self._thread = None
         self._read(self.adapters.stop_observers, None)
+
+
+def default_adapters():
+    """This platform's sources: MacAdapters, or WinAdapters on Windows."""
+    import platforms
+    if platforms.is_windows():
+        from platforms.win_smart import WinAdapters
+        return WinAdapters()
+    return MacAdapters()
 
 
 def parse_ioreg_idle(text):

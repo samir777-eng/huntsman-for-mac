@@ -23,11 +23,24 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
 
 /* ---------- live frames on the board ---------- */
 function studioLive() { return !!(ST.data && ST.data.enabled && ST.frame); }
+// Studio off, its tab open: the board previews the working preset (frames composed by the service, nothing sent to the
+// keys), asked for every few seconds while the tab shows so a closed window doesn't keep it running.
+function studioPreviewing() { return !!(ST.data && !ST.data.enabled && ST.frame); }
+const PREVIEW_ASK_S = 10, PREVIEW_EVERY_MS = 4000;
+let previewTimer = null;
+const askPreview = s => { try { api.studio_preview(s).catch(() => {}); } catch (e) { /* an older app without it */ } };
+function previewUi() {
+  const want = view === "studio" && !!ST.data && !ST.data.enabled;
+  $("#stPreview").hidden = !want;
+  if (want && !previewTimer) { askPreview(PREVIEW_ASK_S); previewTimer = setInterval(() => askPreview(PREVIEW_ASK_S), PREVIEW_EVERY_MS); }
+  else if (!want && previewTimer) { clearInterval(previewTimer); previewTimer = null; if (!ST.data?.enabled) askPreview(0); }
+}
+$("#stPreviewOn").onclick = () => { $("#stOn").click(); $("#stOn").focus(); };
 function studioColour(id) { const c = ST.frame && ST.frame[id]; return c ? rgb2hex(c) : "#000000"; }
 let capEls = null;
 window.onStudioFrame = frame => {
   ST.frame = frame;
-  if (!studioLive()) return;
+  if (!studioLive() && !(view === "studio" && studioPreviewing())) return;
   if (!capEls || !capEls.length || !capEls[0].isConnected) capEls = $$(".cap").map(c => [c, c.dataset.id]);
   let r = 0, g = 0, b = 0, n = 0;
   for (const [c, id] of capEls) {
@@ -66,17 +79,19 @@ window.onStudioLevel = level => {
 function renderStudio() {
   const d = ST.data;
   $("#stOn").checked = d.enabled; $("#stOnLabel").textContent = d.enabled ? "On" : "Off";
-  $("#studioOnNote").hidden = !d.enabled; $("#stCloseHint").hidden = !d.enabled;
+  $("#studioOnNote").hidden = !d.enabled || typeof model === "undefined" || !model; $("#stCloseHint").hidden = !d.enabled;
   $("#stBright").value = Math.round(d.brightness * 100); $("#stFps").value = d.fps;
   sliderOuts();
   presetsUi(); stackUi(); editorUi(); soundUi(); typingUi(); smartUi(); noticesUi();
   if (view === "studio") $("#stageNote").textContent = studioNote();
-  if (!d.enabled) { ST.frame = null; paint(); }
+  if (!d.enabled && view !== "studio") ST.frame = null;   // on its tab the last frame stays until the preview's next one
+  if (!d.enabled) paint();
+  previewUi();
   fillAll();
 }
 function studioNote() {
-  return ST.data && ST.data.enabled ? "Live: what the keys show now. Select keys on the board to limit a layer to them."
-    : "Studio is off. Turn it on to light the keyboard and watch it here.";
+  const keys = ST.tab === "layers" ? " Select keys on the board to limit a layer to them." : "";
+  return (ST.data && ST.data.enabled ? "Live: what the keys show now." : "Studio is off, so this is a preview: the keys don't show it until you turn Studio on.") + keys;
 }
 function sliderOuts() {
   const b = $("#stBright").value + "%", f = $("#stFps").value + " fps";
@@ -94,9 +109,12 @@ function presetsUi() {
     s.appendChild(g);
   }
   s.value = ST.data.active;
+  // A built-in preset can't be changed: no dead Save, Save as… is the way to keep edits
   const built = isBuiltin(ST.data.active);
-  $("#stSave").disabled = built || !ST.data.dirty;
-  $("#stSave").title = built ? "Built-in presets can't be changed. Use Save as." : "";
+  if (built && document.activeElement === $("#stSave")) $("#stSaveAs").focus();
+  $("#stSave").hidden = built; $("#stSave").disabled = !ST.data.dirty;
+  $("#stSaveAs").classList.toggle("primary", built);
+  $("#stBuiltinHint").hidden = !built;
   $$("#stMenu [data-act='rename'], #stMenu [data-act='delete']").forEach(b => b.disabled = built);
   stDirtyUi();
 }
@@ -104,8 +122,8 @@ function presetsUi() {
 /* ---------- layer stack (shown top layer first) ---------- */
 const ICONS = {
   eye: '<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" d="M1.8 10S5 4.5 10 4.5 18.2 10 18.2 10 15 15.5 10 15.5 1.8 10 1.8 10z"/><circle cx="10" cy="10" r="2.6" fill="currentColor"/></svg>',
-  up: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M8 4l5 6H3z" fill="currentColor"/></svg>',
-  down: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M8 12L3 6h10z" fill="currentColor"/></svg>',
+  up: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 4l5 6H3z" fill="currentColor"/></svg>',
+  down: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 12L3 6h10z" fill="currentColor"/></svg>',
   del: '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
 };
 function paletteOf(effect, params) {
@@ -313,7 +331,9 @@ function addLayer(e) {
   const id = `l${Date.now().toString(36)}${layerSeq++}`;
   // typing reactions are black where nothing was pressed, so they add onto the layers below
   const blend = e.category === "reactive" || (e.category === "audio" && layers().length) ? "add" : "normal";
-  layers().push({ id, effect: e.name, params: {}, keys: "all", blend, opacity: 1, enabled: true });
+  // a solid colour over other layers would hide them all: it mixes in at half, so the preset still shows through
+  const opacity = e.name === "solid" && layers().length ? 0.5 : 1;
+  layers().push({ id, effect: e.name, params: {}, keys: "all", blend, opacity, enabled: true });
   ST.sel = id; changed(true);
   focusLayerButton(id, ".layer-main");
   toast(`${e.label} added on top`);
@@ -433,7 +453,8 @@ function stTab(t, focus) {
   $$("#stTabs button").forEach(b => { const on = b.dataset.tab === t; b.setAttribute("aria-selected", on); b.tabIndex = on ? 0 : -1; if (on && focus) b.focus(); });
   for (const [k, id] of [["layers", "stLayers"], ["sound", "stSound"], ["typing", "stTyping"], ["smart", "stSmart"]]) $("#" + id).hidden = k !== t;
   if (t === "smart" && !ST.apps.length) loadApps();
-  fillAll();
+  fillAll(); paint();   // the selection matters on Layers only
+  if (view === "studio" && ST.data) $("#stageNote").textContent = studioNote();
 }
 $$("#stTabs button").forEach(b => b.onclick = () => stTab(b.dataset.tab));
 $("#stTabs").addEventListener("keydown", e => {
@@ -525,15 +546,27 @@ function rulesUi() {
     ul.appendChild(li);
   });
 }
+// On Windows an app is its program name ("steam.exe"), in place of the Mac's bundle ID; the lighting keeps running
+// from the tray icon instead of the menu bar icon.
+const onWindows = () => typeof model !== "undefined" && model?.platform === "windows";
+function appRuleUi() {
+  const w = onWindows();
+  $("#smBundle").placeholder = w ? "or program name, e.g. steam.exe" : "or bundle ID, e.g. com.valvesoftware.steam";
+  $("label[for=smBundle]").textContent = w ? "App program name" : "App bundle ID";
+  $("#stCloseHint").textContent = `While Studio is on, closing the window keeps the lighting running from the ${w ? "tray" : "menu bar"} icon. Quit from there.`;
+}
 async function loadApps() {
+  appRuleUi();
   try { ST.apps = await scall("running_apps"); } catch (e) { ST.apps = []; }
   const s = $("#smPick"); s.length = 1;
   ST.apps.forEach(a => { const o = document.createElement("option"); o.value = a.bundle_id; o.textContent = a.name; s.appendChild(o); });
   rulesUi();
 }
 $("#smAdd").onclick = () => {
-  const bundle = ($("#smPick").value || $("#smBundle").value).trim();
-  if (!/^[A-Za-z0-9][\w.-]*$/.test(bundle)) { toast("Pick an open app, or type its bundle ID (like com.apple.Safari).", true); $("#smBundle").focus(); return; }
+  const typed = $("#smBundle").value.trim(), w = onWindows();
+  const bundle = $("#smPick").value || (w ? typed.toLowerCase() : typed);
+  const valid = w ? /^[^\\/:*?"<>|]+\.exe$/i.test(bundle) : /^[A-Za-z0-9][\w.-]*$/.test(bundle);
+  if (!valid) { toast(w ? "Pick an open app, or type its program name (like steam.exe)." : "Pick an open app, or type its bundle ID (like com.apple.Safari).", true); $("#smBundle").focus(); return; }
   const rules = ST.data.smart.app_rules;
   if (rules.some(r => r.bundle_id === bundle)) { toast(`${appName(bundle)} already has a rule.`, true); return; }
   rules.push({ bundle_id: bundle, preset: ST.data.active });
@@ -542,5 +575,6 @@ $("#smAdd").onclick = () => {
 };
 
 /* ---------- hooks used by app.js ---------- */
-window.studioShown = v => { if (v === "studio" && ST.data) { $("#stageNote").textContent = studioNote(); keysUi(); } };
+window.studioSelecting = () => ST.tab === "layers";   // only layers use the selected keys
+window.studioShown = v => { if (v === "studio") appRuleUi(); if (v === "studio" && ST.data) { $("#stageNote").textContent = studioNote(); keysUi(); } previewUi(); };
 window.studioStart = async () => { await studioRefresh(); };

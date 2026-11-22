@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping. The most useful contributions right now are hardware reports: Rapid Trigger, Snap Tap, other Huntsman models, Intel Macs and older macOS.
+Thanks for helping. The most useful contributions right now are hardware reports: the Windows build, Rapid Trigger, Snap Tap, other Huntsman models, Intel Macs and older macOS.
 
 ## Safety rule
 
@@ -22,7 +22,19 @@ python3 -m venv .venv
 - `tests/test_ui.py` opens `ui/index.html?demo` in headless Chromium and records what the interface sends. It is skipped when Playwright isn't installed.
 - `tests/test_repo.py` checks that `ui/demo-layout.js` matches `layout.json` and `layouts/` and that every source file has its licence header.
 
+- On Windows, install `requirements-win.txt` instead of `requirements.txt` (use `.venv\Scripts\python`). Tests that
+  need macOS-only pieces (fcntl, UNIX sockets, pyusb, launchctl, SIGHUP) are marked `mac_only` and skipped there.
+
 If you change `layout.json` or a file in `layouts/`, regenerate the demo layout with `python tools/make_demo_layout.py`.
+
+### Continuous integration
+
+GitHub Actions runs the whole suite on `macos-latest` and `windows-latest` (Python 3.13) for every push and pull
+request (`.github/workflows/ci.yml`). `.github/workflows/windows-build.yml` builds the Windows app with PyInstaller
+(`packaging/windows/huntsman.spec`), runs the built `Huntsman.exe --version` and `--self-test` (no keyboard, no
+window), and zips it as `Huntsman-for-Windows-<version>.zip`; when a release is published it attaches the zip to it.
+If you add a module the app imports lazily, or a data file, list it in `platforms/bundle.py`
+(`tests/test_packaging.py` checks this).
 
 ## Previewing the interface
 
@@ -46,6 +58,29 @@ then turn the switch off (or `huntsman.py experimental off`). With the switch of
 
 If your model isn't in the list, open the same issue with the model name, USB IDs and firmware version. Please don't
 add a Product ID to `models.py` and write to it on your own; we'll work out a read-only check first.
+
+## Testing on Windows
+
+The Windows build has never been run on a Windows PC with a keyboard, so any report helps, even "it didn't open".
+Every model counts as experimental on Windows. Use a keyboard you can live without for a while, and:
+
+1. Install it as in the README's [Windows section](README.md#install-on-windows). Note your Windows version (Settings
+   → System → About) and whether SmartScreen asked.
+2. Quit Razer Synapse first. Then, if you like, start it once with the app open and check that the window says it's
+   paused because of Synapse, and that the controls come back within a few seconds after you quit Synapse again.
+3. Open the app: does the window open and show the keyboard's model and firmware? Does a tray icon appear?
+4. Turn on **Keyboard → Experimental support**. If the window says Windows Dynamic Lighting is on, note that, and
+   whether lighting changes show before and after turning it off for the keyboard.
+5. Try one thing at a time and note what happened: a keyboard effect, brightness, per-key colours (do the right keys
+   light?), Studio (and typing effects), actuation on one key (V3 Pro models and V2 Analog), Rapid Trigger and Snap
+   Tap (V3 Pro models). On an experimental model run the **LED check** too, as in the next section.
+6. Close the window: does the lighting keep running from the tray icon? Sign out and back in: does the lighting
+   service start again? Use **Quit lighting service**: does the keyboard's own lighting come back?
+7. Open a [new model issue](.github/ISSUE_TEMPLATE/new_model.md), choose Windows as the OS, and attach the end of the
+   log, `%LOCALAPPDATA%\Huntsman for Mac\Logs\Huntsman for Mac.log` (remove anything personal).
+
+To stop: if you changed actuation, put it back (*Restore factory depth* on the V3 Pro models), turn Experimental
+support off, quit the lighting service from the tray icon, and see the README for uninstalling.
 
 ## Code style
 

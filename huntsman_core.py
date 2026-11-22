@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Huntsman for Mac contributors
-"""Razer Huntsman protocol on macOS, no Synapse. Verified on the Huntsman V3 Pro (1532:02A6); the other models in
+"""Razer Huntsman protocol on macOS (and, experimental, Windows), no Synapse. Verified on the Huntsman V3 Pro (1532:02A6); the other models in
 models.py get the same commands, behind the experimental-support switch (gate()).
 
 Sources: OpenRazer (packet, lighting), janeblower/easyrazer (analog, Rapid Trigger, Snap Tap,
@@ -10,17 +10,22 @@ Profile 0 is the live copy the keyboard types with (RAM). The saved slot is the 
 profile (flash). Actuation and lighting go to both, so they apply now and survive a replug.
 Each key has an actuation point (thr_l, byte 3) and a release point (thr_h, byte 4); the release
 must sit below the actuation, and by default it follows it RELEASE_GAP units below, like Synapse.
+Each model maps these bytes to mm on its own scale (models.Scale): the constants below are the V3 Pro's; the
+V2 Analog's (experimental) is models.V2_ANALOG_SCALE.
+
+Windows (experimental, untested on a Windows PC): the same protocol over hidapi (platforms/win_hid.py, chosen by
+open_transport), and the gate treats every model as experimental there and never runs the key tester (platforms.py).
 """
 import contextlib
-import fcntl
 import json
 import os
 import threading
 import time
 
 import models
+import platforms
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 VID, PID = 0x1532, 0x02A6   # PID: the verified model; the connected one is active_model().pid
 TID = 0x1F
@@ -77,6 +82,12 @@ class FeatureUnavailable(DeviceError):
 
 class ExperimentalLocked(DeviceError):
     """A write to an experimental model while Experimental support is off. Raised before anything is sent."""
+
+
+class SynapseRunning(ExperimentalLocked):
+    """Windows: Razer Synapse is running, so every write is refused (platforms/win_guard.py), and the hidapi transport
+    won't open the keyboard or exchange a report at all, reads included (platforms/win_hid.py). Raised before anything
+    is sent. A kind of ExperimentalLocked so every path that handles "refused, still connected" handles it too."""
 
 
 # ---------- models, detection and the experimental-support gate ----------
@@ -137,7 +148,7 @@ def experimental_enabled():
         if _switch_cache[0] == key:
             return _switch_cache[1]
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             raw = json.load(f)
     except Exception:
         return False
@@ -150,10 +161,9 @@ def experimental_enabled():
 def set_experimental(on):
     """Remember the switch in state.json, keeping everything else there (same lock as app.update_state)."""
     path = _state_path()
-    with open(os.path.join(os.path.dirname(path), "state.lock"), "a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    with platforms.file_lock(os.path.join(os.path.dirname(path), "state.lock")):
         try:
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 raw = json.load(f)
         except Exception:
             raw = None
@@ -161,7 +171,7 @@ def set_experimental(on):
         raw["experimental"] = bool(on)
         tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
         try:
-            with open(tmp, "w") as f:
+            with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(raw, f, indent=1)
                 f.flush()
                 os.fsync(f.fileno())
@@ -186,18 +196,52 @@ READ_COMMANDS = {(0x00, 0x81): None, (0x05, 0x84): None, (0x0F, 0x82): None, (0x
 
 
 def gate(model, feature):
-    """Raise unless a write for feature may go to model. The verified model is never restricted (and the switch
-    isn't even read for it). Experimental models: features they lack and the key tester always raise
-    FeatureUnavailable; everything else raises ExperimentalLocked until Experimental support is on."""
-    if model.verified and model.has(feature):
+    """Raise unless a write for feature may go to model. The verified model is never restricted on the Mac (and the
+    switch isn't even read for it). Experimental models, and on Windows every model: features they lack and the key
+    tester always raise FeatureUnavailable; everything else raises ExperimentalLocked until Experimental support is
+    on. On Windows, while Razer Synapse runs, every write raises SynapseRunning (platforms/win_guard.py); reads are
+    stopped too, by the transport (platforms/win_hid.py)."""
+    windows = platforms.is_windows()
+    if model.verified and model.has(feature) and not windows:
         return
     if not model.has(feature):
         raise FeatureUnavailable(f"{FEATURE_NAMES[feature]} isn't available on the {model.name}.")
     if feature == "key_tester":
+        if windows:
+            raise FeatureUnavailable("The key tester isn't offered on Windows: Windows support is experimental.")
         raise FeatureUnavailable(f"The key tester isn't offered on the {model.name}: its support is experimental.")
+    if windows:
+        from platforms import win_guard
+        reason = win_guard.write_block_reason()
+        if reason:
+            raise SynapseRunning(reason)
     if not experimental_enabled():
+        if windows:
+            raise ExperimentalLocked(f"Windows support is experimental (not yet tested on a Windows PC). Turn on "
+                                     f"Keyboard, Experimental support to change the {model.name}'s settings.")
         raise ExperimentalLocked(f"Support for the {model.name} is experimental. Turn on Keyboard, Experimental "
                                  "support to change its settings.")
+
+
+def synapse_block():
+    """Windows: why the keyboard is left alone right now (Razer Synapse runs: no writes and no reads, since two
+    programs on one HID interface swap replies), else None. The Mac never asks."""
+    if not platforms.is_windows():
+        return None
+    from platforms import win_guard
+    return win_guard.write_block_reason()
+
+
+def model_info(model):
+    """model.info() as the window should see it on this platform, plus "platform", "platform_experimental" and
+    "model_status" (the table's own status). On Windows every model reports "experimental" and no key tester."""
+    d = model.info()
+    d["model_status"] = model.status
+    if platforms.is_windows():
+        d["status"] = models.EXPERIMENTAL
+        d["features"] = {**d["features"], "key_tester": False}
+    d.update(platforms.info())
+    return d
 
 
 # ---------- pure encoding (unit-tested) ----------
@@ -236,31 +280,20 @@ def check_reply(req, resp):
         raise DeviceError(f"keyboard refused {req[6]:02X}:{req[7]:02X} (status {resp[0]:02X})")
 
 
-def mm_to_threshold(mm):
-    mm = round(float(mm), 1)
-    if not 0.1 <= mm <= 4.0:
-        raise ValueError(f"{mm} mm is outside 0.1-4.0")
-    if mm == 1.2:  # the scale gives 77, but Synapse's factory default is 76: keep the preset and "factory" identical
-        return FACTORY_THR
-    return max(MIN_THR, min(255, round(mm / FULL_MM * 255)))
+def mm_to_threshold(mm, scale=None):
+    """Actuation byte for mm on scale (a models.Scale), default the V3 Pro's: 0.1-4.0 mm, and 1.2 mm gives
+    Synapse's factory 76 (the scale gives 77) so the preset and "factory" are identical."""
+    return (scale or models.V3_SCALE).threshold(mm)
 
 
-def threshold_to_mm(t):
-    return round(t * FULL_MM / 255, 1)
+def threshold_to_mm(t, scale=None):
+    return (scale or models.V3_SCALE).mm(t)
 
 
-def release_for(thr, release_mm=None):
-    """Release threshold for an actuation threshold: explicit, or RELEASE_GAP below. Never 0."""
-    if thr < MIN_THR:
-        raise ValueError(f"actuation threshold {thr} is below the minimum {MIN_THR}")
-    if release_mm is None:
-        return thr - RELEASE_GAP
-    rel = max(1, min(255, round(float(release_mm) / FULL_MM * 255)))
-    if thr - RELEASE_GAP < rel < thr:  # within one 0.1 mm step of the limit (e.g. 3.9 at 4.0): clamp
-        rel = thr - RELEASE_GAP
-    if rel > thr - RELEASE_GAP:
-        raise ValueError("release point must sit at least 0.1 mm above the actuation point")
-    return rel
+def release_for(thr, release_mm=None, scale=None):
+    """Release byte for an actuation byte: explicit, or by default just above (RELEASE_GAP below on the V3 Pro).
+    Never 0."""
+    return (scale or models.V3_SCALE).release(thr, release_mm)
 
 
 def rt_distance(mm):
@@ -355,9 +388,17 @@ _USB_LOCK = threading.RLock()
 def usb_lock():
     """The process lock, plus a file lock so the app, the login agent and the CLI never interleave."""
     with _USB_LOCK:
-        with open(os.path.join(data_dir(), "usb.lock"), "a") as f:
-            fcntl.flock(f, fcntl.LOCK_EX)
-            yield  # closing the file releases the flock
+        with platforms.file_lock(os.path.join(data_dir(), "usb.lock")):
+            yield
+
+
+def open_transport():
+    """The keyboard transport for this platform: pyusb/libusb on the Mac, hidapi on Windows (experimental)."""
+    if platforms.is_windows():
+        from platforms import win_hid
+        return win_hid.HidTransport()
+    return UsbTransport()
+
 
 class UsbTransport:
     def __init__(self):
@@ -433,7 +474,7 @@ class UsbTransport:
 
 class Keyboard:
     def __init__(self, transport=None, model=None):
-        self.t = transport or UsbTransport()
+        self.t = transport or open_transport()
         detected = getattr(self.t, "model", None)
         self.model = model or (detected if isinstance(detected, models.Model) else None) or active_model()
 
@@ -454,7 +495,9 @@ class Keyboard:
             feature = READ_COMMANDS[(cls, cid)]
             if feature and not self.model.has(feature):
                 raise FeatureUnavailable(f"{FEATURE_NAMES[feature]} isn't available on the {self.model.name}.")
-        elif not self.model.verified:
+            if feature == "key_tester" and platforms.is_windows():   # driver mode is never used on Windows
+                gate(self.model, feature)
+        elif not self.model.verified or platforms.is_windows():
             raise FeatureUnavailable(f"command {cls:02X}:{cid:02X} is not sent to the {self.model.name}.")
 
     def cmd(self, cls, cid, args=(), size=None):
@@ -493,18 +536,29 @@ class Keyboard:
         return parse_key_assignment(self.cmd(0x02, 0x92, [profile, key, 0], 80), profile, key)
 
     def read_points(self, key, profile=LIVE):
+        """(actuation mm, release mm) the key acts on: on the V2 Analog the firmware clamps the stored bytes."""
+        sc = self.model.scale
         a = self.read_key(profile, key)
-        return threshold_to_mm(a[3]), threshold_to_mm(a[4])
+        thr, rel = sc.effective(a[3], a[4])
+        return sc.mm(thr), sc.mm(rel)
 
     def _write_points(self, keys, thr, rel):
         """Per key: saved (flash) first, then live (RAM), so a failure never leaves flash behind RAM.
-        A key whose saved write doesn't read back is reported and its live copy is left alone."""
+        Read-modify-write: only the two threshold bytes change; the layer and the key's function (fnId, size,
+        data) are written back as read (easyrazer actuation.rs update). A key whose saved write doesn't read back
+        is reported and its live copy is left alone.
+        Models other than the V3 family: keys already at the target are not written again, to spare flash. The V3
+        family keeps its verified behaviour (always written)."""
         self.check_write("actuation")
+        sc = self.model.scale
+        v3 = sc is models.V3_SCALE
         saved = self.saved
         failed = []
         for k in keys:
             for p in (saved, LIVE):
                 a = self.read_key(p, k)
+                if not v3 and (a[3], a[4]) == (thr, rel):
+                    continue
                 a[3], a[4] = thr, rel
                 self.cmd(0x02, 0x12, a, 80)
                 if tuple(self.read_key(p, k)[3:5]) != (thr, rel):
@@ -513,8 +567,11 @@ class Keyboard:
         return sorted(set(failed))
 
     def set_actuation(self, keys, mm, release_mm=None):
-        thr = mm_to_threshold(mm)
-        return self._write_points(keys, thr, release_for(thr, release_mm))
+        """mm (and release_mm) on the model's scale and range; out of range raises before anything is sent.
+        Without release_mm the reset point follows the scale's default just above (the same in saved and live)."""
+        sc = self.model.scale
+        thr = sc.threshold(mm)
+        return self._write_points(keys, thr, sc.release(thr, release_mm))
 
     def restore_snapshot(self, snap):
         """Write back a snapshot() taken earlier. Refuses a snapshot of another model (one without a PID was taken
@@ -650,8 +707,17 @@ class Keyboard:
 
 
     def restore_factory(self, keys):
-        """Synapse's defaults: actuation 1.2 mm (76), release 1.1 mm (70)."""
-        return self._write_points(keys, FACTORY_THR, FACTORY_REL)
+        """Synapse's defaults: actuation 1.2 mm (76), release 1.1 mm (70). Refused on a model whose factory point
+        isn't known (the V2 Analog), before anything is sent."""
+        self.check_factory()
+        return self._write_points(keys, *self.model.scale.factory)
+
+    def check_factory(self):
+        self._need("actuation")
+        if self.model.scale.factory is None:
+            raise FeatureUnavailable(f"The {self.model.name}'s factory depth isn't known, so it can't be restored. "
+                                     "The first-launch snapshot (huntsman.py restore-snapshot) puts every key back "
+                                     "as it was.")
 
     def snapshot(self, keys):
         """Every key's raw assignment in the live and saved profiles, for manual recovery.
@@ -670,15 +736,16 @@ class Keyboard:
 
 
 def data_dir():
-    """Per-user settings live outside the code folder."""
-    d = os.path.expanduser("~/Library/Application Support/Huntsman for Mac")
+    """Per-user settings live outside the code folder (platforms.data_dir: Application Support on the Mac,
+    %APPDATA% on Windows)."""
+    d = platforms.data_dir()
     os.makedirs(d, exist_ok=True)
     return d
 
 
 def load_layout(model=None):
     """Keys of model (default the active one): layout.json for the V3 Pro, layouts/<PID>.json for the others."""
-    with open(os.path.join(HERE, (model or _active).layout)) as f:
+    with open(os.path.join(HERE, (model or _active).layout), encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -690,5 +757,5 @@ def all_key_ids(model=None):
 def every_key_id(model=None):
     """Every key id in the firmware's key map (from easyrazer), incl. keys not on this layout,
     used to clear per-key Rapid Trigger entries everywhere."""
-    with open(os.path.join(HERE, "keymap.json")) as f:
+    with open(os.path.join(HERE, "keymap.json"), encoding="utf-8") as f:
         return sorted(set(json.load(f).values()) | set(all_key_ids(model)))

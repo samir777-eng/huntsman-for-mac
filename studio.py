@@ -22,10 +22,12 @@ import copy
 import json
 import os
 import threading
+import time
 import traceback
 
 import huntsman_core as hc
 from lighting import effects as fx
+from lighting.engine import PREVIEW_FPS
 from lighting.frame import AudioState as LightAudio
 from lighting.presets import Preset, builtin_presets, load_presets, save_presets
 
@@ -33,6 +35,7 @@ FPS_MIN, FPS_MAX = 15, 60
 SENS_MIN, SENS_MAX = 0.1, 4.0
 DEBOUNCE = 0.15
 MAX_IMPORT = 256 * 1024
+PREVIEW_MAX = 30.0   # seconds one studio_preview request lasts at most; the window asks again while it shows Studio
 EXPORT_FORMAT = "huntsman-for-mac-preset"
 DEFAULT_STUDIO = {"enabled": False, "active": "Rainbow wave", "fps": 30, "brightness": 1.0,
                   "audio": {"device": None, "sensitivity": 1.0}, "heat": False}
@@ -174,6 +177,10 @@ def preset_needs(preset):
 # ---------- default platform hooks (imported lazily: pyobjc, IOKit, PortAudio) ----------
 
 def _key_listener(callback):
+    import platforms
+    if platforms.is_windows():   # Raw Input (experimental)
+        from platforms.win_keys import RawKeyListener
+        return RawKeyListener(callback)
     from inputs.keys import KeyListener
     return KeyListener(callback)
 
@@ -206,9 +213,10 @@ def _timer(delay, fn):
 
 class Studio:
     def __init__(self, engine, settings, smart, *, save, keymap, push=None, key_listener=None, audio_listener=None,
-                 smart_lighting=None, list_devices=None, schedule=None, spawn=None, heat_path=None):
+                 smart_lighting=None, list_devices=None, schedule=None, spawn=None, heat_path=None, clock=None,
+                 sleep=None):
         """save(studio_settings, smart_config) persists both. push(fn_name, payload) sends to the window.
-        spawn(fn) runs fn on another thread (tests pass a synchronous one)."""
+        spawn(fn) runs fn on another thread (tests pass a synchronous one); clock and sleep pace the preview."""
         self.engine, self.keymap = engine, keymap
         self.settings, self.smart_cfg = clean_studio(settings), clean_smart(smart)
         self._save, self._push = save, push or (lambda *_: None)
@@ -218,6 +226,8 @@ class Studio:
         self._list_devices = list_devices or _list_devices
         self._schedule = schedule or _timer
         self._spawn = spawn or _in_thread
+        self._clock, self._sleep = clock or time.monotonic, sleep or time.sleep
+        self._preview_until, self._previewing = None, False
         self._smart_slot = threading.Lock()   # guards _smart_next / _smart_busy only; never held while waiting
         self._smart_next, self._smart_busy = None, False
         self._heat_path = heat_path or os.path.join(hc.data_dir(), "heatmap.json")
@@ -498,6 +508,46 @@ class Studio:
             self._restore_unless_on()
         self._changed()
 
+    def preview(self, seconds):
+        """While Studio is off, show the working preset on the window's on-screen board for `seconds` (at most
+        PREVIEW_MAX; the window asks again while it shows Studio, and 0 stops). Frames are only composed and pushed
+        to the window: nothing is sent to the keyboard. While Studio is on the engine's own previews do this."""
+        if not _num(seconds) or seconds < 0:
+            raise ValueError("seconds must be a number, 0 or more")
+        with self._lock:
+            self._preview_until = self._clock() + min(float(seconds), PREVIEW_MAX) if seconds > 0 else None
+            if self._previewing or self._preview_until is None or self.settings["enabled"]:
+                return
+            self._previewing = True
+            try:
+                self._apply()   # the engine composes what the window would show
+            except BaseException:
+                self._previewing = False
+                raise
+        try:
+            self._spawn(self._preview_loop)
+        except BaseException:
+            with self._lock:
+                self._previewing = False   # no loop started, so a later request may start one
+            raise
+
+    def _preview_loop(self):
+        fresh = True
+        try:
+            while True:
+                with self._lock:
+                    if (self.settings["enabled"] or self._preview_until is None
+                            or self._clock() >= self._preview_until):
+                        self._previewing = False   # with the check, so a request arriving now starts a new loop
+                        return
+                self.engine.preview(fresh=fresh)   # the engine's own lock; Studio's isn't held while composing
+                fresh = False
+                self._sleep(1.0 / PREVIEW_FPS)
+        except BaseException:
+            with self._lock:
+                self._previewing = False   # composing raised: the next request starts a loop again
+            raise
+
     def gui_ready(self):
         """The Cocoa loop is running: smart lighting can observe sleep, lock and app switches now."""
         with self._lock:
@@ -510,6 +560,7 @@ class Studio:
         kept, so Studio comes back at the next launch."""
         stopped = False
         with self._lock:
+            self._preview_until = None
             self._cancel_pending()
             self._stop_inputs()
             self._stop_smart()
@@ -668,7 +719,7 @@ class Studio:
 
     def _load_heat(self):
         try:
-            with open(self._heat_path) as f:
+            with open(self._heat_path, encoding="utf-8") as f:
                 raw = json.load(f)
             return {int(k): int(v) for k, v in raw.items() if int(k) in self.keymap and int(v) >= 0}
         except (OSError, ValueError, AttributeError, TypeError):
@@ -680,7 +731,7 @@ class Studio:
         counts = self.engine.heat_counts()
         tmp = f"{self._heat_path}.{os.getpid()}.tmp"
         try:
-            with open(tmp, "w") as f:
+            with open(tmp, "w", encoding="utf-8") as f:
                 json.dump({str(k): v for k, v in counts.items()}, f)
             os.replace(tmp, self._heat_path)
         except OSError:

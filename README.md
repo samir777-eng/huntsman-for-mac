@@ -14,10 +14,12 @@
   <a href="#supported-hardware"><img src="https://img.shields.io/badge/tested%20on-Apple%20silicon-6ad7ff?style=for-the-badge&logo=apple&logoColor=white&labelColor=0a0a0b" alt="Tested on Apple silicon"></a>
   <a href="#install"><img src="https://img.shields.io/badge/python-3.11%2B-6ad7ff?style=for-the-badge&logo=python&logoColor=white&labelColor=0a0a0b" alt="Python 3.11+"></a>
   <a href="#synapse-for-mac-vs-huntsman-for-mac"><img src="https://img.shields.io/badge/Synapse-not%20needed-6ad7ff?style=for-the-badge&labelColor=0a0a0b" alt="No Synapse needed"></a>
+  <a href="#windows-experimental"><img src="https://img.shields.io/badge/Windows-experimental%2C%20untested-ffc66b?style=for-the-badge&labelColor=0a0a0b" alt="Windows build: experimental, untested"></a>
 </p>
 
 <p align="center">
   <a href="#quick-start"><b>Quick start</b></a> ·
+  <a href="#windows-experimental"><b>Windows</b></a> ·
   <a href="#features"><b>Features</b></a> ·
   <a href="#supported-hardware"><b>Supported models</b></a> ·
   <a href="#safety"><b>Safety</b></a> ·
@@ -65,9 +67,97 @@ Three steps and you're tuning:
 
 You need Python 3.11 or newer, and Homebrew if libusb isn't installed yet. Details in [Install](#install).
 
+On Windows? There's an experimental, untested build: see [Windows (experimental)](#windows-experimental).
+
 > [!NOTE]
 > Unofficial. Not made, endorsed or supported by Razer. "Razer" and "Huntsman" are Razer Inc. trademarks, used here
 > only to say which keyboard this works with. Use at your own risk; see [Safety](#safety).
+
+## Windows (experimental)
+
+Version 0.4.0 adds a Windows build: the same app, as `Huntsman.exe`, with no Python or installer needed.
+
+> [!WARNING]
+> **Untested.** The Windows build has never run on a Windows PC with a keyboard. All that has run is the test suite
+> (simulated keyboard) on GitHub's `windows-latest` runners, and a smoke test there of the built `Huntsman.exe`
+> (`--version` and `--self-test`: it loads its code and data files, without opening a keyboard or a window). The
+> window, the tray icon, start at login, typing reactions, smart lighting, the Synapse check and every exchange with a
+> keyboard have not been seen working. A report either way helps: see
+> [CONTRIBUTING.md](CONTRIBUTING.md#testing-on-windows).
+
+What's different on Windows:
+
+- **Every model is experimental**, the Huntsman V3 Pro too: nothing that changes the keyboard is sent until you turn
+  on **Keyboard → Experimental support** (see [Experimental support](#experimental-support)). Reads always work,
+  except while Razer Synapse runs (below).
+- **No key tester.** It puts the keyboard into a mode where it stops typing, so it stays off on an untested platform.
+- **Hands off while Razer Synapse runs.** Synapse overwrites the keyboard's live settings, and two programs talking
+  to it at once mix up the replies. While Synapse (`RazerAppEngine.exe`, or Synapse 3 or 2) is running, the app and the
+  lighting service don't open the keyboard at all, not even to read it: the window shows the last model it saw and
+  says why. Quit Synapse, including its icon in the notification area, and the controls come back within a few
+  seconds.
+- **Windows Dynamic Lighting** can take over the keyboard's lights, so lighting changes may not show. When it's on,
+  the window says so. To give the lights to this app: **Settings → Personalization → Dynamic Lighting**, choose the
+  Razer Huntsman and turn Dynamic Lighting off for it (or turn off *Use Dynamic Lighting on my devices*). The app never
+  changes this setting.
+- The lighting service has a **tray icon** (notification area) instead of the menu bar icon. Smart lighting's app
+  rules use the program name (like `steam.exe`).
+- The download has **no command line** (`huntsman.py`). There's no USB driver to install: the app uses the
+  keyboard's normal Windows driver (hidapi).
+
+### Install on Windows
+
+1. **Download** `Huntsman-for-Windows-<version>.zip` from the
+   [latest release](https://github.com/samir777-eng/huntsman-for-mac/releases/latest).
+2. **Unzip it** (right-click → *Extract All*) somewhere you'll keep it, for example `Documents`. You get a `Huntsman`
+   folder; keep everything in it together.
+3. **Close Razer Synapse**, including its icon in the notification area, or the app leaves the keyboard alone.
+4. **Run `Huntsman.exe`.** It isn't code-signed, so Windows SmartScreen may say *Windows protected your PC*: click
+   **More info**, then **Run anyway**.
+5. Turn on **Keyboard → Experimental support** and read its warning.
+
+The window uses the **Microsoft Edge WebView2 Runtime**. It's built into Windows 11; on Windows 10 it may be missing,
+and then the window can't open. Install the *Evergreen* runtime from
+[Microsoft's WebView2 page](https://developer.microsoft.com/microsoft-edge/webview2/) and run `Huntsman.exe` again.
+
+### Start at login, tray icon and files
+
+- Opening the app starts the **lighting service** (the tray icon; it may be hidden under the **^** arrow) and turns
+  on **start at login** for the current user, no administrator rights needed: the registry value
+  `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run` → `Huntsman for Mac lighting`, set to
+  `"<your folder>\Huntsman\Huntsman.exe" --service`. If you move the folder, open the app once from its new place.
+  If you delete that value, the app leaves it deleted (it remembers in `state.json` that it added it once) until you
+  turn Studio on in the app, which adds it back.
+- The tray icon turns Studio on or off, switches presets, opens the app, and has **Quit lighting service**, which
+  stops Studio and puts the keyboard's own lighting back. The service stays off until the next sign-in or the next
+  time you open the app. Closing the window just closes it.
+- Settings: `%APPDATA%\Huntsman for Mac\` (`state.json`, `presets.json`, `heatmap.json`,
+  `first-launch-snapshot.json` and lock files).
+- The service's pipe name and key: `%LOCALAPPDATA%\Huntsman for Mac\service.key`.
+- Log: `%LOCALAPPDATA%\Huntsman for Mac\Logs\Huntsman for Mac.log`. The windowed app has no console, so everything
+  it prints goes there.
+
+### Uninstall on Windows
+
+<details>
+<summary>Quit, remove start at login, delete the folders</summary>
+
+1. Tray icon → **Quit lighting service**, and close the window.
+2. Remove start at login. In a Command Prompt:
+
+   ```bat
+   reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "Huntsman for Mac lighting" /f
+   ```
+
+   Or delete that value in Registry Editor. Switching it off in **Task Manager → Startup apps** (or **Settings → Apps
+   → Startup**) only disables it; there it's probably listed by the program's description, *Huntsman for Mac (Windows
+   build)* (not checked).
+3. Delete the unzipped `Huntsman` folder.
+4. To remove your settings and the log too, delete `%APPDATA%\Huntsman for Mac` and `%LOCALAPPDATA%\Huntsman for Mac`.
+
+Settings stored on the keyboard (actuation, keyboard effects) stay on it.
+
+</details>
 
 ## What it does
 
@@ -81,6 +171,7 @@ You need Python 3.11 or newer, and Homebrew if libusb isn't installed yet. Detai
 | 🎨 | [Per-key colours](#keyboard-lighting) | No, kept until unplugged and sent again |
 | 🌈 | [Lighting Studio](#lighting-studio): layers, typing and sound effects, presets, smart lighting | No, drawn live by the app |
 | 🧪 | [Six more Huntsman models](#supported-hardware), experimental and looking for testers | – |
+| 🪟 | [A Windows build](#windows-experimental), experimental and untested | – |
 
 "Sent again" means the lighting service puts it back when it starts, at login and after the installer runs.
 
@@ -109,7 +200,7 @@ You need Python 3.11 or newer, and Homebrew if libusb isn't installed yet. Detai
     <td width="50%"><a href="#lighting-studio"><img src="docs/screenshot-studio.png" alt="Studio tab: the Aurora preset running, with its layer, palette and speed settings"></a></td>
     <td width="50%">
       <p><b>🌈 Lighting Studio</b></p>
-      Layers, 17 effects and eight built-in presets, reacting to your typing and your music. Studio runs in a small
+      Layers, 17 effects and fourteen built-in presets, reacting to your typing and your music. Studio runs in a small
       background lighting service, so close the app and your aurora keeps drifting.
       <a href="#lighting-studio">More →</a>
     </td>
@@ -150,13 +241,30 @@ you stop, close the window or quit. Meanwhile, use your Mac's built-in keyboard.
 
 The key tester is only offered on the Huntsman V3 Pro (1532:02A6), the one model tested with this app.
 
+#### Actuation on the V2 Analog
+
+Experimental and untested with this app. The Huntsman V2 Analog (1532:0266) measures travel differently: its keyboard
+acts between **1.62 mm** and **3.56 mm**, so that's the slider's range, in 0.01 mm steps, with presets at 1.62, 2.0,
+2.5, 3.0 and 3.56. Unless you set one (the window's *Just above*, and the command line), the reset point follows
+0.1 mm above the new actuation point, the same in the saved and the live profile, no shallower than 1.54 mm; a
+custom one stays
+at least 0.1 mm above (the firmware rule is 10 bytes, about 0.08 mm). The 0.01 mm steps are this app's choice
+(easyrazer uses 0.1 mm). The scale and limits come from easyrazer, which checked the 3.56 mm end on this
+keyboard; the 1.62 mm end and the reset point rules come from its reading of the firmware and haven't been seen
+working. Only the two depth bytes of each key change: the key's assignment (what it types, or a macro) is written
+back as read, and every write is read back. A key set by Razer Synapse reads 0/0, which the keyboard treats as
+1.62 mm, so the app shows it that way. Only the normal layer is changed; a Hypershift (Fn) depth is left alone.
+There's no *Restore factory depth* on this model, because its factory depth isn't known; the first-launch snapshot
+(`huntsman.py restore-snapshot`) puts every key back as it was.
+
 ### Rapid Trigger and Snap Tap
 
 **Rapid Trigger** fires a key again as soon as it moves down by the press distance after rising by the release
 distance, anywhere in its travel. Both distances go from 0.1 to 1.0 mm, and there's a *Stay on for the whole press*
 option.
 
-**Snap Tap** takes one pair of keys (usually A and D): while both are held, only the one pressed last counts.
+**Snap Tap** takes one pair of keys (usually A and D): while both are held, only the one pressed last counts. In the
+window, turn on its switch, click the two keys on the keyboard (or pick them in the lists) and choose Apply.
 
 Both were confirmed on a Huntsman V3 Pro. The keyboard forgets them when unplugged, so the lighting service sends them
 again when it starts.
@@ -181,7 +289,8 @@ with what you're doing.
 - **17 effects.** Basic: solid colour, gradient (linear or radial, 2 to 5 colours), rainbow wave, colour cycle,
   breathing. Ambient: aurora, matrix rain, plasma, fire, starfield. Sound: audio spectrum (bars across the keyboard),
   audio pulse. Typing: ripple, afterglow, explosion, trail, and a typing heatmap.
-- **Presets.** Eight built in: Rainbow wave, Aurora, Gaming WASD, Typing glow, Music, Fire, Matrix, Calm breathing.
+- **Presets.** Fourteen built in: Rainbow wave, Aurora, Gaming WASD, Typing glow, Music, Fire, Matrix, Calm breathing,
+  Plasma, Starfield, Ripple, Spectrum bars, Sunset, Neon cycle.
   Save, save as, rename, duplicate, delete, and import or export a preset as a JSON file. Built-in presets can't be
   changed; save a copy instead. Brightness and smoothness (15 to 60 frames a second) apply to every preset.
 - **Sound.** Choose the input in Studio → Sound. A microphone hears the room. For the Mac's own sound, install a
@@ -227,14 +336,19 @@ them with the [LED check](#led-check).
 | Huntsman V3 Pro Mini | 1532:02B0 | 🧪 Experimental, untested | Lighting, per-key colours, Studio, actuation, Rapid Trigger, Snap Tap. No key tester |
 | Huntsman V2 | 1532:026C | 🧪 Experimental, untested | Lighting, per-key colours and Studio only |
 | Huntsman V2 TKL | 1532:026B | 🧪 Experimental, untested | Lighting, per-key colours and Studio only |
-| Huntsman V2 Analog | 1532:0266 | 🧪 Experimental, untested | Lighting, per-key colours and Studio only. No starlight effects; its analog features aren't supported |
+| Huntsman V2 Analog | 1532:0266 | 🧪 Experimental, untested | Lighting, per-key colours, Studio, actuation (1.62 to 3.56 mm). No Rapid Trigger, Snap Tap, key tester, factory depth reset or starlight effects |
 
-On the experimental models none of this has been seen working yet. The V2 family has no actuation, Rapid Trigger or
-Snap Tap tabs and no key tester. If more than one supported keyboard is plugged in, the app uses the first one it
-finds in the order of this table.
+On the experimental models none of this has been seen working yet. The V2 and V2 TKL have no actuation, Rapid
+Trigger or Snap Tap tabs and no key tester. The V2 Analog has actuation only, on its own scale (see
+[Actuation on the V2 Analog](#actuation-on-the-v2-analog)); its Rapid Trigger and Snap Tap run in Razer's software on
+the computer, not on the keyboard, so the app doesn't offer them. If more than one supported keyboard is plugged in,
+the app uses the first one it finds in the order of this table.
 
 Macs: tested on Apple silicon with macOS 26. Intel Macs and earlier macOS versions are untested; they will probably
 work, and a report either way helps.
+
+Windows: untested on a PC, and every model, the V3 Pro too, is experimental there, with no key tester. See
+[Windows (experimental)](#windows-experimental).
 
 ### Experimental support
 
@@ -271,7 +385,7 @@ Checked on 2026-11-17 with a Huntsman V3 Pro (1532:02A6), firmware 1.03, wired, 
 
 | ✅ Checked on hardware | ⏳ Not checked yet |
 |---|---|
-| Actuation and reset points: written, read back, still there after unplugging | The six models with [experimental support](#experimental-support) |
+| Actuation and reset points: written, read back, still there after unplugging | The six models with [experimental support](#experimental-support), including actuation on the V2 Analog |
 | Rapid Trigger and Snap Tap turned on | Intel Macs |
 | Keyboard lighting effects, per-key colours and brightness | macOS versions before 26 |
 | Colour correction (the keyboard matches the picker) | |
@@ -282,11 +396,19 @@ Checked on 2026-11-17 with a Huntsman V3 Pro (1532:02A6), firmware 1.03, wired, 
 | Lighting Studio: built-in presets, layers, settings, saving presets, Sound, Typing and Smart panels, music through the microphone | Smart lighting over a long session (real sleep and screen lock) |
 | Studio effects keep running after the app quits | System sound through a loopback device such as BlackHole |
 | | install.sh putting the previous app back after a failed build |
+| | Anything on [Windows](#windows-experimental): the build has never run on a PC with a keyboard |
 
 **Version 0.3.0** was checked again on the same keyboard: the window, actuation, Rapid Trigger and Snap Tap, keyboard
 effects, per-key colours and brightness, Studio typing and ambient presets (also after quitting the app), and
 starting and stopping the key tester with typing coming back. All passed. The key tester's new place in Actuation was
 then checked too (2026-11-18): the meter and readings update, and typing comes back after stopping.
+
+**Version 0.4.0** was partly checked on the same keyboard before its UX changes (2026-11-18): the window, the menu
+bar icon, actuation, lighting, Studio after quitting the app, and the key tester; the no-keyboard screen and
+Reconnect on 2026-11-20. Not checked on the keyboard yet: the Mixed readout and Apply confirmation, Snap Tap's switch
+and picking keys on the board, Studio's preview while off, the six new presets, and the key tester since the UX
+changes. The golden tests show every byte sent to the V3 Pro is unchanged. The Windows build and the V2 Analog's
+actuation are untested.
 
 ## Install
 
@@ -395,7 +517,8 @@ Huntsman for Mac, and has **Quit lighting service**, which stops Studio and puts
 - The service starts at login and when the installer finishes. When it starts, it sends per-key colours, Rapid
   Trigger and Snap Tap to the keyboard again and starts Studio if it was on.
 - It's set up to restart if it crashes (not checked on hardware yet). After *Quit lighting service* it stays off
-  until the next login, or until you use Studio in the app, which starts it again.
+  until the next login or the next time you open the app: the window starts it again when it opens (it reads
+  Studio's state from the service).
 - Quitting the app window (red button, Cmd-Q) just closes the window; the lighting keeps running.
 - While the app changes the keyboard (actuation, keyboard effects, per-key colours, brightness, the key tester), the
   service pauses its frames.
@@ -418,13 +541,13 @@ APP=~/Applications/"Huntsman for Mac.app"/Contents/Resources
 |---|---|
 | `status` | Model, USB ID and status, the Experimental support switch (experimental models), firmware, saved profile, brightness, and the A key's actuation and reset points (models with adjustable actuation) |
 | `experimental on`, `experimental off` | Turn Experimental support on or off. Doesn't need a keyboard |
-| `depth 2.0` | Every key types at 2.0 mm (0.1 to 4.0); the reset point follows 0.1 mm above |
+| `depth 2.0` | Every key types at 2.0 mm (0.1 to 4.0; on the V2 Analog 1.62 to 3.56, in 0.01 mm steps); the reset point follows 0.1 mm above |
 | `depth 0.5 W A S D` | Only those keys |
 | `color 255 255 255` | Solid colour, saved on the keyboard |
 | `spectrum`, `wave`, `off` | Built-in effects, saved on the keyboard |
 | `brightness 80` | Brightness, 0 to 100 |
 | `apply-saved` | Send per-key colours, Rapid Trigger and Snap Tap again (the lighting service does this when it starts) |
-| `factory` | Every key back to 1.2 mm; Rapid Trigger and Snap Tap off |
+| `factory` | Every key back to 1.2 mm; Rapid Trigger and Snap Tap off. Refused on the V2 Analog (factory depth unknown) |
 | `restore-snapshot` | Put every key back exactly as it was on the app's first launch |
 | `--version` | Print the version |
 | `help` | Print this list |
@@ -446,15 +569,17 @@ Razer documentation. So it's careful:
 - **Your original settings are saved.** On first launch the app copies every key's settings to
   `~/Library/Application Support/Huntsman for Mac/first-launch-snapshot.json`; `huntsman.py restore-snapshot` puts
   them back. The snapshot records its model and is never written to another one. There is one snapshot per Mac user:
-  a second model plugged in later gets none. The V2 family has no actuation settings, so it gets none either.
+  a second model plugged in later gets none. The V2 and V2 TKL have no actuation settings, so they get none either.
 - **Factory reset.** *Restore factory depth* (in the app, or `huntsman.py factory`) puts every key back to 1.2 mm and
-  turns off Rapid Trigger and Snap Tap.
+  turns off Rapid Trigger and Snap Tap. Not on the V2 Analog, whose factory depth isn't known: use the snapshot.
 - **The key tester always lets go.** The keyboard goes back to typing when you stop, after 60 seconds, when you close
   the window, when the app quits, and when macOS ends it (SIGTERM). If the app is killed outright, the next time the
   app or the command line connects it puts the keyboard back to typing. Unplugging and replugging should also work,
   since test mode isn't stored.
 - **Experimental models** get only commands already checked on the Huntsman V3 Pro, and nothing that changes them is
   sent until Experimental support is on. The key tester is never offered on them.
+- **On Windows** every model counts as experimental, the key tester is never offered, and nothing is written while
+  Razer Synapse is running. See [Windows (experimental)](#windows-experimental).
 - **If everything else fails,** connecting the keyboard to Windows with Razer Synapse should reset it. This hasn't
   been needed or tried.
 
@@ -577,6 +702,16 @@ No. It talks to the keyboard directly over USB from macOS.
 </details>
 
 <details>
+<summary><b>Does it work on Windows?</b></summary>
+
+There's an experimental Windows build (`Huntsman-for-Windows-<version>.zip` on the releases page), but it has never
+been run on a Windows PC with a keyboard, so nobody knows yet. On Windows every model needs Experimental support
+switched on, there's no key tester, and the app leaves the keyboard alone while Razer Synapse is running. See
+[Windows (experimental)](#windows-experimental).
+
+</details>
+
+<details>
 <summary><b>Is it free?</b></summary>
 
 Yes. It's open source under GPL-3.0-or-later, with no account, no telemetry and no paid tier.
@@ -604,7 +739,7 @@ Turn on Experimental support, run the LED check, and report what worked and what
 <summary><b>Why is there no key tester on my model?</b></summary>
 
 The key tester switches the keyboard into a mode where it stops typing. It's only offered on a model that has been
-tested, so an untested keyboard can't be left unable to type. The V2 family also has no analog keys to test.
+tested, so an untested keyboard can't be left unable to type. The V2 and V2 TKL also have no analog keys to test.
 
 </details>
 
@@ -613,7 +748,8 @@ tested, so an untested keyboard can't be left unable to type. The V2 family also
 The app talks to the keyboard's control interface with USB control transfers through libusb, which avoids Razer's
 macOS driver (it keeps that interface to itself). Settings go to two places: the copy the keyboard is using right now,
 and the saved onboard profile. The key tester puts the keyboard into "driver mode" and reads its travel reports
-(report `0x0B`) through IOKit.
+(report `0x0B`) through IOKit. On Windows the same commands go through hidapi as feature reports on the same
+interface (no driver swap), the app and the lighting service talk over a named pipe, and driver mode is never used.
 
 <details>
 <summary>Code map, and where your settings live</summary>
@@ -629,6 +765,8 @@ and the saved onboard profile. The key tester puts the keyboard into "driver mod
   presets and the engine that streams per-key frames
 - `inputs/`: key presses (IOKit), sound levels (sounddevice) and smart-lighting signals (idle, sleep, lock, front app)
 - `huntsman.py`: the command line
+- `platforms/`: which OS this is, folders and file locks, and the Windows pieces (hidapi transport, tray icon, start
+  at login, Raw Input typing, smart-lighting events, the Synapse check, the build manifest)
 
 Your settings and logs live in:
 
@@ -642,7 +780,7 @@ Your settings and logs live in:
 
 ## Contributing
 
-🙌 Hardware reports are the most useful thing right now: experimental models, Intel Macs and older macOS. See
+🙌 Hardware reports are the most useful thing right now: experimental models, Windows, Intel Macs and older macOS. See
 [CONTRIBUTING.md](CONTRIBUTING.md) for the steps, the safety rule for new commands, and how to run the tests:
 
 ```bash
@@ -652,7 +790,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requiremen
 ```
 
 The tests use a simulated keyboard and never touch USB. The interface tests open `ui/index.html?demo` in a headless
-browser; they're skipped if Playwright isn't installed. Security problems: see [SECURITY.md](SECURITY.md).
+browser; they're skipped if Playwright isn't installed. GitHub Actions runs them on macOS and Windows for every push
+and pull request. Security problems: see [SECURITY.md](SECURITY.md).
 
 ## Credits
 

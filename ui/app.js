@@ -6,8 +6,10 @@ const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAl
 const TITLES = { actuation: "Actuation", rapid: "Rapid Trigger", snap: "Snap Tap", lighting: "Lighting", studio: "Studio", device: "Keyboard" };
 const NOTES = {
   actuation: "Click a key to select it, or drag across several. The number on each key is the depth it types at, in mm.",
+  actuationSmall: "Click a key to select it, or drag across several. To see the depth a key types at, point at it.",
   rapid: "Select keys to limit Rapid Trigger to them, or leave nothing selected for all keys.",
-  snap: "The two outlined keys are the pair. Choose them in the panel on the left.",
+  snap: "The two outlined keys are the pair. Click a key to make it the first key, then another for the second.",
+  snapSecond: "Now click the second key of the pair.",
   lighting: "Each key shows the colour its LED is set to.",
   studio: "",
   testing: "Keys sink as you press them. The trace shows the last key's travel.",
@@ -31,11 +33,16 @@ let fxShown = null;         // the built-in effect the keyboard runs: {name, c1,
 let testing = false;
 let focusId = null;         // roving tabindex on the board
 let zoom = 1;
+// The connected model's actuation scale (models.Scale.info): slider range and step, lowest reset point, the
+// "Just above" gap, the factory depth (null: not offered) and the presets. The V3 Pro's until a model says otherwise.
+const V3_ACT = { min: 0.1, max: 4, step: 0.1, decimals: 1, release_min: 0, reset_gap: 0.1, factory: 1.2,
+  presets: [["Light", 0.5], ["Gaming", 1.0], ["Factory", 1.2], ["Balanced", 1.5], ["Typing", 2.0], ["Firm", 3.0]] };
+let act = V3_ACT;
 
 /* ---------- helpers ---------- */
 const hex2rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
 const rgb2hex = a => "#" + a.map(v => (+v).toString(16).padStart(2, "0")).join("");
-const mm = v => (+v).toFixed(1) + " mm";
+const mm = v => (+v).toFixed(act.decimals) + " mm";
 const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
 const keyIds = () => layout.filter(k => k.name !== "RIGHT_GUI").map(k => k.id);
 const byName = n => layout.find(k => k.name === n)?.id;
@@ -66,11 +73,21 @@ function toast(msg, err) {
   const t = $("#toast"); t.textContent = msg; t.className = "toast show" + (err ? " err" : "");
   clearTimeout(t._h); t._h = setTimeout(() => t.className = "toast" + (err ? " err" : ""), err ? 6000 : 2400);
 }
+// A toast belongs to what was just done: gone on another tab, and an error gone once the keyboard answers again
+function hideToast(errOnly) {
+  const t = $("#toast"); if (errOnly && !t.classList.contains("err")) return;
+  clearTimeout(t._h); t.classList.remove("show");
+}
+const setText = (el, t) => { if (el.textContent !== t) el.textContent = t; };   // live regions speak only on change
 function setConn(ok, text) { $("#led").className = "led " + (ok ? "on" : "err"); if (text) $("#conn").textContent = text; }
 async function call(name, ...args) {
   const r = await api[name](...args);
   // r.reason: the model refused it before anything was sent (experimental or missing feature), still connected
-  if (!r.ok) { toast(r.error, true); if (!r.reason) setConn(false, "Not connected"); throw new Error(r.error); }
+  if (!r.ok) {
+    toast(r.error, true); if (!r.reason) setConn(false, "Not connected");
+    if (r.reason === "synapse" && !platform.blocked) { await readPlatform(); platformUi(); lockUi(); }   // Synapse started since
+    throw new Error(r.error);
+  }
   setConn(true); return r.data;
 }
 async function busy(btn, fn) { btn.disabled = true; try { await fn(); } catch (e) { /* toast shown */ } finally { btn.disabled = false; refreshButtons(); } }
@@ -113,12 +130,20 @@ function fit() {
   const reserved = (traceShown() ? 280 : 0) + $("#dock").offsetHeight + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + 64;
   zoom = Math.max(0.5, Math.min(1.6, stage.clientWidth * 0.9 / nw, (stage.clientHeight - reserved) / nh));
   kb.style.zoom = zoom;
-  // keep small type at or above ~9.5 px on screen whatever the zoom
-  kb.style.setProperty("--legend-fs", Math.max(11, 10.5 / zoom).toFixed(2) + "px");
-  kb.style.setProperty("--legend-long", Math.max(8.5, 8.5 / zoom).toFixed(2) + "px");
-  kb.style.setProperty("--front-fs", (9.5 / zoom).toFixed(2) + "px");
-  // the skirt is 10 px tall; when the number would not fit there, it moves onto the keycap
-  kb.classList.toggle("num-on-top", 9.5 / zoom > 10.5);
+  // Type follows the size of a key on screen (a 1u cap is 41 px at zoom 1) and stays readable: legends
+  // 9-10.5 px, long ones 7.5-8.5 px.
+  const capPx = (U - GAP) * zoom;
+  const legendPx = Math.max(9, Math.min(10.5, capPx * 0.36)), longPx = Math.max(7.5, Math.min(8.5, capPx * 0.29));
+  kb.style.setProperty("--legend-fs", Math.max(11, legendPx / zoom).toFixed(2) + "px");
+  kb.style.setProperty("--legend-long", Math.max(8.5, longPx / zoom).toFixed(2) + "px");
+  // Small keys have no room for both a legend and a depth: the depth shows in the legend's place while the key is
+  // pointed at or focused (its name and tooltip always carry it). Otherwise the number sits on the 10 px skirt,
+  // or on the keycap when it would not fit there.
+  const small = capPx < 27;
+  kb.classList.toggle("depths-on-demand", small);
+  kb.style.setProperty("--front-fs", (small ? Math.max(11, legendPx / zoom) : 9.5 / zoom).toFixed(2) + "px");
+  kb.classList.toggle("num-on-top", !small && 9.5 / zoom > 10.5);
+  if (view === "actuation" && !testing) $("#stageNote").textContent = stageNote(view);
 }
 
 /* What each key's LED shows, so legends glow like the real keyboard */
@@ -133,8 +158,10 @@ function fxColour(id) {
   return f.c1 || "#e9e9ee";
 }
 const studioOn = () => typeof studioLive === "function" && studioLive();
+// Studio's frames on the board: what the keys show while it's on, and a preview of the edits on its tab while it's off
+const studioShowing = () => studioOn() || (view === "studio" && typeof studioPreviewing === "function" && studioPreviewing());
 function ledColour(id) {
-  if (studioOn()) return studioColour(id);   // Studio streams frames: show what the keys really show
+  if (studioShowing()) return studioColour(id);
   if (custom) return rgb2hex(custom.keys[id] || custom.base);
   return fxColour(id);
 }
@@ -152,14 +179,20 @@ function capName(id) {
   }
   return name;
 }
-const selecting = () => ["actuation", "rapid", "lighting", "studio"].includes(view);
+// Where the selection does something: Actuation, Rapid Trigger, Lighting's Per key (and a Static effect, which colours
+// the selected keys), and Studio's Layers. Elsewhere the Select bar and the outlines hide; the selection is kept.
+const selecting = () => view === "actuation" || view === "rapid"
+  || (view === "lighting" && ($("#tabKeys").getAttribute("aria-selected") === "true" || $("#effect").value === "static"))
+  || (view === "studio" && (!window.studioSelecting || studioSelecting()));
 function rtCovers(id) { const r = state.rapid; return !!(r && r.enabled && (r.keys === "all" || (r.keys || []).map(Number).includes(id))); }
 const snapPair = () => [+$("#snapA").value, +$("#snapB").value];
 
 function paint() {
   const showSel = selecting(), [sa, sb] = snapPair(), kb = $("#kb");
   kb.dataset.view = view;
-  kb.dataset.fx = !custom && fxShown && !studioOn() ? fxShown.name : "";
+  $("#selectTools").hidden = !showSel;
+  $("#board").setAttribute("aria-multiselectable", showSel);
+  kb.dataset.fx = !custom && fxShown && !studioShowing() ? fxShown.name : "";
   for (const c of $$(".cap")) {
     const id = +c.dataset.id, p = points[id], front = c.querySelector(".front");
     const led = ledColour(id), dark = unlit(led);
@@ -172,7 +205,7 @@ function paint() {
     c.classList.toggle("unlit", dark);
     c.tabIndex = id === focusId ? 0 : -1;
     if (view === "actuation") {
-      if (!(testing && c.classList.contains("pressed"))) front.textContent = p ? p[0].toFixed(1) : "";   // a pressed key shows its travel
+      if (!(testing && c.classList.contains("pressed"))) front.textContent = p ? p[0].toFixed(act.decimals) : "";   // a pressed key shows its travel
       c.title = p ? `Types at ${mm(p[0])}, resets at ${mm(p[1])}` : "";
     } else { front.textContent = ""; if (!c.classList.contains("off")) c.title = ""; }
     c.setAttribute("aria-label", capName(id));
@@ -188,7 +221,7 @@ function paint() {
   }
   refreshButtons();
 }
-const fxAnimated = () => !custom && !studioOn() && fxShown && /spectrum|wave|random|fire/.test(fxShown.name);
+const fxAnimated = () => !custom && !studioShowing() && fxShown && /spectrum|wave|random|fire/.test(fxShown.name);
 function fxDuration(f) {
   if (f.name === "wave") return (1.5 + (f.speed ?? 40) / 255 * 9).toFixed(2);   // lower value = faster
   if (f.name.startsWith("starlight")) return [0, 1.4, 2.4, 3.6][f.speed ?? 2];
@@ -196,12 +229,22 @@ function fxDuration(f) {
   return 4;
 }
 
+// The selection carries across tabs, so wherever it applies the panel says so, with a way to drop it
+function scopeUi(el, n, none) {
+  if (el.dataset.n === String(n)) return; el.dataset.n = n;
+  if (!n) { el.textContent = none; return; }
+  el.textContent = `Applying to ${plural(n, "selected key")} · `;
+  const b = document.createElement("button"); b.className = "link"; b.textContent = "Clear"; b.setAttribute("aria-label", "Clear selection");
+  b.onclick = () => { selected.clear(); paint(); el.focus(); };
+  el.tabIndex = -1; el.appendChild(b);
+}
 // Labels and enabled states that depend on the selection and on what is applied
 function refreshButtons() {
-  const n = selected.size, scope = n ? `${plural(n, "key")} selected` : "All keys";
-  $("#actScope").textContent = scope; $("#rtScope").textContent = scope;
+  syncDepth();
+  const n = selected.size;
+  scopeUi($("#actScope"), n, "All keys"); scopeUi($("#rtScope"), n, "All keys");
   $("#applyDepth").textContent = n ? `Apply to ${plural(n, "key")}` : "Apply to all keys";
-  $("#paintScope").textContent = n ? `${plural(n, "key")} selected` : "Select keys on the keyboard to paint them";
+  scopeUi($("#paintScope"), n, "Select keys on the keyboard to paint them");
   const pb = $("#paintSel"), eb = $("#eraseSel");
   pb.disabled = eb.disabled = !n;
   pb.textContent = n ? `Paint ${plural(n, "key")}` : "Paint selected keys";
@@ -215,17 +258,22 @@ function refreshButtons() {
     $("#stageNote").textContent = (!r.enabled ? "Rapid Trigger is off. " + NOTES.rapid : r.keys === "all" ? "Rapid Trigger is on for all keys, marked with a bar."
       : `Rapid Trigger is on for ${plural((r.keys || []).length, "key")}, marked with a bar. Select keys to change which ones it covers.`);
   }
-  const [a, b] = snapPair();
-  $("#applySnap").textContent = a === b ? "Choose two different keys" : `Turn on for ${label(a)} and ${label(b)}`;
-  $("#applySnap").disabled = a === b;
-  $("#offSnap").disabled = !state.snap;
+  const [a, b] = snapPair(), snapOn = $("#snapOn").checked, sd = snapDirty();
+  $("#applySnap").textContent = !snapOn ? (state.snap ? "Turn off Snap Tap" : "Apply")   // #snapState says it's off
+    : a === b ? "Choose two different keys" : `Apply to ${label(a)} and ${label(b)}`;
+  $("#applySnap").disabled = !sd || (snapOn && a === b);
+  $("#snapDirty").hidden = !sd;
+  $("#actTest").disabled = !hasFeature("key_tester");
   fxScopeUi(); dirtyUi(); lockUi();
 }
 
 /* ---------- models: experimental support, features, LED check ---------- */
 const FEATURE_TABS = { actuation: "actuation", rapid: "rapid", snap: "snap_tap" };
 const experimentalModel = () => !!model && model.status === "experimental";
-const writesLocked = () => experimentalModel() && !model.experimental_on;
+const switchLocked = () => experimentalModel() && !model.experimental_on;
+// Windows: while Razer Synapse runs (platform.blocked) the app leaves the keyboard alone, so every write is refused too
+let platform = { blocked: null, notices: [] };
+const writesLocked = () => switchLocked() || !!platform.blocked || !!model?.blocked;
 // No keyboard answered (model null): claim no feature, so only Lighting and Studio show until one connects
 const hasFeature = f => !!model && !!model.features[f];
 const viewShown = v => !FEATURE_TABS[v] || hasFeature(FEATURE_TABS[v]);
@@ -235,17 +283,74 @@ let lockShown = false;
 function lockUi() {
   const lk = writesLocked();
   $$("[data-write]").forEach(e => { if (lk) e.disabled = true; else if (lockShown) e.disabled = false; });
-  $$(".lock-note").forEach(n => n.hidden = !lk);
+  // while Razer Synapse runs, the Experimental switch wouldn't help: the Synapse notice says what will
+  $$(".lock-note").forEach(n => n.hidden = !switchLocked() || !!platform.blocked || !!model?.blocked);
   const was = lockShown; lockShown = lk;
   if (was && !lk) refreshButtons();
 }
+// Windows notices: why writes are off (Razer Synapse) and settings that get in the way (Dynamic Lighting). While
+// Synapse runs only platform_status (the guard, no keyboard traffic) is asked every few seconds; once Synapse quits
+// the keyboard is connected and read again, so the controls come back.
+let guardTimer = null;
+async function readPlatform() { try { const r = await api.platform_status(); if (r.ok) platform = r.data; } catch (e) {} }
+// One short line each, the long text folded into a disclosure. Rebuilt only when the text changes, so the guard's
+// polling doesn't close a disclosure someone opened or announce the alert again.
+function noticePart(box, lead, more, summary, bold) {
+  const p = document.createElement("p"), t = document.createElement(bold ? "strong" : "span");
+  t.textContent = lead; p.appendChild(t); box.appendChild(p);
+  const d = document.createElement("details"), s = document.createElement("summary"), m = document.createElement("p");
+  s.textContent = summary; m.textContent = more; d.append(s, m); box.appendChild(d);
+}
+function platformUi() {
+  const blocked = platform.blocked || model?.blocked || null, notices = (platform.notices || []).filter(Boolean);
+  const box = $("#platformNotice"), key = JSON.stringify([blocked, notices]);
+  if (box.dataset.key !== key) {
+    box.dataset.key = key; box.innerHTML = "";
+    if (blocked) noticePart(box, "Quit Razer Synapse to use these controls", blocked, "Why", true);
+    notices.forEach(t => noticePart(box, t.split(/, so |\. /)[0].replace(/\.$/, "") + ".", t, "Details"));
+  }
+  box.hidden = !blocked && !notices.length;
+  if (model?.platform === "windows") $("#expBadge").title = "Windows support is experimental: it hasn't been tested on a Windows PC";
+  if ((platform.blocked || model?.blocked) && !guardTimer) guardTimer = setTimeout(async () => {
+    guardTimer = null;
+    await readPlatform();
+    if (platform.blocked) { platformUi(); return; }
+    await load();
+    if (model) try { const done = await call("startup"); if (done.length) toast("Sent again: " + done.join(", ")); } catch (e) {}
+    refreshButtons();
+  }, 5000);
+}
+// No keyboard: the stage says so with a Reconnect button, and the panes (all but Keyboard) are off, not merely idle
+function noKbUi() {
+  const none = !model && !platform.blocked;
+  // focus in a pane that goes inert would drop to the page: it moves to the stage's Reconnect instead
+  const lost = none && $("#noKb").hidden && document.activeElement?.closest?.('.pane:not([data-pane="device"]), #kbWrap, #dock');
+  $("#noKb").hidden = !none; $("#kbWrap").hidden = $("#dock").hidden = none;
+  $$(".pane").forEach(p => { const off = none && p.dataset.pane !== "device"; p.inert = off; p.classList.toggle("dimmed", off); });
+  $(".device-name").textContent = model ? model.name : "No keyboard";
+  $("#noKbWhy").textContent = none && modelError ? modelError : "";
+  if (none) $("#studioOnNote").hidden = true;   // "Studio is lighting the keyboard" is false with no keyboard
+  if (lost) $("#emptyReconnect").focus();
+}
+// The key tester shows on every model with Actuation, disabled with the reason where it isn't offered
+function testerWhy() {
+  if (!model || hasFeature("key_tester")) return "";
+  if (model.platform === "windows") return "Key tester isn't available on Windows yet.";
+  if (/^Huntsman V2\b/.test(model.name)) return "Key tester isn't available on the Huntsman V2 family.";
+  return "Key tester isn't available on experimental models.";
+}
 function applyModel() {
-  if (model) $(".device-name").textContent = model.name;
+  noKbUi();
   $("#expBadge").hidden = !experimentalModel();
+  platformUi();
   Object.keys(FEATURE_TABS).forEach(v => { $(`#sources button[data-view="${v}"]`).hidden = !viewShown(v); });
-  $("#actTest").hidden = $("#actReadings").hidden = !hasFeature("key_tester");
+  const why = testerWhy();
+  $("#actTestWhy").textContent = why; $("#actTestWhy").hidden = !why;
+  if (why) $("#actTest").setAttribute("aria-describedby", "actTestWhy"); else $("#actTest").removeAttribute("aria-describedby");
+  $("#actReadings").hidden = !hasFeature("key_tester") || !testing;   // readings and the warning while testing only
   if (testing && !hasFeature("key_tester")) stopTest();
-  $("#restore").hidden = $("#restoreHint").hidden = !hasFeature("actuation");
+  setAct(hasFeature("actuation") && model.actuation || V3_ACT);
+  $("#restore").hidden = $("#restoreHint").hidden = !hasFeature("actuation") || act.factory == null;
   $("#expBox").hidden = !experimentalModel();
   $("#expOn").checked = !!model?.experimental_on;
   $("#ledBox").hidden = !experimentalModel() || !model.experimental_on;
@@ -320,6 +425,7 @@ let drag = null;
 $("#board").addEventListener("mousedown", e => {
   const c = e.target.closest(".cap"); if (!c) return;
   focusId = +c.dataset.id;
+  if (view === "snap" && !c.classList.contains("off")) { e.preventDefault(); c.focus({ preventScroll: true }); pickSnap(focusId); return; }
   if (!selecting() || c.classList.contains("off") || testing) { paint(); return; }
   e.preventDefault(); c.focus({ preventScroll: true });
   const id = +c.dataset.id; drag = selected.has(id) ? "remove" : "add"; toggle(id);
@@ -354,7 +460,8 @@ $("#board").addEventListener("keydown", e => {
     const row = c.parentElement.querySelectorAll(".cap"); next = +(e.key === "Home" ? row[0] : row[row.length - 1]).dataset.id;
   } else if (e.key === " " || e.key === "Enter") {
     e.preventDefault();
-    if (selecting() && !c.classList.contains("off") && !testing) { selected.has(id) ? selected.delete(id) : selected.add(id); paint(); }
+    if (view === "snap" && !c.classList.contains("off")) pickSnap(id);
+    else if (selecting() && !c.classList.contains("off") && !testing) { selected.has(id) ? selected.delete(id) : selected.add(id); paint(); }
     return;
   } else return;
   e.preventDefault();
@@ -372,17 +479,19 @@ $$("#selectTools button").forEach(b => b.onclick = () => {
 /* ---------- navigation ---------- */
 // The key tester runs from Actuation: while it runs, the stage shows the travel trace under the keyboard
 const traceShown = () => testing && view === "actuation";
-const stageNote = v => v === "actuation" && testing ? NOTES.testing : NOTES[v];
+const depthsOnDemand = () => $("#kb").classList.contains("depths-on-demand");
+const stageNote = v => v === "actuation" && testing ? NOTES.testing : v === "actuation" && depthsOnDemand() ? NOTES.actuationSmall
+  : v === "snap" && snapNext ? NOTES.snapSecond : NOTES[v];
 async function show(v) {
   if (!viewShown(v)) v = "lighting";   // a tab this model doesn't have
   if (testing && v !== "actuation") await stopTest();   // the key tester lives in Actuation
+  if (v !== view) hideToast();
+  if (v !== view && view === "snap") snapNext = 0;   // picking a pair starts over at the first key
   view = v;
   $$("button[data-view]").forEach(b => { if (b.dataset.view === v) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   $$(".pane").forEach(p => p.hidden = p.dataset.pane !== v);
   document.title = `${TITLES[v]} · Huntsman for Mac`;
   $("#stageNote").textContent = stageNote(v);
-  $("#selectTools").hidden = !selecting();
-  $("#board").setAttribute("aria-multiselectable", selecting());
   $("#traceWrap").hidden = !traceShown();
   $("#stage").dataset.view = v;
   $$(".cap").forEach(c => c.classList.remove("pressed", "typed"));
@@ -399,39 +508,108 @@ function fillAll() { $$('input[type="range"]').forEach(fillRange); }
 const valueText = (id, t) => { $("#" + id).setAttribute("aria-valuetext", t); };
 
 /* ---------- actuation ---------- */
-const depth = () => +(+$("#depth").value).toFixed(1);
-const relValue = () => $("#relMode").value === "custom" ? +(+$("#rel").value).toFixed(1) : +Math.max(0, depth() - 0.1).toFixed(1);
+// Until the user moves a control, the slider follows the keys in scope (the selection, or all keys), and keys at
+// different depths read "Mixed (a–b)". Nothing is "Not applied yet" before an edit.
+let actEdited = false;
+const depth = () => +(+$("#depth").value).toFixed(act.decimals);
+const scopeIds = () => (selected.size ? [...selected] : keyIds()).filter(id => points[id]);
+function scopeDepths() {   // [[depth, [ids]], ...], most keys first
+  const g = new Map();
+  scopeIds().forEach(id => { const d = points[id][0]; g.set(d, [...(g.get(d) || []), id]); });
+  return [...g.entries()].sort((a, b) => b[1].length - a[1].length || a[0] - b[0]);
+}
+const mixed = () => !actEdited && scopeDepths().length > 1;
+function syncDepth() {
+  if (actEdited || !layout.length) return;
+  const top = scopeDepths()[0];
+  if (top && Math.abs(depth() - top[0]) > 0.0001) $("#depth").value = top[0];
+  depthUi();
+}
+function edited() { actEdited = true; depthUi(); }
+const relTop = () => Math.max(act.release_min, depth() - act.reset_gap);   // "Just above", and the custom maximum
+const relValue = () => +($("#relMode").value === "custom" ? +$("#rel").value : relTop()).toFixed(act.decimals);
 function depthUi() {
-  $("#depthNum").textContent = depth().toFixed(1);
-  valueText("depth", mm(depth()));
-  const rel = $("#rel"); rel.max = Math.max(0, depth() - 0.1).toFixed(1);
+  const ds = scopeDepths().map(([d]) => d), mix = mixed(), lo = Math.min(...ds), hi = Math.max(...ds);
+  $("#depthNum").textContent = mix ? "Mixed" : depth().toFixed(act.decimals);
+  $("#depthUnit").textContent = mix ? `${lo.toFixed(act.decimals)}–${hi.toFixed(act.decimals)} mm` : "mm";
+  $("#readout").classList.toggle("mixed", mix);
+  valueText("depth", mix ? `Mixed, ${mm(lo)} to ${mm(hi)}` : mm(depth()));
+  const rel = $("#rel"); rel.max = relTop().toFixed(act.decimals);
   if (+rel.value > +rel.max) rel.value = rel.max;
   $("#relOut").textContent = mm(rel.value); valueText("rel", mm(rel.value));
-  $$("#presets button").forEach(b => b.setAttribute("aria-pressed", +b.dataset.v === depth()));
+  $$("#presets button").forEach(b => b.setAttribute("aria-pressed", !mix && +b.dataset.v === depth()));   // none while Mixed
   fillAll(); meterLines(); dirtyUi();
 }
-$("#depth").oninput = depthUi; $("#rel").oninput = depthUi;
-$("#relMode").onchange = () => { $("#relRow").hidden = $("#relMode").value !== "custom"; depthUi(); };
-[["Light", 0.5], ["Gaming", 1.0], ["Factory", 1.2], ["Balanced", 1.5], ["Typing", 2.0], ["Firm", 3.0]].forEach(([n, v]) => {
-  const b = document.createElement("button"); b.dataset.v = v;
-  b.innerHTML = "<b></b><span></span>"; b.children[0].textContent = v.toFixed(1); b.children[1].textContent = n;
-  b.setAttribute("aria-label", `${n}, ${mm(v)}`);
-  b.onclick = () => { $("#depth").value = v; depthUi(); }; $("#presets").appendChild(b);
-});
-$("#applyDepth").onclick = e => busy(e.target, async () => {
-  const rel = $("#relMode").value === "custom" ? relValue() : null;
-  const r = await call("set_depth", [...selected], depth(), rel);
-  Object.entries(r.done).forEach(([k, p]) => points[k] = p); paint();
-  const n = Object.keys(r.done).length;
-  if (r.failed.length) toast(`${n} keys set. ${r.failed.length} didn't confirm: ${r.failed.map(label).join(", ")}`, true);
-  else toast(`${plural(n, "key")} now type at ${mm(depth())}`);
-});
+$("#depth").oninput = edited; $("#rel").oninput = edited;
+$("#relMode").onchange = () => { $("#relRow").hidden = $("#relMode").value !== "custom"; edited(); };
+function fillPresets() {
+  $("#presets").innerHTML = "";
+  act.presets.forEach(([n, v]) => {
+    const b = document.createElement("button"); b.dataset.v = v;
+    b.innerHTML = "<b></b><span></span>"; b.children[0].textContent = v.toFixed(act.decimals); b.children[1].textContent = n;
+    b.setAttribute("aria-label", `${n}, ${mm(v)}`);
+    b.onclick = () => { $("#depth").value = v; edited(); }; $("#presets").appendChild(b);
+  });
+}
+fillPresets();
+// a model with another scale: the sliders, their labels and the presets follow it
+function setAct(next) {
+  if (JSON.stringify(next) === JSON.stringify(act)) return;
+  act = next;
+  const d = $("#depth"), rel = $("#rel");
+  d.min = act.min; d.max = act.max; d.step = act.step;
+  rel.min = act.release_min; rel.step = act.step;
+  const [lo, hi] = $$(".scale span");
+  lo.textContent = `${act.min.toFixed(act.decimals)} mm, lightest`; hi.textContent = `${act.max.toFixed(act.decimals)} mm, deepest`;
+  fillPresets(); depthUi(); paint();
+}
+// While the keys in scope are at different depths (usually some set on purpose, like WASD), the readout said
+// "Mixed", so Apply says which keys will change and which already match before writing. Keys at one depth (the one
+// the readout showed) are applied without asking.
+const near = (x, y) => Math.abs(x - y) < 0.001;
+function keyNames(ids, many) { return ids.length <= 8 ? ids.map(label).join(", ") : many; }
+function confirmApply() {
+  if (scopeDepths().length < 2) return Promise.resolve(true);
+  const d = depth(), custom = $("#relMode").value === "custom", r = relValue();
+  const changes = id => !near(points[id][0], d) || (custom && !near(points[id][1], r));
+  const ids = scopeIds(), change = ids.filter(changes), keep = ids.filter(id => !changes(id));
+  if (!change.length) return Promise.resolve(true);
+  const from = new Map();
+  change.filter(id => !near(points[id][0], d)).forEach(id => { const x = points[id][0]; from.set(x, [...(from.get(x) || []), id]); });
+  const groups = [...from.entries()].sort((a, b) => b[1].length - a[1].length || a[0] - b[0]);
+  const resetOnly = change.filter(id => near(points[id][0], d));   // at the depth already, a new custom reset point
+  const n = groups.reduce((t, [, g]) => t + g.length, 0), resetting = custom ? `, resetting at ${mm(r)}` : "";
+  const who = g => keyNames(g, plural(g.length, "key"));
+  let text = groups.length === 1 ? `${who(groups[0][1])} will change from ${mm(groups[0][0])} to ${mm(d)}${resetting}.`
+    : `${plural(n, "key")} will change to ${mm(d)}${resetting}: ` + groups.map(([x, g]) => `${who(g)} from ${mm(x)}`).join("; ") + ".";
+  if (resetOnly.length) text += ` ${who(resetOnly)} ${resetOnly.length === 1 ? "keeps" : "keep"} ${mm(d)} and get${resetOnly.length === 1 ? "s" : ""} a new reset point at ${mm(r)}.`;
+  const one = keep.length === 1;
+  if (keep.length) text += ` ${keyNames(keep, `The other ${keep.length} keys`)} already ${custom ? (one ? "matches" : "match") : `${one ? "types" : "type"} at ${mm(d)}`}.`;
+  const dlg = $("#confirmApply");
+  $("#caBody").textContent = text;
+  $("#caOk").textContent = $("#applyDepth").textContent;
+  dlg.returnValue = ""; dlg.showModal();
+  return new Promise(res => dlg.addEventListener("close", () => { res(dlg.returnValue === "apply"); $("#applyDepth").focus(); }, { once: true }));
+}
+$("#applyDepth").onclick = async e => {
+  const btn = e.currentTarget;
+  if (!(await confirmApply())) return;
+  busy(btn, async () => {
+    const rel = $("#relMode").value === "custom" ? relValue() : null, d = depth();
+    const r = await call("set_depth", [...selected], d, rel);
+    Object.entries(r.done).forEach(([k, p]) => points[k] = p);
+    actEdited = false; paint();
+    const n = Object.keys(r.done).length;
+    if (r.failed.length) toast(`${n} keys set. ${r.failed.length} didn't confirm: ${r.failed.map(label).join(", ")}`, true);
+    else toast(`${plural(n, "key")} now type at ${mm(d)}`);
+  });
+};
 
 // "Not applied yet" when the controls differ from what the keyboard has
 function dirtyUi() {
   if (!layout.length) return;
   const ids = selected.size ? [...selected] : keyIds(), d = depth(), r = relValue();
-  const actDirty = Object.keys(points).length > 0 && ids.some(id => { const p = points[id]; return p && (Math.abs(p[0] - d) > 0.001 || Math.abs(p[1] - r) > 0.001); });
+  const actDirty = actEdited && Object.keys(points).length > 0 && ids.some(id => { const p = points[id]; return p && (Math.abs(p[0] - d) > 0.001 || Math.abs(p[1] - r) > 0.001); });
   $("#actDirty").hidden = !actDirty;
   const a = state.rapid || {}, want = rtForm();
   const sameKeys = (x, y) => x === "all" || y === "all" ? x === y : x.length === y.length && x.every(v => y.map(Number).includes(+v));
@@ -465,14 +643,30 @@ function fillSnap() {
   }
   $("#snapA").value = byName("A"); $("#snapB").value = byName("D");
 }
-function snapUi() { const p = state.snap; $("#snapState").textContent = p ? `On for ${label(p[0])} and ${label(p[1])}` : "Off"; }
-$("#snapA").onchange = $("#snapB").onchange = () => paint();
+// A switch and Apply, like Rapid Trigger. The pair is chosen in the lists or by clicking two keys on the board,
+// which fill the first key, then the second, in turn. set_snap gets the pair, or null to turn it off.
+let snapNext = 0;
+const samePair = (x, y) => [...x].map(Number).sort().join() === [...y].map(Number).sort().join();
+function snapDirty() {
+  const on = $("#snapOn").checked;
+  return on !== !!state.snap || (on && !samePair(snapPair(), state.snap));
+}
+function snapUi() { const p = state.snap; $("#snapState").textContent = p ? `On for ${label(+p[0])} and ${label(+p[1])}` : "Off"; }
+function pickSnap(id) {
+  $(snapNext ? "#snapB" : "#snapA").value = id; snapNext ^= 1;
+  $("#snapOn").checked = true; paint();
+  $("#stageNote").textContent = stageNote(view);
+}
+$("#snapA").onchange = $("#snapB").onchange = () => { $("#snapOn").checked = true; paint(); };
+$("#snapOn").onchange = () => refreshButtons();
 $("#applySnap").onclick = e => {
-  const [a, b] = snapPair();
-  if (a === b) return toast("Choose two different keys", true);
-  busy(e.target, async () => { await call("set_snap", [a, b]); state.snap = [a, b]; snapUi(); toast(`Snap Tap on for ${label(a)} and ${label(b)}`); });
+  const on = $("#snapOn").checked, [a, b] = snapPair();
+  if (on && a === b) return toast("Choose two different keys", true);
+  busy(e.target, async () => {
+    await call("set_snap", on ? [a, b] : null); state.snap = on ? [a, b] : null; snapUi(); paint();
+    toast(on ? `Snap Tap on for ${label(a)} and ${label(b)}` : "Snap Tap off");
+  });
 };
-$("#offSnap").onclick = e => busy(e.target, async () => { await call("set_snap", null); state.snap = null; snapUi(); toast("Snap Tap off"); });
 
 /* ---------- lighting ---------- */
 function wellsUi() {
@@ -486,7 +680,7 @@ $("#paint").oninput = $("#bg").oninput = wellsUi;
 function lightMode(m, focus) {
   $$("#lightMode button").forEach(b => { const on = b.dataset.mode === m; b.setAttribute("aria-selected", on); b.tabIndex = on ? 0 : -1; if (on && focus) b.focus(); });
   $("#keysPane").hidden = m !== "keys"; $("#effectPane").hidden = m !== "effect";
-  fillAll();
+  fillAll(); if (layout.length) paint();
 }
 $$("#lightMode button").forEach(b => b.onclick = () => lightMode(b.dataset.mode));
 $("#lightMode").addEventListener("keydown", e => {
@@ -528,7 +722,7 @@ function speedUi() {
   const t = fx.dir ? Math.round((hi - v) / (hi - lo) * 100) + "%" : ["", "Fast", "Medium", "Slow"][v];
   $("#speedOut").textContent = t; valueText("speed", fx.dir ? `${t} speed` : t);
 }
-$("#speed").oninput = speedUi; $("#effect").onchange = () => { effectUi(); fxScopeUi(); };
+$("#speed").oninput = speedUi; $("#effect").onchange = () => { effectUi(); paint(); };
 // Effects always cover the whole keyboard. A static colour with keys selected is really a per-key paint.
 function fxScopeUi() {
   const n = selected.size, name = $("#effect").value, staticSel = n && name === "static";
@@ -592,9 +786,11 @@ window.onDepth = batch => {            // batch: [[keyId, mm], ...] from the app
     $("#mLive").dataset.idle = "false";
     $("#mKey").textContent = `Key ${label(trace.key)}`;
     $("#mNum").textContent = d.toFixed(2);
-    const hit = d >= depth(), applied = p[0] != null && Math.abs(p[0] - depth()) < 0.001;
-    $("#mHit").textContent = applied ? `Types at ${mm(depth())}: ${hit ? "reached" : "not reached"}`
-      : `With ${mm(depth())} (not applied yet): ${hit ? "reached" : "not reached"}`;
+    // against the slider once it's moved; before that, against the depth this key has
+    const ref = actEdited || p[0] == null ? depth() : p[0];
+    const hit = d >= ref, applied = p[0] != null && Math.abs(p[0] - ref) < 0.001;
+    setText($("#mHit"), applied ? `Types at ${mm(ref)}: ${hit ? "reached" : "not reached"}`
+      : `With ${mm(ref)} (not applied yet): ${hit ? "reached" : "not reached"}`);
     $("#mHit").classList.toggle("on", hit);
     meterKey(d, hit);
   }
@@ -640,8 +836,8 @@ function drawTrace() {
     g.beginPath(); g.moveTo(L, y(p[0])); g.lineTo(R, y(p[0])); g.stroke();
     g.globalAlpha = .5; g.beginPath(); g.moveTo(L, y(p[1])); g.lineTo(R, y(p[1])); g.stroke(); g.globalAlpha = 1;
     g.setLineDash([]); g.fillStyle = accent;
-    g.fillText(`types at ${p[0].toFixed(1)}`, L + 6, y(p[0]) + 14);
-    g.globalAlpha = .7; g.fillText(`resets at ${p[1].toFixed(1)}`, L + 6, y(p[1]) - 5); g.globalAlpha = 1;
+    g.fillText(`types at ${p[0].toFixed(act.decimals)}`, L + 6, y(p[0]) + 14);
+    g.globalAlpha = .7; g.fillText(`resets at ${p[1].toFixed(act.decimals)}`, L + 6, y(p[1]) - 5); g.globalAlpha = 1;
   }
   const s = trace.samples; if (s.length < 2) return;
   const now = s[s.length - 1][0], x = t => R - (now - t) / WINDOW_MS * (R - L);
@@ -659,7 +855,8 @@ function testerUi() {
   $("#actTest").classList.toggle("on", testing);
   $("#testBanner").hidden = !testing;
   $("#stage").classList.toggle("testing", testing);
-  if (testing) { $("#mLive").dataset.idle = "true"; $("#mKey").textContent = "Press a key on the Huntsman"; $("#mNum").textContent = "0.00"; $("#mHit").textContent = `Types at ${mm(depth())}`; }
+  if (testing) { $("#mLive").dataset.idle = "true"; $("#mKey").textContent = "Press a key on the Huntsman"; $("#mNum").textContent = "0.00"; setText($("#mHit"), mixed() ? "Each key types at its own depth" : `Types at ${mm(depth())}`); }
+  $("#actReadings").hidden = !testing || !hasFeature("key_tester");
   $("#mLive").classList.toggle("active", testing);
   $("#traceWrap").hidden = !traceShown();
   if (view === "actuation") $("#stageNote").textContent = stageNote(view);
@@ -686,7 +883,19 @@ window.onProgress = (done, total) => {
 };
 
 /* ---------- keyboard info ---------- */
-$("#reload").onclick = e => busy(e.target, async () => { const done = await call("reconnect"); if (done.length) toast("Sent again: " + done.join(", ")); await load(); });
+// Reconnect (Keyboard pane, and the stage while no keyboard answers): says which keyboard answered, or why none did
+async function reconnect(btn) {
+  const fromStage = btn.id === "emptyReconnect";
+  snapNext = 0; $("#stageNote").textContent = stageNote(view);
+  await busy(btn, async () => {
+    const done = await call("reconnect");
+    if (!(await load())) { if (!model && !platform.blocked) toast(modelError || "No keyboard answered.", true); return; }
+    toast(`Connected to ${model.name}` + (done.length ? `. Sent again: ${done.join(", ")}` : ""));
+    if (fromStage) $(".tabs button[aria-current]")?.focus();
+  });
+}
+$("#reload").onclick = e => reconnect(e.currentTarget);
+$("#emptyReconnect").onclick = e => reconnect(e.currentTarget);
 $("#restore").onclick = () => { $("#confirmRestore").returnValue = ""; $("#confirmRestore").showModal(); };
 $("#confirmRestore").addEventListener("close", () => {
   if ($("#confirmRestore").returnValue !== "restore") { $("#restore").focus(); return; }
@@ -700,7 +909,8 @@ async function readPoints() {
   const count = {};
   Object.values(points).forEach(p => count[p[0]] = (count[p[0]] || 0) + 1);
   const common = Object.entries(count).sort((a, b) => b[1] - a[1])[0];
-  if (common) { $("#depth").value = common[0]; depthUi(); }
+  if (common) $("#depth").value = common[0];
+  actEdited = false; depthUi();
   paint();
 }
 /* ---------- accent colour (the app's own, separate from the LED colours on the keys) ---------- */
@@ -749,6 +959,8 @@ function applyState() {
     if (fx.direction) $("#dir").value = fx.direction;
     fxShown = custom ? null : fxFromForm(fx.name);
   }
+  $("#snapOn").checked = !!state.snap;
+  if (state.snap) { $("#snapA").value = state.snap[0]; $("#snapB").value = state.snap[1]; }
   wellsUi(); snapUi(); paint(); applyAccent();
 }
 function fromRaw(raw) {  // effect bytes the keyboard reports: store, led, effect id, ...
@@ -766,9 +978,14 @@ function fillEffects() {
 }
 // The connected model, again: on Reconnect a keyboard may have appeared, or another model replaced it. A new
 // PID (or the first one after none) brings its layout and effects; the same one keeps the board as drawn.
+let modelError = null;      // why no keyboard answered, for the empty stage and a Reconnect that finds none
+async function readModel() {   // connects, so layout and effects follow it. No toast: the stage shows "no keyboard"
+  try { const r = await api.model(); modelError = r.ok ? null : r.error; return r.ok ? r.data : null; }
+  catch (e) { modelError = String(e); return null; }
+}
 async function followModel() {
   const before = model?.pid ?? null;
-  try { model = await call("model"); } catch (e) { model = null; }   // connects, so layout and effects follow it
+  model = await readModel();
   if (model && model.pid !== before) {
     layout = await api.layout(); effects = await api.effects();
     selected = new Set([...selected].filter(id => keyOf(id)));
@@ -778,8 +995,12 @@ async function followModel() {
   applyModel(); show(view);
   return !!model;
 }
+const SYNAPSE_CONN = "Paused: Razer Synapse is running";
 async function load(again = true) {
-  if (again && !(await followModel())) { setConn(false, "Not connected"); return; }
+  if (again) await readPlatform();
+  const found = again ? await followModel() : !!model;
+  if (platform.blocked) { setConn(false, SYNAPSE_CONN); return false; }   // nothing is read while Synapse runs
+  if (!found) { setConn(false, "Not connected"); return false; }
   setConn(true, "Reading");
   try {
     const i = await call("info");
@@ -789,21 +1010,25 @@ async function load(again = true) {
     applyState();
     $("#devInfo").innerHTML = "";
     const m = i.model || model || { name: "Huntsman V3 Pro", pid: "02A6" };
-    [["Model", m.name], ["USB ID", `1532:${m.pid}`], ["Firmware", i.firmware], ["Stored profile", String(i.profile)], ["Brightness", i.brightness + "%"], ["App version", i.version || "–"]]
+    [["Model", m.name], ["USB ID", `1532:${m.pid}`], ["Firmware", i.firmware], ["Onboard profile", String(i.profile)], ["Brightness", i.brightness + "%"], ["App version", i.version || "–"]]
       .forEach(([k, v]) => { const r = document.createElement("div"); r.className = "row"; r.innerHTML = '<span></span><span class="val"></span>'; r.children[0].textContent = k; r.children[1].textContent = v; $("#devInfo").appendChild(r); });
     if (hasFeature("actuation")) await readPoints();
     ledUi();
     setConn(true, `Connected, firmware ${i.firmware}`);
-  } catch (e) { setConn(false, "Not connected"); }
+    hideToast(true);   // an error from before doesn't stand next to "Connected"
+    return true;
+  } catch (e) { setConn(false, "Not connected"); return false; }
 }
 
 /* ---------- start ---------- */
 async function start() {
   api = window.pywebview.api;
-  try { model = await call("model"); } catch (e) { model = null; }   // connects, so layout and effects follow it
+  await readPlatform();
+  model = await readModel();
   layout = await api.layout(); effects = await api.effects();
   fillEffects(); fillSnap(); drawBoard(); effectUi(); depthUi(); rtUi(); testerUi(); wellsUi(); applyModel(); show(view);
-  if (model) {
+  if (platform.blocked) setConn(false, SYNAPSE_CONN);
+  else if (model) {
     try { const done = await call("startup"); if (done.length) toast("Sent again: " + done.join(", ")); } catch (e) {}
     await load(false);   // the model was just read
   } else setConn(false, "Not connected");

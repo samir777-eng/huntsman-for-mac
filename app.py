@@ -7,7 +7,6 @@ background lighting service (service.py), reached through ServiceLink. Every key
 lease on the service so its frames never interleave with them."""
 import contextlib
 import copy
-import fcntl
 import json
 import os
 import re
@@ -23,6 +22,7 @@ sys.path.insert(0, HERE)
 import depth_stream  # noqa: E402
 import huntsman_core as hc  # noqa: E402
 import ipc  # noqa: E402
+import platforms  # noqa: E402
 import studio as studio_mod  # noqa: E402
 
 STATE_FILE = os.path.join(hc.data_dir(), "state.json")
@@ -36,6 +36,7 @@ DEFAULT_STATE = {
     "studio": studio_mod.clean_studio(None),   # Lighting Studio: on/off, active preset, fps, brightness, audio, heatmap
     "smart": studio_mod.clean_smart(None),     # smart lighting: idle, sleep, lock, per-app presets
     "experimental": False,  # Keyboard -> Experimental support: writes to untested models (huntsman_core.gate)
+    "autostart_added": False,   # Windows: this app wrote the start-at-login Run value once (ensure_autostart)
 }
 
 
@@ -137,12 +138,13 @@ def _clean_state(raw):
     st["studio"] = studio_mod.clean_studio(raw.get("studio"))
     st["smart"] = studio_mod.clean_smart(raw.get("smart"))
     st["experimental"] = raw.get("experimental") is True
+    st["autostart_added"] = raw.get("autostart_added") is True
     return st
 
 
 def load_state():
     try:
-        with open(STATE_FILE) as f:
+        with open(STATE_FILE, encoding="utf-8") as f:
             raw = json.load(f)
     except Exception:
         raw = None
@@ -152,7 +154,7 @@ def load_state():
 def save_state(state):
     tmp = f"{STATE_FILE}.{os.getpid()}.{threading.get_ident()}.tmp"
     try:
-        with open(tmp, "w") as f:
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=1)
             f.flush()
             os.fsync(f.fileno())  # the data is on disk before the rename makes it the real file
@@ -166,8 +168,7 @@ def save_state(state):
 def update_state():
     """Read-modify-write state.json under a file lock: the app, the login agent and the CLI can run
     at once, and without it one would silently undo the other's change. Saved only if the body succeeds."""
-    with open(os.path.join(os.path.dirname(STATE_FILE), "state.lock"), "a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    with platforms.file_lock(os.path.join(os.path.dirname(STATE_FILE), "state.lock")):
         st = load_state()
         yield st
         save_state(st)
@@ -235,13 +236,13 @@ def set_effect(kb, name, opts):
 def ensure_snapshot(kb):
     """On first launch, keep a copy of every key's settings so they can be put back by hand.
     Written once, never overwritten; keys the firmware refuses are listed as skipped. Models without
-    adjustable actuation (the V2 family) have nothing to keep."""
+    adjustable actuation (the V2 and V2 TKL) have nothing to keep."""
     if os.path.exists(SNAPSHOT_FILE) or not kb.model.has("actuation"):
         return
     snap = kb.snapshot(hc.every_key_id())
     tmp = SNAPSHOT_FILE + ".tmp"
     try:
-        with open(tmp, "w") as f:
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(snap, f)
             f.flush()
             os.fsync(f.fileno())
@@ -253,7 +254,10 @@ def ensure_snapshot(kb):
 
 def restore_factory(kb):
     """Every step is tried, and Rapid Trigger / Snap Tap are cleared from state.json even if the
-    keyboard refuses one, so the app never re-sends them at the next login. Then any failure is raised."""
+    keyboard refuses one, so the app never re-sends them at the next login. Then any failure is raised.
+    A model whose factory depth isn't known (the V2 Analog) is refused first, with nothing sent or cleared."""
+    if kb.model.has("actuation"):
+        kb.check_factory()
     failed, errors = [], []
     steps = [lambda: failed.extend(kb.restore_factory(hc.all_key_ids())),
              lambda: kb.set_rapid([(k, None) for k in hc.every_key_id()]),
@@ -325,15 +329,50 @@ LEASE_SECONDS = 5.0
 SERVICE_EVENTS = ("onStudioFrame", "onStudioChanged", "onStudioStatus", "onStudioAction", "onStudioLevel")
 NOT_RUNNING = ("The lighting service isn't running and couldn't be started ({}). "
                "Reinstall with ./install.sh, or check ~/Library/Logs/Huntsman for Mac.log.")
+NOT_RUNNING_WINDOWS = ("The lighting service isn't running and couldn't be started ({}). "
+                       "Start Huntsman for Mac again, or check the log in {}.")
+
+
+def not_running_message(detail):
+    if platforms.is_windows():
+        return NOT_RUNNING_WINDOWS.format(detail, platforms.log_path())
+    return NOT_RUNNING.format(detail)
 
 
 def service_socket():
     return os.path.join(hc.data_dir(), "service.sock")
 
 
+def service_endpoint():
+    """Where the lighting service listens: the UNIX socket service_socket() on the Mac, a named pipe on Windows."""
+    return ipc.service_endpoint(hc.data_dir())
+
+
+def ensure_autostart(force=False):
+    """Windows: the start-at-login Run value through win_autostart.ensure(), remembering in state.json that it was
+    added, so a value the user removed isn't added back (force: Studio turned on from the app). True when it was
+    written. The Mac: None (its LaunchAgent is the installer's). Registry errors raise."""
+    if not platforms.is_windows():
+        return None
+    from platforms import win_autostart
+    with update_state() as st:
+        st["autostart_added"], wrote = win_autostart.ensure(st["autostart_added"], force=force)
+    return wrote
+
+
 def start_service():
     """Ask launchd to start the lighting service if it isn't running (never -k: killing a service that is still
-    starting would interrupt a USB write); load its LaunchAgent first if it isn't loaded."""
+    starting would interrupt a USB write); load its LaunchAgent first if it isn't loaded. On Windows (no launchd):
+    turn start at login on unless the user removed it (ensure_autostart) and start the service process
+    (platforms/win_autostart.py). A second copy that finds the first running exits at once (the instance lock)."""
+    if platforms.is_windows():
+        from platforms import win_autostart
+        try:
+            ensure_autostart()
+        except Exception as e:   # policy or a locked registry: starting now still works
+            print(f"huntsman: couldn't turn on start at login: {e}", file=sys.stderr)
+        win_autostart.spawn(win_autostart.service_argv())
+        return
     target = f"gui/{os.getuid()}/{LIGHTING_LABEL}"
     r = subprocess.run(["launchctl", "kickstart", target], capture_output=True, text=True, timeout=10)
     if r.returncode == 0:
@@ -408,7 +447,7 @@ class ServiceLink:
 
     def _default_client(self):
         if self._client is None:
-            self._client = ipc.Client(service_socket())
+            self._client = ipc.Client(service_endpoint())
         return self._client
 
     def _request(self, cmd, args):
@@ -421,7 +460,7 @@ class ServiceLink:
             return self._request(cmd, args or {})
         except ipc.ServiceUnavailable as e:
             if not start:
-                return {"ok": False, "error": NOT_RUNNING.format(e), "unavailable": True}
+                return {"ok": False, "error": not_running_message(e), "unavailable": True}
         with self._lock:   # one start at a time
             try:
                 return self._request(cmd, args or {})
@@ -430,21 +469,21 @@ class ServiceLink:
             try:
                 self._starter()
             except Exception as e:
-                return {"ok": False, "error": NOT_RUNNING.format(e), "unavailable": True}
+                return {"ok": False, "error": not_running_message(e), "unavailable": True}
             deadline = time.monotonic() + self._wait
             while True:
                 try:
                     return self._request(cmd, args or {})
                 except ipc.ServiceUnavailable as e:
                     if time.monotonic() >= deadline:
-                        return {"ok": False, "error": NOT_RUNNING.format(f"no answer: {e}"), "unavailable": True}
+                        return {"ok": False, "error": not_running_message(f"no answer: {e}"), "unavailable": True}
                     time.sleep(0.1)
 
     def lease(self):
         return Lease(self, self._lease_seconds, self._renew_every)
 
     def subscribe(self, on_event):
-        return ipc.Subscription(service_socket(), on_event, frames=True)
+        return ipc.Subscription(service_endpoint(), on_event, frames=True)
 
 
 class Api:
@@ -459,6 +498,7 @@ class Api:
         self._led_check = False     # an LED check lit a cell and its lighting isn't back yet
         self.reapplied = []
         self._svc = service or ServiceLink()
+        self._last_model = None     # the model last connected, shown (read only) while Razer Synapse runs
         self._events = None
         self._pusher = JsPusher(lambda: self._window)
 
@@ -497,8 +537,13 @@ class Api:
         """Connect; on every (re)connect put a keyboard stuck in driver mode back to typing (a crash
         during a key test leaves it there) and re-send the RAM-only settings, since a replug drops them.
         Neither the snapshot nor the re-send may block connecting: failures are logged."""
+        reason = hc.synapse_block()
+        if reason:   # Windows: let go of the keyboard, and don't open it, while Razer Synapse runs
+            self._drop()
+            raise hc.SynapseRunning(reason)
         if self._kb is None:
             kb = hc.Keyboard()
+            self._last_model = kb.model
             depth_stream.recover_typing(kb)
             try:
                 ensure_snapshot(kb)
@@ -514,8 +559,10 @@ class Api:
         t = self._test
         if t and t.running:
             t.stop("Testing stopped because the keyboard reconnected.")
-        if self._kb is not None and hasattr(self._kb.t, "close"):
-            self._kb.t.close()
+        if self._kb is not None:
+            self._last_model = self._kb.model
+            if hasattr(self._kb.t, "close"):
+                self._kb.t.close()
         self._kb = None
 
     def _run(self, fn):
@@ -543,7 +590,11 @@ class Api:
 
     def _refused(self, feature):
         """Before a write that first turns Studio off: the plain refusal if the connected model won't take it, so
-        nothing changes. None when it may go ahead (or no keyboard is connected yet: the write itself checks)."""
+        nothing changes. None when it may go ahead (or no keyboard is connected yet: the write itself checks).
+        Windows: while Razer Synapse runs no handle is open, so the guard is asked here."""
+        reason = hc.synapse_block()
+        if reason:
+            return refused(hc.SynapseRunning(reason))
         kb = self._kb
         try:
             if kb is not None:
@@ -555,10 +606,39 @@ class Api:
     # ----- reads -----
     def model(self):
         """The connected model (connecting first): name, PID, status, matrix, effects, features, whether
-        Experimental support is on and whether writes are locked until it is."""
+        Experimental support is on and whether writes are locked until it is.
+        Windows, while Razer Synapse runs: nothing is sent; the last connected model from memory, marked "offline"
+        and locked, or None if none was connected yet (platform_status() carries the reason)."""
+        with self._lock:
+            reason = hc.synapse_block()
+            if reason:
+                self._drop()
+                m = self._last_model
+                if m is None:
+                    return {"ok": True, "data": None}
+                from platforms import win_guard
+                return {"ok": True, "data": {**hc.model_info(m), "experimental_on": hc.experimental_enabled(),
+                                             "locked": True, "offline": True, "blocked": reason,
+                                             "notices": win_guard.notices()}}
+
         def f(kb):
-            return {**kb.model.info(), "experimental_on": hc.experimental_enabled(), "locked": not kb.allowed("lighting")}
+            d = {**hc.model_info(kb.model), "experimental_on": hc.experimental_enabled(),
+                 "locked": not kb.allowed("lighting")}
+            if platforms.is_windows():   # Razer Synapse running (writes refused), Dynamic Lighting on
+                from platforms import win_guard
+                d["blocked"], d["notices"] = win_guard.write_block_reason(), win_guard.notices()
+            return d
         return self._run(f)
+
+    def platform_status(self):
+        """For the window's poll: the platform, why the keyboard is left alone (Windows: Razer Synapse runs) and
+        Windows settings in the way. Asks only the guard (cached, a process list at most every few seconds): never
+        touches the keyboard."""
+        d = {"platform": platforms.current(), "blocked": hc.synapse_block(), "notices": []}
+        if platforms.is_windows():
+            from platforms import win_guard
+            d["notices"] = win_guard.notices()
+        return {"ok": True, "data": d}
 
     def layout(self):
         """Keys of the connected model (the window asks for model() first, which connects)."""
@@ -591,7 +671,7 @@ class Api:
 
     def info(self):
         def f(kb):
-            return {"version": hc.__version__, "model": kb.model.info(), "firmware": kb.firmware(), "profile": kb.saved,
+            return {"version": hc.__version__, "model": hc.model_info(kb.model), "firmware": kb.firmware(), "profile": kb.saved,
                     "brightness": kb.brightness(), "effect": kb.get_effect_raw().hex(),
                     "state": load_state()}
         return self._run(f)
@@ -603,7 +683,7 @@ class Api:
     def read_depths(self):
         def f(kb):
             if not kb.model.has("actuation"):
-                return {}   # the V2 family: no adjustable depth to read
+                return {}   # the V2 and V2 TKL: no adjustable depth to read
             ids = hc.all_key_ids()
             out = {}
             for i, k in enumerate(ids):
@@ -796,7 +876,15 @@ class Api:
         return self._studio("studio_state")
 
     def studio_enable(self, on):
-        return self._studio("studio_enable", on=on)
+        """Turning Studio on from the window also brings start at login back on Windows, if the user removed it
+        (only once the service has taken the switch: a refused one changes nothing)."""
+        r = self._studio("studio_enable", on=on)
+        if on is True and r.get("ok") and platforms.is_windows():
+            try:
+                ensure_autostart(force=True)
+            except Exception as e:
+                print(f"huntsman: couldn't turn on start at login: {e}", file=sys.stderr)
+        return r
 
     def set_active_preset(self, name):
         return self._studio("set_active_preset", name=name)
@@ -815,6 +903,10 @@ class Api:
 
     def update_layers(self, layers):
         return self._studio("update_layers", layers=layers)
+
+    def studio_preview(self, seconds):
+        """Studio off: the window's board previews the working preset for `seconds` (nothing reaches the keys)."""
+        return self._studio("studio_preview", seconds=seconds)
 
     def set_studio_brightness(self, level):
         return self._studio("set_studio_brightness", level=level)
@@ -858,7 +950,7 @@ class Api:
             if not path:
                 return {"ok": True, "data": {"path": None}}
             path = path[0] if isinstance(path, (list, tuple)) else path
-            with open(path, "w") as fh:
+            with open(path, "w", encoding="utf-8") as fh:
                 fh.write(text)
             return {"ok": True, "data": {"path": path}}
         except Exception as e:
@@ -877,9 +969,13 @@ def studio_off_before_lock(svc):
 
 def refused(e):
     """A write the connected model doesn't take, for the window: the plain message, and why (so it isn't shown as
-    a lost connection): "experimental" (turn on Experimental support) or "unavailable" (the model lacks it)."""
-    return {"ok": False, "error": str(e),
-            "reason": "experimental" if isinstance(e, hc.ExperimentalLocked) else "unavailable"}
+    a lost connection): "experimental" (turn on Experimental support), "synapse" (Windows: quit Razer Synapse) or
+    "unavailable" (the model lacks it)."""
+    if isinstance(e, hc.SynapseRunning):
+        reason = "synapse"
+    else:
+        reason = "experimental" if isinstance(e, hc.ExperimentalLocked) else "unavailable"
+    return {"ok": False, "error": str(e), "reason": reason}
 
 
 def in_background(fn):
@@ -913,5 +1009,63 @@ def main(argv=None):
     api.shutdown()
 
 
+def self_test(out=None):
+    """`Huntsman.exe --self-test`: the build's smoke test. Imports every module the build must contain
+    (platforms/bundle.py) and reads the data files and every model's layout, without opening the keyboard or a
+    window. Windows-only modules are skipped elsewhere. Returns 0 when everything is there, 1 otherwise."""
+    import importlib
+    from platforms import bundle
+    out = out or (lambda line: print(line, flush=True))
+    failed = 0
+    for name in bundle.HIDDEN_IMPORTS:
+        if name in bundle.WINDOWS_ONLY and not platforms.is_windows():
+            out(f"skip {name} (Windows only)")
+            continue
+        try:
+            importlib.import_module(name)
+            out(f"ok   {name}")
+        except Exception as e:  # noqa: BLE001  (report every failure, then exit 1)
+            failed += 1
+            out(f"FAIL {name}: {type(e).__name__}: {e}")
+    for rel in bundle.REQUIRED_FILES:
+        path = os.path.join(HERE, *rel.split("/"))
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+            if rel.endswith(".json"):
+                json.loads(data)
+            out(f"ok   {rel}")
+        except Exception as e:  # noqa: BLE001
+            failed += 1
+            out(f"FAIL {rel}: {type(e).__name__}: {e}")
+    for m in hc.models.MODELS.values():
+        try:
+            assert hc.load_layout(m), "empty layout"
+            out(f"ok   layout {m.pid:04X}")
+        except Exception as e:  # noqa: BLE001
+            failed += 1
+            out(f"FAIL layout {m.pid:04X} ({m.layout}): {type(e).__name__}: {e}")
+    out(f"Huntsman for Mac {hc.__version__} self-test {'passed' if not failed else 'FAILED'}"
+        f" ({platforms.current()}, frozen={bool(getattr(sys, 'frozen', False))})")
+    return 1 if failed else 0
+
+
+def entry(argv=None):
+    """The program's entry point. The packaged Windows build is one Huntsman.exe: with --service it runs the
+    lighting service (its start-at-login command), without it the window. --version and --self-test (the build's
+    smoke test, app.self_test) print to stdout, or to the log file in the windowed build."""
+    argv = sys.argv if argv is None else argv
+    platforms.redirect_output()
+    if "--version" in argv[1:]:
+        print(f"Huntsman for Mac {hc.__version__}", flush=True)
+        return 0
+    if "--self-test" in argv[1:]:
+        return self_test()
+    if "--service" in argv[1:]:
+        import service
+        return service.main()
+    return main()
+
+
 if __name__ == "__main__":
-    main()
+    sys.exit(entry())

@@ -3,8 +3,10 @@
 """Menu bar status item: Lighting on/off, a presets submenu, Open Huntsman for Mac, Quit (the lighting service
 passes quit_title="Quit lighting service"; service.py owns the icon).
 
-The menu is built from a plain model (build_menu -> list of MenuItem) so it can be tested without Cocoa;
-StatusMenu turns the model into an NSStatusItem and calls the handlers.
+The menu is built from a plain model (build_menu -> list of MenuItem) so it can be tested without Cocoa.
+MenuState holds what the menu shows and runs the handlers; both front-ends share it: StatusMenu (here) turns the
+model into an NSStatusItem, platforms/win_tray.TrayMenu into a pystray tray icon on Windows. An optional notice
+(e.g. "Razer Synapse is running") shows as a disabled first item.
 
 The lighting service (service.py) owns the icon. It runs its own Cocoa loop (an accessory NSApplication); the
 status item is created on the main thread once that loop runs (install(), or install_soon() from another thread).
@@ -34,12 +36,13 @@ class MenuItem:
 SEPARATOR = MenuItem("", separator=True)
 
 
-def build_menu(enabled, presets, active, quit_title=f"Quit {APP_NAME}"):
+def build_menu(enabled, presets, active, quit_title=f"Quit {APP_NAME}", notice=None):
     if presets:
         sub = tuple(MenuItem(p, "preset", checked=(p == active), payload=p) for p in presets)
     else:
         sub = (MenuItem("No presets yet", enabled=False),)
-    return [
+    head = [MenuItem(notice, enabled=False), SEPARATOR] if notice else []
+    return head + [
         MenuItem("Lighting", "toggle", checked=bool(enabled)),
         MenuItem("Presets", children=sub),
         SEPARATOR,
@@ -49,33 +52,33 @@ def build_menu(enabled, presets, active, quit_title=f"Quit {APP_NAME}"):
     ]
 
 
-class StatusMenu:
-    """on_toggle(new_enabled: bool), on_preset(name), on_open(), on_quit().
+class MenuState:
+    """What the menu shows and what its items do, shared by the Mac menu bar and the Windows tray.
 
+    on_toggle(new_enabled: bool), on_preset(name), on_open(), on_quit().
     The menu shows state; it doesn't change it by itself. After a handler acts, call set_state() with
-    the new state (e.g. on_toggle -> engine on/off -> menu.set_state(enabled=...)).
+    the new state (e.g. on_toggle -> engine on/off -> menu.set_state(enabled=...)). A front-end sets `installed`
+    and implements _refresh(), which set_state() calls (from any thread) once it is installed.
     """
 
     def __init__(self, on_toggle, on_preset, on_open, on_quit, presets=(), enabled=True, active=None,
-                 quit_title=f"Quit {APP_NAME}"):
+                 quit_title=f"Quit {APP_NAME}", notice=None):
         self.handlers = {"toggle": lambda _p: on_toggle(not self.enabled), "preset": on_preset,
                          "open": lambda _p: on_open(), "quit": lambda _p: on_quit()}
         self.presets, self.enabled, self.active = list(presets), bool(enabled), active
-        self.quit_title = quit_title
+        self.quit_title, self.notice = quit_title, notice
         self._lock = threading.Lock()
-        self._item = None
-        self._target = None
 
     @property
     def installed(self):
-        return self._item is not None
+        return False
 
     def model(self):
         with self._lock:
-            return build_menu(self.enabled, self.presets, self.active, self.quit_title)
+            return build_menu(self.enabled, self.presets, self.active, self.quit_title, self.notice)
 
     def activate(self, action, payload=None):
-        """Runs the handler for a menu action. Never raises (it is called from Cocoa)."""
+        """Runs the handler for a menu action. Never raises (it is called from Cocoa or the tray thread)."""
         fn = self.handlers.get(action)
         if fn is None:
             return
@@ -84,8 +87,9 @@ class StatusMenu:
         except Exception:
             traceback.print_exc()
 
-    def set_state(self, enabled=None, presets=None, active=...):
-        """Update what the menu shows; any thread. active=None clears the checkmark, omit it to keep it."""
+    def set_state(self, enabled=None, presets=None, active=..., notice=...):
+        """Update what the menu shows; any thread. active=None clears the checkmark, notice=None removes the notice;
+        omit either to keep it."""
         with self._lock:
             if enabled is not None:
                 self.enabled = bool(enabled)
@@ -93,8 +97,29 @@ class StatusMenu:
                 self.presets = list(presets)
             if active is not ...:
                 self.active = active
+            if notice is not ...:
+                self.notice = notice
         if self.installed:
-            _on_main(self._rebuild)
+            self._refresh()
+
+    def _refresh(self):
+        pass
+
+
+class StatusMenu(MenuState):
+    """The Mac front-end: an NSStatusItem in the menu bar."""
+
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
+        self._item = None
+        self._target = None
+
+    @property
+    def installed(self):
+        return self._item is not None
+
+    def _refresh(self):
+        _on_main(self._rebuild)
 
     # Cocoa layer (main thread only below) ------------------------------------------------------------
 

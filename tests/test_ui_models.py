@@ -62,7 +62,8 @@ def test_experimental_model_shows_its_name_and_badge(open_model):
     expect(page.locator("#expBadge")).to_be_visible()
     expect(page.locator("#expBadge")).to_have_text("Experimental")
     assert visible_tabs(page) == ["actuation", "rapid", "snap", "lighting", "studio"]
-    expect(page.locator("#actTest")).to_be_hidden()      # never the key tester
+    expect(page.locator("#actTest")).to_be_disabled()    # never the key tester, and it says why
+    expect(page.locator("#actTestWhy")).to_have_text("Key tester isn't available on experimental models.")
     expect(page.locator("#actReadings")).to_be_hidden()
     page.click('button[data-view="device"]')
     expect(page.locator("#devInfo")).to_contain_text("1532:02A7")
@@ -244,3 +245,120 @@ def test_reconnect_to_the_same_model_keeps_the_layout(open_model):
     expect(page.locator("#conn")).to_have_text("Connected, firmware 1.03")
     assert len(calls(page, "layout")) == 1 and len(calls(page, "effects")) == 1
     assert page.locator(".cap").count() == 104 and page.errors == []
+
+
+# ---------- actuation follows the model's scale ----------
+
+def presets(page):
+    return page.locator("#presets button").evaluate_all(
+        "bs => bs.map(b => [b.children[1].textContent, b.children[0].textContent, b.dataset.v])")
+
+
+def test_v3_actuation_controls_are_unchanged(open_model):
+    page = open_model()
+    d = page.locator("#depth")
+    assert [d.get_attribute(a) for a in ("min", "max", "step")] == ["0.1", "4", "0.1"]
+    assert page.locator(".scale span").all_text_contents() == ["0.1 mm, lightest", "4.0 mm, deepest"]
+    assert presets(page) == [["Light", "0.5", "0.5"], ["Gaming", "1.0", "1"], ["Factory", "1.2", "1.2"],
+                             ["Balanced", "1.5", "1.5"], ["Typing", "2.0", "2"], ["Firm", "3.0", "3"]]
+    r = page.locator("#rel")
+    assert [r.get_attribute(a) for a in ("min", "step")] == ["0", "0.1"]
+    expect(page.locator("#depthNum")).to_have_text("Mixed")      # the demo's W, A, S and D type at 1.0 mm, the rest at 2.0
+    expect(page.locator("#depth")).to_have_value("2")
+    page.click('button[data-view="device"]')
+    expect(page.locator("#restore")).to_be_visible()
+    assert page.errors == []
+
+
+def test_v2_analog_offers_actuation_on_its_own_scale(open_model):
+    page = open_model("0266")
+    assert visible_tabs(page) == ["actuation", "lighting", "studio"]   # no Rapid Trigger or Snap Tap
+    expect(page.locator("#actTest")).to_be_disabled()
+    d = page.locator("#depth")
+    assert [d.get_attribute(a) for a in ("min", "max", "step")] == ["1.62", "3.56", "0.01"]
+    assert page.locator(".scale span").all_text_contents() == ["1.62 mm, lightest", "3.56 mm, deepest"]
+    p = presets(page)
+    assert "Factory" not in [n for n, _, _ in p] and all(1.62 <= float(v) <= 3.56 for _, _, v in p)
+    assert all(len(t.split(".")[1]) == 2 for _, t, _ in p)
+    expect(page.locator("#depthNum")).to_have_text("Mixed")
+    expect(page.locator("#applyDepth")).to_be_disabled()                # experimental: locked until the switch
+    page.click('button[data-view="device"]')
+    expect(page.locator("#restore")).to_be_hidden()                    # no known factory point
+    expect(page.locator("#restoreHint")).to_be_hidden()
+    page.check("#expOn")
+    wait_for_call(page, "set_experimental")
+    page.click('button[data-view="actuation"]')
+    page.locator("#presets button").first.click()
+    expect(page.locator("#depthNum")).to_have_text("1.62")
+    page.select_option("#relMode", "custom")
+    r = page.locator("#rel")
+    assert [r.get_attribute(a) for a in ("min", "step")] == ["1.54", "0.01"]
+    page.click("#applyDepth")
+    page.click('#confirmApply button[value="apply"]')
+    assert wait_for_call(page, "set_depth")[-1][1:] == [1.62, 1.54]
+    expect(page.locator('.cap[data-id="31"] .front')).to_have_text("1.62")   # A
+    expect(page.locator("#actDirty")).to_be_hidden()
+    assert page.errors == []
+
+
+def test_switching_to_the_v2_analog_rescales_the_slider(unplugged):
+    page = unplugged("0266")
+    reconnect(page)
+    expect(page.locator(".device-name")).to_have_text("Huntsman V2 Analog")
+    expect(page.locator("#depth")).to_have_attribute("min", "1.62")
+    expect(page.locator(".scale span").first).to_have_text("1.62 mm, lightest")
+    assert page.errors == []
+
+
+# ---------- the Windows build (W2): Synapse and Dynamic Lighting notices ----------
+
+def test_windows_with_synapse_running_says_why_and_locks_writes(browser):  # noqa: F811
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.add_init_script(RECORDER)
+    try:
+        page.goto(BASE + "&windows=synapse,dynamic")
+        # nothing is read while Synapse runs: the last model from memory, locked, and only the guard is polled
+        expect(page.locator("#conn")).to_have_text("Paused: Razer Synapse is running")
+        assert calls(page, "info") == [] and calls(page, "startup") == []
+        note = page.locator("#platformNotice")
+        expect(note).to_be_visible()
+        expect(note).to_contain_text("Razer Synapse is running")
+        expect(note).to_contain_text("Dynamic Lighting")
+        assert page.locator("#expBadge").get_attribute("title").startswith("Windows support is experimental")
+        page.click('button[data-view="device"]')
+        page.check("#expOn")                                   # the switch on: Synapse still blocks writes
+        page.click('#sources button[data-view="lighting"]')
+        expect(page.locator(".lock-note:visible")).to_have_count(0)
+        assert page.locator("[data-write]:visible").count() > 0
+        assert all(page.locator("[data-write]:visible").nth(i).is_disabled()
+                   for i in range(page.locator("[data-write]:visible").count()))
+        page.click('#sources button[data-view="studio"]')
+        assert page.locator("#smBundle").get_attribute("placeholder") == "or program name, e.g. steam.exe"
+        expect(page.locator("#stCloseHint")).to_contain_text("tray icon")
+        assert errors == []
+    finally:
+        page.close()
+
+
+def test_while_synapse_runs_the_window_polls_only_the_guard(browser):  # noqa: F811
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    page.clock.install()
+    page.add_init_script(RECORDER)
+    try:
+        page.goto(BASE + "&windows=synapse")
+        expect(page.locator("#conn")).to_have_text("Paused: Razer Synapse is running")
+        models_before, polls_before = len(calls(page, "model")), len(calls(page, "platform_status"))
+        page.clock.run_for(16000)
+        assert len(calls(page, "platform_status")) >= polls_before + 3
+        assert len(calls(page, "model")) == models_before and calls(page, "info") == []
+    finally:
+        page.close()
+
+
+def test_the_mac_shows_no_platform_notice(open_model):
+    page = open_model()
+    expect(page.locator("#platformNotice")).to_be_hidden()
+    page.click('#sources button[data-view="studio"]')
+    assert page.locator("#smBundle").get_attribute("placeholder") == "or bundle ID, e.g. com.valvesoftware.steam"

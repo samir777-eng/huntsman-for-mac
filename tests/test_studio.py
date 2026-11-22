@@ -24,6 +24,7 @@ class FakeEngine:
         self.preset, self.brightness, self.running, self.depth = None, 1.0, False, 0
         self.log, self.events, self.audio, self.frames = [], [], None, []
         self.heat, self.heat_enabled = {}, heat_enabled
+        self.previews = []
 
     def set_fps(self, fps):
         self.fps = fps
@@ -84,6 +85,10 @@ class FakeEngine:
 
     def on_frame(self, cb):
         self.frames.append(cb)
+
+    def preview(self, now=None, fresh=False):
+        self.previews.append(fresh)
+        return self.preset is not None
 
 
 class FakeListener:
@@ -681,3 +686,78 @@ def test_restore_lighting_stored_effect_is_resent_to_ram(app, fake):
     kb = hc.Keyboard()
     app.restore_lighting(kb, app.load_state())
     assert [r[8] for r in fake.writes(0x0F, 0x02)] == [0]
+
+
+# ---------- preview while Studio is off ----------
+
+@pytest.fixture
+def preview_api(app, fake, hooks):
+    """Like api, with a fake clock and sleep for the preview loop (spawn is synchronous, so it runs to its end)."""
+    import service
+    clock, naps = Clock(), []
+
+    def sleep(s):
+        naps.append(s)
+        clock.t += s
+    hooks["inputs"].update(clock=clock, sleep=sleep)
+    svc = service.LightingService(engine_cls=FakeEngine, inputs=hooks["inputs"], clock=Clock())
+    svc.start()
+    a = app.Api(service=link_to(app, svc))
+    a.svc, a.naps = svc, naps
+    yield a
+    a.shutdown()
+    svc.shutdown()
+
+
+def test_preview_while_off_composes_frames_for_the_window_only(preview_api):
+    eng = preview_api.svc.studio.engine
+    assert ok(preview_api.studio_preview(1.0)) is None
+    assert eng.preset is not None                          # the working preset, handed over to compose
+    assert 14 <= len(eng.previews) <= 16                   # one second at the preview rate
+    assert eng.previews[0] is True and not any(eng.previews[1:])   # the first frame is sent even if unchanged
+    assert not eng.running and ("start",) not in eng.log   # nothing streams to the keyboard
+
+
+def test_no_preview_loop_while_studio_is_on_or_for_zero_seconds(preview_api):
+    eng = preview_api.svc.studio.engine
+    ok(preview_api.studio_preview(0))
+    assert eng.previews == []
+    ok(preview_api.studio_enable(True))
+    ok(preview_api.studio_preview(1.0))
+    assert eng.previews == []                              # the engine sends previews of what it streams
+
+
+def test_preview_seconds_are_checked(preview_api):
+    assert not preview_api.studio_preview(-1)["ok"]
+    assert not preview_api.studio_preview("soon")["ok"]
+    ok(preview_api.studio_preview(3600))                   # capped, so a lost window can't keep it running
+    assert len(preview_api.svc.studio.engine.previews) <= 31 * 15
+
+
+def test_preview_flag_resets_if_the_loop_raises(preview_api):
+    st, eng = preview_api.svc.studio, preview_api.svc.studio.engine
+    real = eng.preview
+
+    def boom(**_):
+        raise RuntimeError("compose failed")
+    eng.preview = boom
+    with pytest.raises(RuntimeError):
+        st.preview(1.0)
+    assert st._previewing is False
+    eng.preview = real
+    st.preview(1.0)                                         # a later request starts a loop again
+    assert len(eng.previews) >= 14
+
+
+def test_preview_flag_resets_if_the_loop_cannot_start(preview_api):
+    st, eng = preview_api.svc.studio, preview_api.svc.studio.engine
+
+    def no_thread(fn):
+        raise RuntimeError("can't start a thread")
+    spawn, st._spawn = st._spawn, no_thread
+    with pytest.raises(RuntimeError):
+        st.preview(1.0)
+    assert st._previewing is False
+    st._spawn = spawn
+    st.preview(1.0)
+    assert len(eng.previews) >= 14

@@ -61,7 +61,7 @@ def presets_path():
 def load_presets():
     """User presets from presets.json; [] when there is no file. A damaged file raises ValueError."""
     try:
-        with open(presets_path()) as f:
+        with open(presets_path(), encoding="utf-8") as f:
             raw = json.load(f)
     except FileNotFoundError:
         return []
@@ -82,7 +82,7 @@ def save_presets(presets):
     path = presets_path()
     tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
     try:
-        with open(tmp, "w") as f:
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump({"version": FILE_VERSION, "presets": [p.to_dict() for p in presets]}, f, indent=1)
             f.flush()
             os.fsync(f.fileno())
@@ -119,4 +119,25 @@ def builtin_presets(keymap=None):
         Preset("Matrix", [Layer("rain", "matrix", {})]),
         Preset("Calm breathing", [Layer("breathe", "breathing", {"colors": [[0, 120, 255], [120, 0, 255]],
                                                                   "period": 6.0})], brightness=0.8),
+        # added in 0.4.0; append new built-ins after these (the active preset is stored by name)
+        Preset("Plasma", [Layer("plasma", "plasma", {
+            "colors": [[255, 0, 110], [255, 120, 0], [0, 230, 200], [70, 0, 255]], "speed": 0.6, "scale": 0.8})]),
+        Preset("Starfield", [
+            Layer("sky", "gradient", {"colors": [[0, 4, 50], [0, 24, 90]], "angle": 90.0}),
+            Layer("stars", "starfield", {"color": [210, 230, 255], "density": 0.3, "speed": 0.5, "seed": 7},
+                  blend="screen"),
+        ]),
+        Preset("Ripple", [
+            Layer("base", "gradient", {"colors": [[0, 40, 50], [26, 0, 60]]}),
+            Layer("rings", "reactive_ripple", {"colors": [[0, 255, 200], [255, 0, 170], [255, 190, 0]],
+                                               "speed": 9.0, "width": 2.0, "fade": 1.6}, blend="screen"),
+        ]),
+        Preset("Spectrum bars", [
+            Layer("base", "gradient", {"colors": [[40, 0, 70], [0, 30, 70]], "speed": 0.05}),
+            Layer("bars", "audio_spectrum", {"colors": [[0, 140, 255], [170, 0, 255], [255, 0, 120]]}, blend="max"),
+        ]),
+        Preset("Sunset", [Layer("sky", "gradient", {
+            "colors": [[255, 150, 0], [255, 60, 0], [255, 0, 80], [110, 0, 190]], "angle": 20.0, "speed": 0.04})]),
+        Preset("Neon cycle", [Layer("neon", "colour_cycle", {
+            "colors": [[255, 0, 200], [0, 230, 255], [140, 255, 0], [255, 0, 60], [120, 0, 255]], "speed": 0.08})]),
     ]

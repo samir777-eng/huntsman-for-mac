@@ -18,11 +18,19 @@
     const ok = d => Promise.resolve({ ok: true, data: d });
     const NOT_FOUND = { ok: false, error: "No supported Razer Huntsman found. Is it plugged in by USB?" };
     const plugged = fn => (...a) => connected ? fn(...a) : Promise.resolve(NOT_FOUND);
+    // ?demo&windows=synapse,dynamic previews the Windows build: every model experimental, Razer Synapse running
+    // (writes refused, re-checked) and/or Dynamic Lighting on.
+    const win = q.has("windows") ? (q.get("windows") || "").split(",") : null;
+    const SYNAPSE = "Razer Synapse is running, so this app leaves the keyboard alone: it doesn't read or change it (two programs talking to the keyboard at once mix up each other's replies, and Synapse would overwrite any change). Quit Synapse, including its icon in the taskbar's notification area, and the controls come back within a few seconds.";
+    const DYNAMIC = "Windows Dynamic Lighting is on, so Windows may control the keyboard's lights and lighting changes here may not show. To give the lights to this app, open Settings, Personalization, Dynamic Lighting, choose the Razer Huntsman and turn off Dynamic Lighting for it (or turn off \"Use Dynamic Lighting on my devices\" for all devices).";
+    const platform = () => win ? { platform: "windows", platform_experimental: true, status: "experimental",
+      blocked: win.includes("synapse") ? SYNAPSE : null, offline: win.includes("synapse"), notices: win.includes("dynamic") ? [DYNAMIC] : [] } : {};
     let experimentalOn = false;
-    const locked = () => M.status === "experimental" && !experimentalOn;
+    const locked = () => (M.status === "experimental" || !!win) && !experimentalOn || !!(win && win.includes("synapse"));
     // the same plain refusals as huntsman_core.gate, nothing "sent" while locked
     const refuse = feature => !M.features[feature] ? Promise.resolve({ ok: false, reason: "unavailable", error: `This isn't available on the ${M.name}.` })
       : feature === "key_tester" && M.status === "experimental" ? Promise.resolve({ ok: false, reason: "unavailable", error: `The key tester isn't offered on the ${M.name}: its support is experimental.` })
+      : win && win.includes("synapse") ? Promise.resolve({ ok: false, reason: "synapse", error: SYNAPSE })
       : locked() ? Promise.resolve({ ok: false, reason: "experimental", error: `Support for the ${M.name} is experimental. Turn on Keyboard, Experimental support to change its settings.` }) : null;
     const gated = (feature, fn) => (...a) => refuse(feature) || fn(...a);
     let pts, state;
@@ -47,8 +55,13 @@
     const speed = n => n === "wave" ? [1, 255] : n.startsWith("starlight") ? [1, 3] : null;
     let timer = null;
     const studio = demoStudio(layout, ok);
-    const info = () => { const { layout: _, ...m } = M; return { ...m, experimental_on: experimentalOn, locked: locked() }; };
+    // as huntsman_core.model_info: on Windows every model is experimental and has no key tester
+    const info = () => { const { layout: _, ...m } = M; return { ...m, ...(win ? { features: { ...m.features, key_tester: false } } : {}), experimental_on: experimentalOn, locked: locked(), ...platform() }; };
+    // platform_status: the guard alone, as the app asks it every few seconds while Synapse runs
+    const status = () => ({ platform: win ? "windows" : "mac", blocked: win && win.includes("synapse") ? SYNAPSE : null,
+      notices: win && win.includes("dynamic") ? [DYNAMIC] : [] });
     window.pywebview = { api: {
+      platform_status: () => ok(status()),
       model: plugged(() => ok(info())),
       experimental: () => ok(experimentalOn),
       set_experimental: on => { experimentalOn = on; return ok(on); },
@@ -59,11 +72,12 @@
         [n, { speed: speed(n), colors: (t.match(/\{rgb/g) || []).length, dir: t.includes("{dir}") }]))),
       startup: plugged(() => ok([])),
       reconnect: () => { if (!connected) { connected = true; use(find((q.get("plug") || "").toUpperCase())); } return ok([]); },
-      info: plugged(() => ok({ version: "0.3.0", model: info(), firmware: "1.03", profile: 1, brightness: 100, effect: "010501000001ffffff000000", state })),
+      info: plugged(() => ok({ version: "0.4.0", model: info(), firmware: "1.03", profile: 1, brightness: 100, effect: "010501000001ffffff000000", state })),
       read_depths: plugged(() => ok(pts)),
       set_depth: gated("actuation", (keys, mm, rel) => {
         const done = {};
-        (keys.length ? keys : Object.keys(pts)).forEach(k => { done[k] = pts[k] = [mm, rel ?? +(mm - 0.1).toFixed(1)]; });
+        const A = M.actuation;   // the model's scale, as huntsman_core: "Just above" is reset_gap above, never below release_min
+        (keys.length ? keys : Object.keys(pts)).forEach(k => { done[k] = pts[k] = [mm, rel ?? +Math.max(A.release_min, mm - A.reset_gap).toFixed(A.decimals)]; });
         return ok({ failed: [], done, count: Object.keys(done).length });
       }),
       set_rapid: gated("rapid", () => ok(true)), set_snap: gated("snap_tap", () => ok(true)), set_prefs: () => ok(true),
@@ -72,7 +86,8 @@
       set_custom: gated("per_key", () => { studio.studio_enable(false); return ok(true); }),
       set_brightness: gated("lighting", () => ok(null)),   // live only
       save_brightness: gated("lighting", () => ok(null)),  // written to the keyboard's memory
-      restore_original: gated("actuation", () => ok(state)),
+      restore_original: gated("actuation", () => M.actuation.factory == null
+        ? Promise.resolve({ ok: false, reason: "unavailable", error: `The ${M.name}'s factory depth isn't known, so it can't be restored.` }) : ok(state)),
       start_test: gated("key_tester", () => {
         const seq = ["W", "A", "S", "D"].map(id);
         let t = 0;
@@ -122,6 +137,7 @@
         heat: { enabled: st.heat, keys: st.heat ? 42 : 0 }, smart: copy(smart), action: { brightness: 1, off: false, preset: null },
         errors: { keys: null, audio: null, presets: null } }),
       studio_enable: on => { st.enabled = on; return ok(null); },
+      studio_preview: secs => { if (!(secs >= 0)) return fail("seconds must be a number, 0 or more"); st.previewUntil = secs > 0 ? performance.now() + Math.min(secs, 30) * 1000 : 0; return ok(null); },
       set_active_preset: n => { const p = find(n); if (!p) return fail(`there's no preset called '${n}'`); activate(p); return ok(null); },
       update_layers: ls => { const p = { ...working, layers: copy(ls) }, e = check(p); if (e) return fail(e); working = p; dirty = true; return ok(needs(p)); },
       save_preset: p => {
@@ -206,7 +222,7 @@
     window.__frames = 0;
     setInterval(() => {
       const s = settings(), p = preset(), t = (performance.now() - t0) / 1000;
-      if (!s.enabled || typeof window.onStudioFrame !== "function") return;
+      if (!(s.enabled || performance.now() < (s.previewUntil || 0)) || typeof window.onStudioFrame !== "function") return;   // on, or previewing
       if (t - (presses.length ? presses[presses.length - 1].t : -1) > 0.45) { const k = byName(seq[pi++ % seq.length]); if (k) presses.push({ k, t }); if (presses.length > 12) presses.shift(); }
       const audio = { level: 0.5 + 0.45 * Math.sin(t * 3.1) * Math.sin(t * 1.3), bands: Array.from({ length: 16 }, (_, i) => Math.max(0, 0.75 - i * 0.035 + 0.25 * Math.sin(t * (3 + i * .4) + i))) };
       const hears = p.layers.some(l => l.enabled && window.DEMO_STUDIO.effects.find(e => e.name === l.effect).needs.includes("audio"));

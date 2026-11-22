@@ -234,17 +234,21 @@ Pick keys on the board (or none, for all of them), drag the slider anywhere from
 balanced, 2.0 typing, 3.0 firm. The reset point follows 0.1 mm above, or set it yourself. It's stored on the keyboard,
 so it stays after unplugging and goes with the keyboard to other computers.
 
-Not sure what 1.2 mm feels like? Just press a key on the Huntsman. The key tester runs by itself while the Actuation
-tab is open and the window is in front: the Huntsman sends travel readings instead of typing, the pressed key sinks on
-the board, the meter follows it, a trace draws its travel, and the panel shows where the last key typed, where it reset
-and how deep you pressed. A line in the panel says when it's live. You can still pick keys and Apply while it runs.
+Not sure what 1.2 mm feels like? Just press a key on the Huntsman. The key tester ("live view") runs by itself while
+the Actuation tab is open and the window is in front: the Huntsman sends travel readings instead of typing, the pressed
+key sinks on the board, the meter follows it, a trace under the board names the key and draws its travel, and the panel
+shows the last key, where it typed, where it reset and how deep you pressed. A banner over the board says the Huntsman
+isn't typing; the first time, the panel explains why once. You can still pick keys and Apply while it runs.
 
-Because the Huntsman doesn't type while it's live, the tester stops, and the keyboard types again, as soon as you open
-another tab, switch to another app (Cmd-Tab, or click another window), minimise the window or lock the screen, close
-the window or quit, and when the keyboard is disconnected or you Reconnect. Coming back to the window or the tab starts
-it again. After 5 minutes without a key press it pauses: click **Resume** (or the board), or come back to the window,
-to start it again. If it can't start (for example, Input Monitoring isn't allowed), the panel says why once, with
-**Try again**; it doesn't keep retrying. Meanwhile, use your Mac's built-in keyboard.
+Because the Huntsman doesn't type in live view, it stops, and the keyboard types again, as soon as you click another
+window (or Cmd-Tab), open another tab, minimise the window or lock the screen, close the window or quit, and when the
+keyboard is disconnected or you Reconnect. Coming back to the window or the tab starts it again. While it's paused the
+trace and readings stay where they are, dimmed, so nothing jumps. After 5 minutes without a key press it pauses: click
+**Resume** on the trace, or come back to the window or the tab. If it can't start, the panel says why once, with
+**Try again** (and **Open Privacy settings** when Input Monitoring isn't allowed); it doesn't keep retrying.
+
+The app opens on the tab you used last, so it only stops the Huntsman typing at launch if you left it on Actuation.
+The very first launch opens Lighting.
 
 The key tester is only offered on the Huntsman V3 Pro (1532:02A6), the one model tested with this app.
 

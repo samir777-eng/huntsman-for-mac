@@ -23,14 +23,23 @@ with open(ROOT / "layout.json") as f:
 # method is wrapped before app.js calls any of them. window.__override[name] replaces a method's result.
 # The key tester starts by itself on Actuation, so start_test answers without the demo's simulated presses (a test
 # feeds its own depth readings), and window.__front = {focus, visible} stands in for the window being in front.
+# The saved interface preferences (state.ui) are window.__ui: by default the window was last on Actuation and the
+# live view's one-time explanation was seen; window.__ui = {} is a first launch. Text drawn on canvases goes to
+# window.__texts.
 RECORDER = """
 window.__calls = [];
 window.__override = { start_test: () => Promise.resolve({ok: true, data: true}) };
 window.__front = { focus: true, visible: true };
+window.__ui = { tab: "actuation", liveSeen: true };
+window.__texts = [];
 Document.prototype.hasFocus = () => window.__front.focus;
 Object.defineProperty(Document.prototype, "visibilityState", { get: () => window.__front.visible ? "visible" : "hidden" });
+const fillText = CanvasRenderingContext2D.prototype.fillText;
+CanvasRenderingContext2D.prototype.fillText = function (t, ...a) { window.__texts.push(String(t)); return fillText.call(this, t, ...a); };
 addEventListener("pywebviewready", () => {
   const api = window.pywebview.api;
+  const info = api.info;
+  api.info = (...a) => info(...a).then(r => { if (r.ok) r.data.state.ui = { ...(r.data.state.ui || {}), ...window.__ui }; return r; });
   for (const name of Object.keys(api)) {
     const real = api[name];
     api[name] = (...args) => {
@@ -168,8 +177,8 @@ def test_key_tester_starts_by_itself_on_actuation(page):
     wait_for_call(page, "start_test")
     sync_api.expect(page.locator("#testBanner")).to_be_visible()
     sync_api.expect(page.locator("#traceWrap")).to_be_visible()
-    sync_api.expect(page.locator("#liveNote")).to_contain_text("Live: the Huntsman's typing is paused while this window is in front")
-    sync_api.expect(page.locator("#actReadings")).to_contain_text("sends travel readings instead of typing")
+    sync_api.expect(page.locator("#liveNote")).to_contain_text("Live view on")
+    sync_api.expect(page.locator("#testBanner")).to_contain_text("Click another window to type again")
     page.wait_for_timeout(600)
     assert count(page, "start_test") == 1 and count(page, "stop_test") == 0   # no repeats
     assert page.errors == []
@@ -282,20 +291,20 @@ def test_hidden_stops_at_once_and_visible_restarts(page):
 
 def test_idle_stop_waits_for_focus_or_a_click(page):
     wait_for_call(page, "start_test")
-    page.evaluate("window.onTestEnded('Testing stopped after 5 minutes without a key press.', true)")
+    page.evaluate("window.onTestEnded('Live view paused after 5 minutes without a key press.', true)")
     sync_api.expect(page.locator("#testBanner")).to_be_hidden()
     sync_api.expect(page.locator("#liveNote")).to_contain_text("5 minutes without a key press")
-    go = page.locator("#liveGo")
+    go = page.locator("#traceResume")
     sync_api.expect(go).to_have_text("Resume")
     page.click('button[data-view="lighting"]')         # coming back to the tab counts as asking again
     page.click('button[data-view="actuation"]')
     page.wait_for_function("() => window.__calls.filter(c => c[0] === 'start_test').length === 2")
-    page.evaluate("window.onTestEnded('Testing stopped after 5 minutes without a key press.', true)")
+    page.evaluate("window.onTestEnded('Live view paused after 5 minutes without a key press.', true)")
     page.wait_for_timeout(700)
     assert count(page, "start_test") == 2                # paused: no restart by itself
     go.click()
     page.wait_for_function("() => window.__calls.filter(c => c[0] === 'start_test').length === 3")
-    page.evaluate("window.onTestEnded('Testing stopped after 5 minutes without a key press.', true)")
+    page.evaluate("window.onTestEnded('Live view paused after 5 minutes without a key press.', true)")
     front(page, focus=False)
     front(page)                                          # focus again also resumes
     page.wait_for_function("() => window.__calls.filter(c => c[0] === 'start_test').length === 4")

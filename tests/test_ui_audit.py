@@ -138,7 +138,7 @@ def paused(pg):
     wait_for_call(pg, "start_test")
     pg.evaluate("window.__front = {focus: false, visible: true}; dispatchEvent(new Event('blur'))")
     wait_for_call(pg, "stop_test")
-    expect(pg.locator("#traceWrap")).to_be_hidden()
+    expect(pg.locator("#traceWrap")).to_have_class(re.compile(r"\bpaused\b"))
 
 
 def test_small_window_shows_depths_on_hover_instead_of_over_the_legends(small):
@@ -171,7 +171,7 @@ def test_readings_show_only_while_testing(page):  # noqa: F811
     expect(page.locator("#actReadings")).to_be_visible()
     page.evaluate("window.__front = {focus: false, visible: true}; dispatchEvent(new Event('blur'))")
     wait_for_call(page, "stop_test")
-    expect(page.locator("#actReadings")).to_be_hidden()
+    expect(page.locator("#actReadings")).to_have_class(re.compile(r"\bpaused\b"))   # kept in place, dimmed
 
 
 def test_primary_actions_stay_in_view_in_a_short_window(small):
@@ -237,8 +237,9 @@ def test_built_in_preset_offers_save_as_with_a_hint(studio):
 
 # ---------- quick wins ----------
 
-def test_live_readout_is_announced(page):  # noqa: F811
-    assert page.locator("#mHit").get_attribute("aria-live") == "polite"
+def test_live_readout_is_not_a_live_region(page):  # noqa: F811
+    """It changes on every key press; the live view's state line (#liveNote) is the one that speaks."""
+    assert page.locator("#mHit").get_attribute("aria-live") is None
 
 
 def test_switching_tabs_drops_the_last_toast(page):  # noqa: F811

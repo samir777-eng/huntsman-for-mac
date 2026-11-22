@@ -773,9 +773,9 @@ def test_a_stale_session_end_is_not_pushed(api, app, monkeypatch):
     ok(api.start_test())
     api.stop_test()                                   # session A ends (the window stopped it: nothing to push)
     ok(api.start_test())                              # session B starts
-    sessions[0].ended("Testing stopped after 5 minutes without a key press.", True)   # A's late end
+    sessions[0].ended("Live view paused after 5 minutes without a key press.", True)   # A's late end
     assert [p for p in pushed if p[0] == "onTestEnded"] == []
-    sessions[1].ended("Testing stopped after 5 minutes without a key press.", True)   # B's own end is pushed
+    sessions[1].ended("Live view paused after 5 minutes without a key press.", True)   # B's own end is pushed
     assert [p[0] for p in pushed].count("onTestEnded") == 1
 
 

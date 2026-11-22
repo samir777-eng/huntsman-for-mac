@@ -83,7 +83,9 @@ venv into the bundle and signs it ad hoc; unsigned apps can't read ~/Downloads):
 - First-launch snapshot records its PID; restore refuses another model's snapshot. One snapshot per Mac user.
 - Key tester lives in Actuation and runs live (Unreleased, branch `auto-key-tester`, plan
   docs/plans/2026-11-22-live-key-tester.md): no button; starts while Actuation is in front, stops on tab/app change,
-  hidden, close, disconnect, 5 min idle. Not yet checked on the keyboard (pywebview focus/blur untested).
+  hidden, close, disconnect, 5 min idle. UX-audit fixes: opens on the last tab (state.ui.tab; first launch Lighting),
+  one-time intro (state.ui.liveSeen), stable layout with a Resume chip, `Api.open_privacy`. Not yet checked on the
+  keyboard (pywebview focus/blur untested).
 
 ## Code map
 - `huntsman_core.py`: protocol + USB transport (pyusb/libusb control transfers to interface 3, 90-byte reports, CRC,

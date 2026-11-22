@@ -40,6 +40,8 @@ DEFAULT_STATE = {
 }
 
 
+TABS = ("actuation", "rapid", "snap", "lighting", "studio", "device")   # the window's tabs (ui/app.js TITLES)
+PRIVACY_INPUT_MONITORING = "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
 ACCENT = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
@@ -135,6 +137,10 @@ def _clean_state(raw):
             st["ui"]["accent"] = u["accent"]
         if isinstance(u.get("accentMatch"), bool):
             st["ui"]["accentMatch"] = u["accentMatch"]
+        if u.get("tab") in TABS:
+            st["ui"]["tab"] = u["tab"]
+        if isinstance(u.get("liveSeen"), bool):
+            st["ui"]["liveSeen"] = u["liveSeen"]
     st["studio"] = studio_mod.clean_studio(raw.get("studio"))
     st["smart"] = studio_mod.clean_smart(raw.get("smart"))
     st["experimental"] = raw.get("experimental") is True
@@ -558,7 +564,7 @@ class Api:
         the transport to switch the keyboard back to typing."""
         t = self._test
         if t and t.running:
-            t.stop("Testing stopped because the keyboard reconnected.")
+            t.stop("Live view stopped because the keyboard reconnected.")
         if self._kb is not None:
             self._last_model = self._kb.model
             if hasattr(self._kb.t, "close"):
@@ -829,14 +835,25 @@ class Api:
         return self._run(f)
 
     def set_prefs(self, prefs):
-        """Interface preferences (accent colour), saved together. Not sent to the keyboard."""
-        prefs = {k: v for k, v in dict(prefs).items() if k in ("accent", "accentMatch")}
+        """Interface preferences (accent colour, the last tab, the live view's explanation seen), saved together.
+        Not sent to the keyboard."""
+        prefs = {k: v for k, v in dict(prefs).items() if k in ("accent", "accentMatch", "tab", "liveSeen")}
         if "accent" in prefs and not (isinstance(prefs["accent"], str) and ACCENT.match(prefs["accent"])):
             return {"ok": False, "error": "accent must be a colour like #3ddc84"}
-        if "accentMatch" in prefs and not isinstance(prefs["accentMatch"], bool):
-            return {"ok": False, "error": "accentMatch must be true or false"}
+        for k in ("accentMatch", "liveSeen"):
+            if k in prefs and not isinstance(prefs[k], bool):
+                return {"ok": False, "error": f"{k} must be true or false"}
+        if "tab" in prefs and prefs["tab"] not in TABS:
+            return {"ok": False, "error": "tab must be one of " + ", ".join(TABS)}
         with self._lock, update_state() as st:
             st["ui"].update(prefs)
+        return {"ok": True, "data": True}
+
+    def open_privacy(self):
+        """System Settings at Privacy & Security, Input Monitoring (the live key tester needs it). macOS only."""
+        if platforms.is_windows():
+            return {"ok": False, "error": "Input Monitoring is a macOS setting.", "reason": "unavailable"}
+        subprocess.run(["open", PRIVACY_INPUT_MONITORING], capture_output=True, timeout=10)
         return {"ok": True, "data": True}
 
     def set_brightness(self, pct):

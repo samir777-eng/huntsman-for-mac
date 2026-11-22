@@ -74,7 +74,7 @@ def _run_shutdown_hooks():
 
 def _on_signal(signum):
     for s in list(_ACTIVE):
-        s.stop("Testing stopped because the app was closed.")
+        s.stop("Live view stopped because the app was closed.")
     if _SHUTDOWN:
         t = threading.Thread(target=_run_shutdown_hooks, name="huntsman-shutdown", daemon=True)
         t.start()
@@ -307,14 +307,14 @@ class DepthSession:
                         pass  # the window may be gone; the time limit and stop below still apply
                     last_sent = batch
                 if time.monotonic() - last_travel > self.limit:
-                    reason = f"Testing stopped after {_duration(self.limit)} without a key press."
+                    reason = f"Live view paused after {_duration(self.limit)} without a key press."
                     break
         finally:
             for dev in opened:
                 io.iokit.IOHIDDeviceUnscheduleFromRunLoop(dev, loop, io.mode)
                 io.iokit.IOHIDDeviceClose(dev, 0)
             if not self._stop.is_set():  # time limit or any unexpected exit: always switch back
-                threading.Thread(target=self.stop, args=(reason or "Testing stopped.",), daemon=True).start()
+                threading.Thread(target=self.stop, args=(reason or "Live view stopped.",), daemon=True).start()
 
     def stop(self, reason=None):
         """Back to normal typing. Safe to call more than once, from any thread. Returns True on success."""

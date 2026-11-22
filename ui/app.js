@@ -12,7 +12,6 @@ const NOTES = {
   snapSecond: "Now click the second key of the pair.",
   lighting: "Each key shows the colour its LED is set to.",
   studio: "",
-  testing: "Keys sink as you press them. The trace shows the last key's travel.",
   device: "",
 };
 const EFFECT_NAMES = { static: "Static", breathing_one: "Breathing, one colour", breathing_two: "Breathing, two colours", breathing_random: "Breathing, random", spectrum: "Spectrum", wave: "Wave", reactive_key_one: "Reactive", reactive_key_random: "Reactive, random", reactive_ripple_one: "Ripple", reactive_ripple_random: "Ripple, random", starlight_one: "Starlight, one colour", starlight_two: "Starlight, two colours", starlight_random: "Starlight, random", fire: "Fire", off: "Off" };
@@ -22,7 +21,7 @@ const U = 46, GAP = 5;
 const UNLIT = "#3a3a40";                 // an unlit doubleshot legend
 const RAINBOW = "#ff3b30";              // starting hue for spectrum and wave previews
 
-let api, layout = [], effects = {}, view = "actuation";
+let api, layout = [], effects = {}, view = "lighting";   // first launch; after that, the last tab used (state.ui.tab)
 let model = null;           // the connected model: {pid, name, status, matrix, features, experimental_on, locked}
 let devInfo = null;         // the last info(): firmware, version, ...
 let points = {};            // id -> [actuation mm, reset mm]
@@ -128,7 +127,8 @@ function fit() {
   const kb = $("#kb"), stage = $("#stage");
   const nw = parseFloat($("#board").style.width) + 44, nh = parseFloat($("#board").style.height) + 68;
   const cs = getComputedStyle(stage);
-  const reserved = (traceShown() ? 280 : 0) + $("#dock").offsetHeight + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + 64;
+  stage.style.setProperty("--dock-h", $("#dock").offsetHeight + "px");
+  const reserved = (traceShown() ? $("#traceWrap").offsetHeight + 18 : 0) + $("#dock").offsetHeight + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + 64;
   zoom = Math.max(0.5, Math.min(1.6, stage.clientWidth * 0.9 / nw, (stage.clientHeight - reserved) / nh));
   kb.style.zoom = zoom;
   // Type follows the size of a key on screen (a 1u cap is 41 px at zoom 1) and stays readable: legends
@@ -347,7 +347,7 @@ function applyModel() {
   Object.keys(FEATURE_TABS).forEach(v => { $(`#sources button[data-view="${v}"]`).hidden = !viewShown(v); });
   const why = testerWhy();
   $("#actTestWhy").textContent = why; $("#actTestWhy").hidden = !why;
-  $("#actReadings").hidden = !hasFeature("key_tester") || !testing;   // readings and the warning while testing only
+  $("#actReadings").hidden = !hasFeature("key_tester");   // dimmed while paused
   if (testing && !hasFeature("key_tester")) liveQueue(stopTest);
   liveUi();
   setAct(hasFeature("actuation") && model.actuation || V3_ACT);
@@ -479,9 +479,9 @@ $$("#selectTools button").forEach(b => b.onclick = () => {
 
 /* ---------- navigation ---------- */
 // The key tester runs from Actuation: while it runs, the stage shows the travel trace under the keyboard
-const traceShown = () => testing && view === "actuation";
+const traceShown = () => view === "actuation" && hasFeature("key_tester");   // kept while paused, so nothing jumps
 const depthsOnDemand = () => $("#kb").classList.contains("depths-on-demand");
-const stageNote = v => v === "actuation" ? (depthsOnDemand() ? NOTES.actuationSmall : NOTES.actuation) + (testing ? " " + NOTES.testing : "")
+const stageNote = v => v === "actuation" ? (depthsOnDemand() ? NOTES.actuationSmall : NOTES.actuation)   // the same live or not: no jump
   : v === "snap" && snapNext ? NOTES.snapSecond : NOTES[v];
 async function show(v) {
   if (!viewShown(v)) v = "lighting";   // a tab this model doesn't have
@@ -494,15 +494,15 @@ async function show(v) {
   $$(".pane").forEach(p => p.hidden = p.dataset.pane !== v);
   document.title = `${TITLES[v]} · Huntsman for Mac`;
   $("#stageNote").textContent = stageNote(v);
-  $("#traceWrap").hidden = !traceShown();
+  $("#traceWrap").hidden = !traceShown(); $("#stage").classList.toggle("traced", traceShown());
   $("#stage").dataset.view = v;
   $$(".cap").forEach(c => c.classList.remove("pressed", "typed"));
   fit(); paint(); fillAll(); snapUi();
   if (traceShown()) drawTrace();
-  liveSync();
+  liveUi(); liveSync();
   if (window.studioShown) studioShown(v);
 }
-$$("button[data-view]").forEach(b => b.onclick = () => show(b.dataset.view));
+$$("button[data-view]").forEach(b => b.onclick = () => { tabRestored = true; show(b.dataset.view); if (model) savePrefs({ tab: b.dataset.view }); });
 
 // slider tracks fill up to the thumb; screen readers hear the value with its unit
 function fillRange(r) { r.style.setProperty("--fill", ((r.value - r.min) / (r.max - r.min) * 100) + "%"); }
@@ -785,6 +785,7 @@ window.onDepth = batch => {            // batch: [[keyId, mm], ...] from the app
     $("#tAct").textContent = p[0] != null ? mm(p[0]) : "–";
     $("#tRel").textContent = p[1] != null ? mm(p[1]) : "–";
     $("#tPeak").textContent = trace.peak.toFixed(2) + " mm";
+    $("#tKey").textContent = `Last key: ${label(trace.key)}`;
     // actuation meter: the live key against the depth on the slider
     $("#mLive").dataset.idle = "false";
     $("#mKey").textContent = `Key ${label(trace.key)}`;
@@ -826,7 +827,7 @@ function traceLabel(force) {
 }
 
 function drawTrace() {
-  const cv = $("#trace"), dpr = devicePixelRatio || 1, w = cv.clientWidth, h = 200;
+  const cv = $("#trace"), dpr = devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight || 200;
   if (!w) return;
   cv.width = w * dpr; cv.height = h * dpr;
   const g = cv.getContext("2d"); g.scale(dpr, dpr);
@@ -847,6 +848,8 @@ function drawTrace() {
     g.fillText(`types at ${p[0].toFixed(act.decimals)}`, L + 6, y(p[0]) + 14);
     g.globalAlpha = .7; g.fillText(`resets at ${p[1].toFixed(act.decimals)}`, L + 6, y(p[1]) - 5); g.globalAlpha = 1;
   }
+  if (trace.key != null) { g.save(); g.font = "600 13px -apple-system, sans-serif"; g.fillStyle = getComputedStyle(document.body).color; g.fillText(label(trace.key), L + 6, T + 14); g.restore(); }
+  else if (testing) { g.save(); g.textAlign = "center"; g.font = "13px -apple-system, sans-serif"; g.fillText("Press any key on your Huntsman", (L + R) / 2, (T + B) / 2); g.restore(); }
   const s = trace.samples; if (s.length < 2) return;
   const now = s[s.length - 1][0], x = t => R - (now - t) / WINDOW_MS * (R - L);
   if (p) {  // shade the stretch where the key was past its actuation point
@@ -862,9 +865,11 @@ function testerUi() {
   $("#testBanner").hidden = !testing;
   $("#stage").classList.toggle("testing", testing);
   if (testing) { $("#mLive").dataset.idle = "true"; $("#mKey").textContent = "Press a key on the Huntsman"; $("#mNum").textContent = "0.00"; setText($("#mHit"), mixed() ? "Each key types at its own depth" : `Types at ${mm(depth())}`); }
-  $("#actReadings").hidden = !testing || !hasFeature("key_tester");
+  $("#actReadings").hidden = !hasFeature("key_tester");
+  $("#actReadings").classList.toggle("paused", !testing); $("#traceWrap").classList.toggle("paused", !testing);
+  if (testing) $("#tKey").textContent = "Last key: –";
   $("#mLive").classList.toggle("active", testing);
-  $("#traceWrap").hidden = !traceShown();
+  $("#traceWrap").hidden = !traceShown(); $("#stage").classList.toggle("traced", traceShown());
   if (view === "actuation") $("#stageNote").textContent = stageNote(view);
   fit(); if (traceShown()) drawTrace();
   if (!testing) { meterKey(0, false); $$(".cap").forEach(c => { c.classList.remove("pressed", "typed"); c.querySelector(".fill").style.height = 0; }); paint(); traceLabel(true); }
@@ -873,27 +878,36 @@ function testerUi() {
 // Live: the tester runs while Actuation is in front (window focused and visible) on a model with the key tester, and
 // stops when any of that changes. Starts and stops are queued so they never overlap; focus changes are debounced.
 let liveHeld = null;        // paused until focus, coming back to Actuation or the button: {idle, why} or {why} (a failure)
-let liveStarting = false, liveTimer = null, liveOp = Promise.resolve();
+let liveStarting = false, startingShown = false, liveTimer = null, liveOp = Promise.resolve();
 const inFront = () => document.hasFocus() && document.visibilityState === "visible";
-const liveWanted = () => view === "actuation" && hasFeature("key_tester") && !writesLocked() && inFront() && !liveHeld;
+const liveWanted = () => liveWanted.ignoringFront() && inFront() && !liveHeld;
+liveWanted.ignoringFront = () => view === "actuation" && hasFeature("key_tester") && !writesLocked();
 const liveQueue = f => (liveOp = liveOp.then(f, f));
 function liveSync(delay = 0) { clearTimeout(liveTimer); liveTimer = setTimeout(() => liveQueue(liveStep), delay); }
 async function liveStep() { const want = liveWanted(); if (want && !testing) await startTest(); else if (!want && testing) await stopTest(); }
 function liveUi() {
-  const held = liveHeld;
+  const held = liveHeld, fail = !!held && !held.idle;
   $("#liveNote").hidden = !hasFeature("key_tester");
-  setText($("#liveText"), testing ? "Live: the Huntsman's typing is paused while this window is in front."
+  $("#liveNote").classList.toggle("notice", fail);
+  // the one live region: the state only, never "Starting" (the chip shows that, after a moment)
+  setText($("#liveText"), testing ? "Live view on."
     : held ? (held.idle ? `${held.why} The Huntsman types normally.` : held.why)
-    : liveStarting || liveWanted() ? "Starting the key tester…" : !inFront() ? "Paused while this window isn't in front. The Huntsman types normally." : "");
-  $("#liveGo").hidden = !held || testing; $("#liveGo").textContent = held?.idle ? "Resume" : "Try again";
+    : liveStarting ? "" : !inFront() && liveWanted.ignoringFront() ? "Live view paused: this window isn't in front. The Huntsman types normally." : "");
+  $("#liveGo").hidden = !fail || testing; $("#livePrivacy").hidden = !fail || !held.perm || testing;
+  setText($("#traceChipText"), testing ? "" : liveStarting ? (startingShown ? "Starting live view…" : "")
+    : held?.idle ? "Paused" : held ? "Live view off" : liveWanted.ignoringFront() ? "Paused while this window isn't in front" : "");
+  $("#traceResume").hidden = !(held?.idle) || testing;
+  $("#traceChip").hidden = !$("#traceChipText").textContent;
 }
 async function startTest() {
-  liveStarting = true; liveUi();
+  liveStarting = true; startingShown = false; liveUi();
+  const slow = setTimeout(() => { startingShown = true; liveUi(); }, 400);   // no "Starting" flash
   let r; try { r = await api.start_test(); } catch (e) { r = { ok: false, error: String(e) }; }
-  liveStarting = false;
-  if (!r.ok) { liveHeld = { why: r.error }; if (!r.reason) setConn(false, "Not connected"); liveUi(); return; }   // said once, no retry
+  clearTimeout(slow); liveStarting = startingShown = false;
+  if (!r.ok) { liveHeld = { why: r.error, perm: r.reason === "permission" }; if (!r.reason) setConn(false, "Not connected"); liveUi(); return; }   // said once, no retry
   if (!r.data) { liveUi(); return; }   // cancelled
   testing = true; trace.key = null; trace.samples = []; testerUi();
+  if (!state.ui?.liveSeen) { $("#liveIntro").hidden = false; savePrefs({ liveSeen: true }); }   // explained once
   if (!liveWanted()) await stopTest();   // the tab or the window changed while it started
 }
 async function stopTest() {
@@ -901,8 +915,9 @@ async function stopTest() {
   try { await call("stop_test"); } catch (e) { liveHeld = { why: e.message }; liveUi(); }   // error toast already shown
 }
 const liveAgain = () => { liveHeld = null; liveSync(); };
-$("#liveGo").onclick = liveAgain;
-$("#stage").addEventListener("click", e => { if (liveHeld?.idle && view === "actuation" && !e.target.closest("button")) liveAgain(); });
+$("#liveGo").onclick = $("#traceResume").onclick = liveAgain;   // board clicks only select keys
+$("#livePrivacy").onclick = () => call("open_privacy").catch(() => {});
+$("#liveIntro button").onclick = () => { $("#liveIntro").hidden = true; };
 addEventListener("blur", () => { liveUi(); liveSync(300); });
 addEventListener("focus", () => { if (liveHeld?.idle) liveHeld = null; liveUi(); liveSync(300); });   // a failure waits for Try again
 document.addEventListener("visibilitychange", () => { liveUi(); liveSync(document.visibilityState === "hidden" ? 0 : 300); });
@@ -1032,6 +1047,7 @@ async function followModel() {
   return !!model;
 }
 const SYNAPSE_CONN = "Paused: Razer Synapse is running";
+let tabRestored = false;   // the last tab used opens once, at the first read, unless a tab was picked before it
 async function load(again = true) {
   if (again) await readPlatform();
   const found = again ? await followModel() : !!model;
@@ -1044,6 +1060,7 @@ async function load(again = true) {
     $("#bright").value = i.brightness; brightUi(); fillAll();
     if (!state.effect && !state.custom) fromRaw(i.effect);
     applyState();
+    if (!tabRestored) { tabRestored = true; const t = state.ui?.tab; if (t && t !== view && viewShown(t)) await show(t); }
     $("#devInfo").innerHTML = "";
     const m = i.model || model || { name: "Huntsman V3 Pro", pid: "02A6" };
     [["Model", m.name], ["USB ID", `1532:${m.pid}`], ["Firmware", i.firmware], ["Onboard profile", String(i.profile)], ["Brightness", i.brightness + "%"], ["App version", i.version || "–"]]

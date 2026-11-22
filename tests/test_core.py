@@ -579,7 +579,7 @@ def test_time_limit_switches_back(monkeypatch):
     deadline = time.monotonic() + 2
     while not ended and time.monotonic() < deadline:
         time.sleep(0.01)
-    assert ended and ended[0][1] is True and "stopped after" in ended[0][0]
+    assert ended and ended[0][1] is True and "paused after" in ended[0][0]
     assert sent.index((0, 4, 3)) < sent.index((0, 4, 0)) and s.t.mode == 0
 
 
@@ -609,7 +609,7 @@ def test_idle_limit_counts_from_the_last_key_travel(monkeypatch):
     deadline = time.monotonic() + 2
     while not ended and time.monotonic() < deadline:
         time.sleep(0.01)
-    assert ended == [("Testing stopped after 5 minutes without a key press.", True)] and s.t.mode == 0
+    assert ended == [("Live view paused after 5 minutes without a key press.", True)] and s.t.mode == 0
 
 
 def test_stop_before_running_cancels_start(monkeypatch):

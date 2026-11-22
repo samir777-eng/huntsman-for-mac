@@ -803,7 +803,7 @@ window.onDepth = batch => {            // batch: [[keyId, mm], ...] from the app
 // Pushed when the app ends a session by itself: 5 minutes without key travel (paused until asked again) or a failed
 // switch back to typing (said once, also as an error toast)
 window.onTestEnded = (reason, ok) => {
-  testing = false; liveHeld = ok === false ? { why: reason } : { idle: true, why: reason || "Testing stopped." }; testerUi();
+  testing = false; liveHeld = ok === false ? { why: reason } : { idle: true, why: reason || "Live view paused." }; testerUi();
   if (ok === false) toast(reason, true);
 };
 function meterLines() {

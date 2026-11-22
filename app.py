@@ -789,7 +789,7 @@ class Api:
         """Never takes the app lock: it must work while another call is busy or the window is closing."""
         t = self._test
         if t and not t.stop():
-            return {"ok": False, "error": "The keyboard may still be in test mode. Unplug it and plug it back in."}
+            return {"ok": False, "error": "The keyboard may still be in live view and not typing. Unplug it and plug it back in."}
         return {"ok": True, "data": []}
 
     def set_rapid(self, cfg):

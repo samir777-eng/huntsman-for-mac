@@ -11,7 +11,7 @@ All notable changes to this project are listed here. Versions follow [Semantic V
   says the Huntsman doesn't type meanwhile ("Click another window to type again"); the first time, the panel explains
   why once.
 - It stops, and the keyboard types again, when you open another tab, click another window or Cmd-Tab, minimise the
-  window or lock the screen, close the window or quit, and when the keyboard is disconnected or you click Reconnect.
+  window, close the window or quit, and when the keyboard is disconnected or you click Reconnect.
   Coming back to the window or the tab starts it again.
 - After 5 minutes without a key press it pauses (was: testing stopped 60 seconds after it started). The trace and
   readings stay where they are, dimmed, with a *Paused · Resume* chip on the trace; *Resume*, or coming back to the
@@ -28,8 +28,8 @@ All notable changes to this project are listed here. Versions follow [Semantic V
 
 ### Not checked on hardware
 - The live view on the Huntsman V3 Pro: starting and stopping as the real app's window comes to the front or goes
-  behind, the Input Monitoring prompt, and the pause after 5 minutes. The owner is checking these now; until then only
-  the test suite (simulated keyboard, headless browser) has run them.
+  behind or the screen locks, the Input Monitoring prompt, and the pause after 5 minutes. Only the test suite
+  (simulated keyboard, headless browser) has run them.
 
 ## 0.4.0 – 2026-11-22
 

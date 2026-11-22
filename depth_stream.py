@@ -349,5 +349,5 @@ class DepthSession:
         return False
 
 
-UNPLUG = ("The keyboard may still be in test mode and not typing. "
+UNPLUG = ("The keyboard may still be in live view and not typing. "
           "Unplug it and plug it back in to restore normal typing.")

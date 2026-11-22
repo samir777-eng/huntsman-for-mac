@@ -241,7 +241,7 @@ shows the last key, where it typed, where it reset and how deep you pressed. A b
 isn't typing; the first time, the panel explains why once. You can still pick keys and Apply while it runs.
 
 Because the Huntsman doesn't type in live view, it stops, and the keyboard types again, as soon as you click another
-window (or Cmd-Tab), open another tab, minimise the window or lock the screen, close the window or quit, and when the
+window (or Cmd-Tab), open another tab, minimise the window, close the window or quit, and when the
 keyboard is disconnected or you Reconnect. Coming back to the window or the tab starts it again. While it's paused the
 trace and readings stay where they are, dimmed, so nothing jumps. After 5 minutes without a key press it pauses: click
 **Resume** on the trace, or come back to the window or the tab. If it can't start, the panel says why once, with
@@ -402,7 +402,7 @@ Checked on 2026-11-17 with a Huntsman V3 Pro (1532:02A6), firmware 1.03, wired, 
 | Colour correction (the keyboard matches the picker) | |
 | Key tester readings, and switching the keyboard back to typing afterwards | A hard kill (SIGKILL) during a key test; this relies on the recovery on the next connect, which is checked |
 | Quitting the app with SIGTERM during a key test: the keyboard types again | The name macOS shows in the lighting service's permission prompts |
-| A keyboard left in test mode is put back to typing the next time the app or the command line connects | Keyboard lighting coming back at logout or shutdown |
+| A keyboard left in live view (not typing) is put back to typing the next time the app or the command line connects | Keyboard lighting coming back at logout or shutdown |
 | Checksums on the keyboard's replies; actuation is written to the saved copy before the live copy | The lighting service restarting itself after a crash |
 | Lighting Studio: built-in presets, layers, settings, saving presets, Sound, Typing and Smart panels, music through the microphone | Smart lighting over a long session (real sleep and screen lock) |
 | Studio effects keep running after the app quits | System sound through a loopback device such as BlackHole |
@@ -590,7 +590,7 @@ Razer documentation. So it's careful:
 - **The key tester always lets go.** The keyboard goes back to typing when you leave the Actuation tab or the window
   goes to the background, after 5 minutes without a key press, when you close the window, when the app quits, and when macOS ends it (SIGTERM). If the app is killed outright, the next time the
   app or the command line connects it puts the keyboard back to typing. Unplugging and replugging should also work,
-  since test mode isn't stored.
+  since live view isn't stored.
 - **Experimental models** get only commands already checked on the Huntsman V3 Pro, and nothing that changes them is
   sent until Experimental support is on. The key tester is never offered on them.
 - **On Windows** every model counts as experimental, the key tester is never offered, and nothing is written while

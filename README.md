@@ -403,10 +403,12 @@ effects, per-key colours and brightness, Studio typing and ambient presets (also
 starting and stopping the key tester with typing coming back. All passed. The key tester's new place in Actuation was
 then checked too (2026-11-18): the meter and readings update, and typing comes back after stopping.
 
-**Version 0.4.0** hasn't been checked on the keyboard yet. On the Mac it changes little: text and JSON files are read
-and written as UTF-8, and the actuation slider takes its range from the model (on the V3 Pro still 0.1 to 4.0 mm, and
-the golden tests show every byte sent to the V3 Pro is unchanged). The Windows build and the V2 Analog's actuation are
-untested.
+**Version 0.4.0** was partly checked on the same keyboard before its UX changes (2026-11-18): the window, the menu
+bar icon, actuation, lighting, Studio after quitting the app, and the key tester; the no-keyboard screen and
+Reconnect on 2026-11-20. Not checked on the keyboard yet: the Mixed readout and Apply confirmation, Snap Tap's switch
+and picking keys on the board, Studio's preview while off, the six new presets, and the key tester since the UX
+changes. The golden tests show every byte sent to the V3 Pro is unchanged. The Windows build and the V2 Analog's
+actuation are untested.
 
 ## Install
 

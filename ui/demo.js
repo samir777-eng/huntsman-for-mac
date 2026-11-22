@@ -72,7 +72,7 @@
         [n, { speed: speed(n), colors: (t.match(/\{rgb/g) || []).length, dir: t.includes("{dir}") }]))),
       startup: plugged(() => ok([])),
       reconnect: () => { if (!connected) { connected = true; use(find((q.get("plug") || "").toUpperCase())); } return ok([]); },
-      info: plugged(() => ok({ version: "0.4.0", model: info(), firmware: "1.03", profile: 1, brightness: 100, effect: "010501000001ffffff000000", state })),
+      info: plugged(() => ok({ version: "0.4.1", model: info(), firmware: "1.03", profile: 1, brightness: 100, effect: "010501000001ffffff000000", state })),
       read_depths: plugged(() => ok(pts)),
       set_depth: gated("actuation", (keys, mm, rel) => {
         const done = {};

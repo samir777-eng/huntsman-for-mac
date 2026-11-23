@@ -2,6 +2,35 @@
 
 All notable changes to this project are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 0.4.1 – 2026-11-23
+
+### Changed
+- The key tester runs live ("live view"): the *Test with a key press* and *Stop testing* buttons are gone. On the
+  Huntsman V3 Pro it starts by itself while the Actuation tab is open and the window is in front, and the pressed key
+  sinks on the board, the meter follows it, and the trace names the key and draws its travel. A banner over the board
+  says the Huntsman doesn't type meanwhile ("Click another window to type again"); the first time, the panel explains
+  why once.
+- It stops, and the keyboard types again, when you open another tab, click another window or Cmd-Tab, minimise the
+  window, close the window or quit, and when the keyboard is disconnected or you click Reconnect.
+  Coming back to the window or the tab starts it again.
+- After 5 minutes without a key press it pauses (was: testing stopped 60 seconds after it started). The trace and
+  readings stay where they are, dimmed, with a *Paused · Resume* chip on the trace; *Resume*, or coming back to the
+  window or the tab, starts it again.
+- If it can't start, the panel says why once, with *Try again*, and *Open Privacy settings* when Input Monitoring
+  isn't allowed. It doesn't keep retrying.
+- You can pick keys and Apply while the live view runs; it keeps running.
+- The app opens on the tab you used last (the very first launch opens Lighting), so it only stops the Huntsman typing
+  at launch if you left it on Actuation.
+- Actuation panel: the presets sit above the readings, the readings say "Last key: W", the trace's height follows the
+  window, and messages appear below the board while the trace shows.
+- VoiceOver: one status line announces the live view's state (and once how to type again); the meter no longer speaks
+  every reading.
+
+### Not checked on hardware
+- The live view on the Huntsman V3 Pro: starting and stopping as the real app's window comes to the front or goes
+  behind or the screen locks, the Input Monitoring prompt, and the pause after 5 minutes. Only the test suite
+  (simulated keyboard, headless browser) has run them.
+
 ## 0.4.0 – 2026-11-22
 
 ### Added
@@ -101,9 +130,8 @@ All notable changes to this project are listed here. Versions follow [Semantic V
   point rules come from its reading of the firmware.
 - The Mac app on the V3 Pro (02A6): the window, the menu bar icon, actuation, lighting, Studio after the app quits and
   the key tester were checked on 2026-11-18, before the UX-audit changes; the no-keyboard screen and Reconnect on
-  2026-11-20. Not checked on the keyboard yet: the Mixed readout and the Apply confirmation, Snap Tap's switch and
-  picking keys on the board, Studio's preview while off, the six new presets, and the key tester since the UX-audit
-  changes. The golden tests show every byte sent to it is unchanged.
+  2026-11-20. Checked after release, on 2026-11-22: the Mixed readout and the Apply confirmation, Snap Tap's switch and
+  picking keys on the board, Studio's preview while off, and the six new presets (all passed). The golden tests show every byte sent to it is unchanged.
 
 ## 0.3.0 – 2026-11-17
 

@@ -74,7 +74,7 @@ def _run_shutdown_hooks():
 
 def _on_signal(signum):
     for s in list(_ACTIVE):
-        s.stop("Testing stopped because the app was closed.")
+        s.stop("Live view stopped because the app was closed.")
     if _SHUTDOWN:
         t = threading.Thread(target=_run_shutdown_hooks, name="huntsman-shutdown", daemon=True)
         t.start()
@@ -197,13 +197,22 @@ class _IOKit:
         return list(arr)
 
 
-class DepthSession:
-    """One key-tester session. on_batch receives [(key_id, mm), ...] about 30 times a second."""
+class PermissionNeeded(hc.DeviceError):
+    """macOS refused Input Monitoring: the keyboard itself is fine."""
 
-    def __init__(self, keyboard, on_batch, on_end, time_limit=60.0):
+
+def _duration(sec):
+    return f"{sec / 60:g} minutes" if sec >= 120 else f"{sec:g} seconds"
+
+
+class DepthSession:
+    """One key-tester session. on_batch receives [(key_id, mm), ...] about 30 times a second.
+    It stops by itself after idle_limit seconds without key travel (the window also stops it when it goes away)."""
+
+    def __init__(self, keyboard, on_batch, on_end, idle_limit=300.0):
         # Device access is serialized by the transport itself, so stop() never waits on app-level locks
         # (stop() can run on the main thread while the window closes).
-        self.kb, self.on_batch, self.on_end, self.limit = keyboard, on_batch, on_end, time_limit
+        self.kb, self.on_batch, self.on_end, self.limit = keyboard, on_batch, on_end, idle_limit
         self._stop = threading.Event()
         self._thread = None
         self._latest = []
@@ -219,7 +228,7 @@ class DepthSession:
             raise hc.FeatureUnavailable("The key tester isn't offered on Windows: Windows support is experimental.")
         io = _IOKit()
         if not io.iokit.IOHIDRequestAccess(1):  # kIOHIDRequestTypeListenEvent: Input Monitoring
-            raise hc.DeviceError("Allow Input Monitoring for this app in System Settings, Privacy & Security, "
+            raise PermissionNeeded("Allow Input Monitoring for this app in System Settings, Privacy & Security, "
                                  "Input Monitoring, then try again.")
         ready, failure = threading.Event(), []
         self._thread = threading.Thread(target=self._run, args=(io, ready, failure), daemon=True)
@@ -227,6 +236,8 @@ class DepthSession:
         ready.wait(5)
         if failure or not ready.is_set():
             self._stop.set()
+            if failure and failure[0].startswith("macOS blocked"):
+                raise PermissionNeeded(failure[0])
             raise hc.DeviceError(failure[0] if failure else "The keyboard's travel stream didn't start.")
         # Mark running before switching, so any failure below (even a lost reply) still switches back.
         with self._state_lock:
@@ -282,26 +293,28 @@ class DepthSession:
         try:
             if failure:
                 return
-            started, last_sent = time.monotonic(), None
+            last_travel, last_sent = time.monotonic(), None
             while not self._stop.is_set():
                 io.cf.CFRunLoopRunInMode(io.mode, 0.033, False)
                 with self._lock:
                     batch = list(self._latest)
+                if batch:
+                    last_travel = time.monotonic()
                 if batch != last_sent:
                     try:
                         self.on_batch(batch)
                     except Exception:
                         pass  # the window may be gone; the time limit and stop below still apply
                     last_sent = batch
-                if time.monotonic() - started > self.limit:
-                    reason = f"Testing stopped after {self.limit:g} seconds."
+                if time.monotonic() - last_travel > self.limit:
+                    reason = f"Live view paused after {_duration(self.limit)} without a key press."
                     break
         finally:
             for dev in opened:
                 io.iokit.IOHIDDeviceUnscheduleFromRunLoop(dev, loop, io.mode)
                 io.iokit.IOHIDDeviceClose(dev, 0)
             if not self._stop.is_set():  # time limit or any unexpected exit: always switch back
-                threading.Thread(target=self.stop, args=(reason or "Testing stopped.",), daemon=True).start()
+                threading.Thread(target=self.stop, args=(reason or "Live view stopped.",), daemon=True).start()
 
     def stop(self, reason=None):
         """Back to normal typing. Safe to call more than once, from any thread. Returns True on success."""
@@ -336,5 +349,5 @@ class DepthSession:
         return False
 
 
-UNPLUG = ("The keyboard may still be in test mode and not typing. "
+UNPLUG = ("The keyboard may still be in live view and not typing. "
           "Unplug it and plug it back in to restore normal typing.")

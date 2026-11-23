@@ -265,7 +265,8 @@ def test_set_custom_accepts_every_lit_key(app, fake):
 
 
 @pytest.mark.parametrize("prefs", [{"accent": "red"}, {"accent": "#12345"}, {"accent": "#1234567"},
-                                   {"accent": "javascript:x"}, {"accentMatch": "yes"}])
+                                   {"accent": "javascript:x"}, {"accentMatch": "yes"}, {"tab": "nowhere"},
+                                   {"tab": 3}, {"liveSeen": "yes"}])
 def test_set_prefs_rejects_bad_input(app, prefs):
     assert app.Api().set_prefs(prefs)["ok"] is False
     assert app.load_state()["ui"] == {}
@@ -348,3 +349,32 @@ def test_set_rapid_rejects_fn_in_key_list(app, fake):
     fake.sent.clear()
     r = api.set_rapid({"enabled": True, "press": 0.3, "release": 0.3, "keys": [31, FN], "continuous": False})
     assert r["ok"] is False and fake.writes(0x02, 0x1A) == [] and app.load_state()["rapid"]["enabled"] is False
+
+
+# ---------- live key tester UX: remembered tab, one-time intro, Privacy settings ----------
+
+def test_set_prefs_remembers_the_tab_and_the_live_view_intro(app):
+    assert app.Api().set_prefs({"tab": "rapid", "liveSeen": True})["ok"] is True
+    assert app.load_state()["ui"] == {"tab": "rapid", "liveSeen": True}
+    write_state(app, {"ui": {"tab": "bogus", "liveSeen": 1}})
+    assert app.load_state()["ui"] == {}
+
+
+def test_open_privacy_opens_input_monitoring_on_the_mac(app, monkeypatch):
+    ran = []
+    monkeypatch.setattr(app.subprocess, "run", lambda cmd, **kw: ran.append(cmd))
+    monkeypatch.setattr(app.platforms, "is_windows", lambda: False)
+    assert app.Api().open_privacy()["ok"] is True
+    assert ran == [["open", "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"]]
+
+
+def test_open_privacy_is_refused_on_windows(app, monkeypatch):
+    ran = []
+    monkeypatch.setattr(app.subprocess, "run", lambda cmd, **kw: ran.append(cmd))
+    monkeypatch.setattr(app.platforms, "is_windows", lambda: True)
+    assert app.Api().open_privacy()["ok"] is False and ran == []
+
+
+@pytest.mark.parametrize("prefs", [None, "tab", 3, ["tab"]])
+def test_set_prefs_refuses_what_isnt_an_object(app, prefs):
+    assert app.Api().set_prefs(prefs)["ok"] is False

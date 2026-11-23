@@ -761,3 +761,29 @@ def test_preview_flag_resets_if_the_loop_cannot_start(preview_api):
     st._spawn = spawn
     st.preview(1.0)
     assert len(eng.previews) >= 14
+
+
+# ---------- live key tester review: stale ends, Input Monitoring refused ----------
+
+def test_a_stale_session_end_is_not_pushed(api, app, monkeypatch):
+    """An old session's end (pushed after its re-send) must not tell the window that a newer session stopped."""
+    sessions = _session(app, monkeypatch)
+    pushed = []
+    monkeypatch.setattr(api._pusher, "push", lambda name, *a: pushed.append((name, a)))
+    ok(api.start_test())
+    api.stop_test()                                   # session A ends (the window stopped it: nothing to push)
+    ok(api.start_test())                              # session B starts
+    sessions[0].ended("Live view paused after 5 minutes without a key press.", True)   # A's late end
+    assert [p for p in pushed if p[0] == "onTestEnded"] == []
+    sessions[1].ended("Live view paused after 5 minutes without a key press.", True)   # B's own end is pushed
+    assert [p[0] for p in pushed].count("onTestEnded") == 1
+
+
+def test_input_monitoring_refused_keeps_the_keyboard(api, app, monkeypatch):
+    eng = engine(api)
+    ok(api.studio_enable(True))
+    ok(api.startup())
+    _session(app, monkeypatch, start=app.depth_stream.PermissionNeeded("Allow Input Monitoring for this app."))
+    r = api.start_test()
+    assert r == {"ok": False, "error": "Allow Input Monitoring for this app.", "reason": "permission"}
+    assert api._kb is not None and eng.depth == 0     # not a lost connection: no reconnect, no re-send

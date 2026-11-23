@@ -72,7 +72,7 @@
         [n, { speed: speed(n), colors: (t.match(/\{rgb/g) || []).length, dir: t.includes("{dir}") }]))),
       startup: plugged(() => ok([])),
       reconnect: () => { if (!connected) { connected = true; use(find((q.get("plug") || "").toUpperCase())); } return ok([]); },
-      info: plugged(() => ok({ version: "0.4.0", model: info(), firmware: "1.03", profile: 1, brightness: 100, effect: "010501000001ffffff000000", state })),
+      info: plugged(() => ok({ version: "0.4.1", model: info(), firmware: "1.03", profile: 1, brightness: 100, effect: "010501000001ffffff000000", state })),
       read_depths: plugged(() => ok(pts)),
       set_depth: gated("actuation", (keys, mm, rel) => {
         const done = {};
@@ -80,7 +80,7 @@
         (keys.length ? keys : Object.keys(pts)).forEach(k => { done[k] = pts[k] = [mm, rel ?? +Math.max(A.release_min, mm - A.reset_gap).toFixed(A.decimals)]; });
         return ok({ failed: [], done, count: Object.keys(done).length });
       }),
-      set_rapid: gated("rapid", () => ok(true)), set_snap: gated("snap_tap", () => ok(true)), set_prefs: () => ok(true),
+      set_rapid: gated("rapid", () => ok(true)), set_snap: gated("snap_tap", () => ok(true)), set_prefs: () => ok(true), open_privacy: () => ok(true),
       // the keyboard's own lighting replaces Studio, as in app.py
       set_effect: gated("lighting", () => { studio.studio_enable(false); return ok(true); }),
       set_custom: gated("per_key", () => { studio.studio_enable(false); return ok(true); }),

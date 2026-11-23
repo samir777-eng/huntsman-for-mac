@@ -280,7 +280,7 @@ class _Session:
     """Builds a DepthSession around a fake keyboard without touching IOKit."""
 
     @staticmethod
-    def make(fail_reply=False, stuck=False, limit=60.0):
+    def make(fail_reply=False, stuck=False, limit=None):
         import depth_stream as ds
         t = FakeTransport()
         t.stuck = stuck
@@ -294,7 +294,8 @@ class _Session:
             return orig(report)
         t.exchange = exchange
         ended = []
-        s = ds.DepthSession(hc.Keyboard(t), lambda b: None, lambda reason, ok: ended.append((reason, ok)), limit)
+        s = ds.DepthSession(hc.Keyboard(t), lambda b: None, lambda reason, ok: ended.append((reason, ok)),
+                            *([] if limit is None else [limit]))
         s.t = t
         return s, sent, ended
 
@@ -578,8 +579,37 @@ def test_time_limit_switches_back(monkeypatch):
     deadline = time.monotonic() + 2
     while not ended and time.monotonic() < deadline:
         time.sleep(0.01)
-    assert ended and ended[0][1] is True and "stopped after" in ended[0][0]
+    assert ended and ended[0][1] is True and "paused after" in ended[0][0]
     assert sent.index((0, 4, 3)) < sent.index((0, 4, 0)) and s.t.mode == 0
+
+
+def test_idle_limit_counts_from_the_last_key_travel(monkeypatch):
+    """The live tester stops after 5 minutes without key travel, not 5 minutes after it started (fake clock)."""
+    import depth_stream as ds
+    import time
+    import types
+    clock = [1000.0]
+    monkeypatch.setattr(ds, "time", types.SimpleNamespace(monotonic=lambda: clock[0], sleep=time.sleep))
+    monkeypatch.setattr(ds, "_IOKit", _FakeIOKit)
+    s, sent, ended = _Session.make()
+    assert s.limit == 300                      # the default: 5 minutes
+    assert s.start() is True
+    for _ in range(4):                         # a key held down for 8 minutes of (fake) time keeps it going
+        s._latest = [(31, 1.5)]
+        time.sleep(0.08)
+        clock[0] += 120
+    time.sleep(0.08)
+    assert not ended and s.running
+    s._latest = []                             # released: the idle clock starts now
+    time.sleep(0.08)
+    clock[0] += 290
+    time.sleep(0.08)
+    assert not ended
+    clock[0] += 20
+    deadline = time.monotonic() + 2
+    while not ended and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert ended == [("Live view paused after 5 minutes without a key press.", True)] and s.t.mode == 0
 
 
 def test_stop_before_running_cancels_start(monkeypatch):

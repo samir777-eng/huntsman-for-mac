@@ -133,7 +133,16 @@ def test_depth_labels_fit_beside_the_legends_in_a_normal_window(page):  # noqa: 
     assert not overlap(rect(q.locator(".legend")), rect(q.locator(".front")))
 
 
+def paused(pg):
+    """The live tester's trace takes room under the board: these check the board without it."""
+    wait_for_call(pg, "start_test")
+    pg.evaluate("window.__front = {focus: false, visible: true}; dispatchEvent(new Event('blur'))")
+    wait_for_call(pg, "stop_test")
+    expect(pg.locator("#traceWrap")).to_have_class(re.compile(r"\bpaused\b"))
+
+
 def test_small_window_shows_depths_on_hover_instead_of_over_the_legends(small):
+    paused(small)
     q = cap(small, "Q")
     expect(q.locator(".front")).to_have_css("opacity", "0")
     expect(q.locator(".legend")).to_have_css("opacity", "1")
@@ -148,6 +157,7 @@ def test_small_window_shows_depths_on_hover_instead_of_over_the_legends(small):
 
 
 def test_small_window_legends_scale_with_the_keys(small):
+    paused(small)
     size = cap(small, "Q").locator(".legend").evaluate(
         "e => parseFloat(getComputedStyle(e).fontSize) * parseFloat(document.querySelector('#kb').style.zoom)")
     cap_h = rect(cap(small, "Q"))
@@ -157,21 +167,17 @@ def test_small_window_legends_scale_with_the_keys(small):
 # ---------- 4. readings only while testing; Apply stays in view ----------
 
 def test_readings_show_only_while_testing(page):  # noqa: F811
-    expect(page.locator("#actReadings")).to_be_hidden()
-    page.click("#actTest")
     wait_for_call(page, "start_test")
     expect(page.locator("#actReadings")).to_be_visible()
-    page.click("#bannerStop")
+    page.evaluate("window.__front = {focus: false, visible: true}; dispatchEvent(new Event('blur'))")
     wait_for_call(page, "stop_test")
-    expect(page.locator("#actReadings")).to_be_hidden()
+    expect(page.locator("#actReadings")).to_have_class(re.compile(r"\bpaused\b"))   # kept in place, dimmed
 
 
 def test_primary_actions_stay_in_view_in_a_short_window(small):
-    expect(small.locator("#applyDepth")).to_be_in_viewport()
-    small.click("#actTest")
     wait_for_call(small, "start_test")
+    expect(small.locator("#actReadings")).to_be_visible()
     expect(small.locator("#applyDepth")).to_be_in_viewport()                 # readings and warning shown too
-    small.click("#bannerStop")
     for tab, btn in [("rapid", "#applyRt"), ("snap", "#applySnap")]:
         small.click(f'.tabs button[data-view="{tab}"]')
         expect(small.locator(btn)).to_be_in_viewport()
@@ -231,8 +237,9 @@ def test_built_in_preset_offers_save_as_with_a_hint(studio):
 
 # ---------- quick wins ----------
 
-def test_live_readout_is_announced(page):  # noqa: F811
-    assert page.locator("#mHit").get_attribute("aria-live") == "polite"
+def test_live_readout_is_not_a_live_region(page):  # noqa: F811
+    """It changes on every key press; the live view's state line (#liveNote) is the one that speaks."""
+    assert page.locator("#mHit").get_attribute("aria-live") is None
 
 
 def test_switching_tabs_drops_the_last_toast(page):  # noqa: F811
@@ -266,16 +273,14 @@ def test_the_gear_is_labelled_keyboard(page):  # noqa: F811
     ("&model=0266", "Key tester isn't available on the Huntsman V2 family."),
     ("&windows=dynamic", "Key tester isn't available on Windows yet."),
 ])
-def test_key_tester_shows_disabled_with_the_reason(browser, query, reason):  # noqa: F811
+def test_key_tester_shows_the_reason_and_never_starts(browser, query, reason):  # noqa: F811
     pg = open_url(browser, query)
     try:
         expect(pg.locator("#conn")).to_have_text("Connected, firmware 1.03")
-        btn = pg.locator("#actTest")
-        expect(btn).to_be_visible()
-        expect(btn).to_be_disabled()
-        why = pg.locator("#actTestWhy")
-        expect(why).to_have_text(reason)
-        assert why.get_attribute("id") in btn.get_attribute("aria-describedby")
+        expect(pg.locator("#actTestWhy")).to_have_text(reason)
+        expect(pg.locator("#liveNote")).to_be_hidden()
+        expect(pg.locator("#testBanner")).to_be_hidden()
+        pg.wait_for_timeout(500)
         assert calls(pg, "start_test") == []
         assert pg.errors == []
     finally:
@@ -283,7 +288,7 @@ def test_key_tester_shows_disabled_with_the_reason(browser, query, reason):  # n
 
 
 def test_key_tester_has_no_reason_where_it_works(page):  # noqa: F811
-    expect(page.locator("#actTest")).to_be_enabled()
+    expect(page.locator("#liveNote")).to_be_visible()
     expect(page.locator("#actTestWhy")).to_be_hidden()
 
 

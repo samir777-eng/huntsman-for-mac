@@ -44,7 +44,7 @@
           <div class="live" id="mLive" data-idle="true">
             <span class="live-key" id="mKey">Press a key</span>
             <span class="live-num"><span id="mNum">0.00</span> mm</span>
-            <span class="live-hit" id="mHit" aria-live="polite">Not typed yet</span>
+            <span class="live-hit" id="mHit">Not typed yet</span>
           </div>
         </div>
         <div class="meter" aria-hidden="true" title="Key travel: the bright line is where keys will type, the faint line where they reset">
@@ -57,17 +57,18 @@
       </div>
       <input class="travel" type="range" id="depth" min="0.1" max="4" step="0.1" value="2" aria-label="Actuation depth">
       <div class="scale"><span>0.1 mm, lightest</span><span>4.0 mm, deepest</span></div>
-      <button id="actTest" class="secondary test-btn" data-write>Test with a key press</button>
+      <div class="presets" id="presets"></div>
+      <div class="notice live-intro" id="liveIntro" hidden><p><strong>Live view.</strong> While this window is in front on Actuation, the Huntsman sends each key's travel here instead of typing, so you can see every press. Click another window to type again.</p><button class="link">Got it</button></div>
+      <p class="live-note" id="liveNote"><span id="liveText" role="status"></span> <button class="link" id="liveGo" hidden>Try again</button> <button class="link" id="livePrivacy" hidden>Open Privacy settings</button></p>
       <p class="hint" id="actTestWhy" hidden></p>
       <div id="actReadings">
+        <p class="readings-title" id="tKey">Last key: –</p>
         <div class="group">
           <div class="row"><span>Types at</span><span class="val" id="tAct">–</span></div>
           <div class="row"><span>Resets at</span><span class="val" id="tRel">–</span></div>
           <div class="row"><span>Deepest press</span><span class="val" id="tPeak">–</span></div>
         </div>
-        <p class="hint warn">While testing, the Huntsman sends travel readings instead of typing. Use your Mac's built-in keyboard meanwhile. Testing stops by itself after 60 seconds.</p>
       </div>
-      <div class="presets" id="presets"></div>
       <div class="group">
         <label class="row"><span>Reset point</span><select id="relMode"><option value="auto">Just above</option><option value="custom">Custom</option></select></label>
         <div class="row" id="relRow" hidden><label for="rel">Resets at</label><span class="row-ctl"><input type="range" id="rel" min="0" max="3.9" step="0.1" value="1.5" aria-label="Reset point"><output id="relOut" aria-hidden="true"></output></span></div>
@@ -288,10 +289,9 @@
 
   <main class="stage" id="stage">
     <div class="progress" id="progress" role="progressbar" aria-label="Talking to the keyboard" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><div class="progress-bar"></div></div>
-    <div class="test-banner" id="testBanner" role="status" hidden>
+    <div class="test-banner" id="testBanner" hidden>
       <span class="rec" aria-hidden="true"></span>
-      <span>Testing – the Huntsman won't type until you stop</span>
-      <button id="bannerStop">Stop testing</button>
+      <span>Live view: the Huntsman doesn't type while this window is in front. Click another window to type again.</span>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <section class="no-kb" id="noKb" aria-labelledby="noKbTitle" hidden>
@@ -309,7 +309,7 @@
         <div class="board" id="board" role="grid" aria-label="Keyboard" aria-multiselectable="true"></div>
       </div>
     </div>
-    <div class="trace-wrap" id="traceWrap" hidden><canvas id="trace" height="200" role="img" aria-label="Travel trace. No key pressed yet."></canvas></div>
+    <div class="trace-wrap" id="traceWrap" hidden><canvas id="trace" height="200" role="img" aria-label="Travel trace. No key pressed yet."></canvas><div class="trace-chip" id="traceChip" hidden><span id="traceChipText"></span><button id="traceResume" hidden>Resume</button></div></div>
     <div class="dock" id="dock">
       <div class="preview-chip" id="stPreview" role="status" hidden><span class="preview-dot" aria-hidden="true"></span><span>Preview, Studio off</span><button id="stPreviewOn" data-write>Turn on</button></div>
       <p class="stage-note" id="stageNote"></p>

@@ -38,7 +38,11 @@ If you add a module the app imports lazily, or a data file, list it in `platform
 
 ## Previewing the interface
 
-Open `ui/index.html?demo` in a browser. A simulated keyboard answers every call, including the key tester. Add `&model=02B0` (or another product ID) to preview another model; a list in the header switches between them.
+Open `ui/index.html?demo` in a browser. A simulated keyboard answers every call, including the key tester (its live view starts on Actuation and presses W, A, S and D in turn). Add `&model=02B0` (or another product ID) to preview another model; a list in the header switches between them.
+
+`docs/screenshot-actuation.png` and `docs/demo-key-tester.gif` are made from demo mode by
+`.venv/bin/python tools/make_media.py` (needs the dev requirements, Playwright's Chromium and ffmpeg). Run it again
+when the Actuation tab or the live view changes, and look at both files before committing them.
 
 ## Testing an experimental model
 

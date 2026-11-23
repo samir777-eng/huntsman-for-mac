@@ -62,9 +62,10 @@ def test_experimental_model_shows_its_name_and_badge(open_model):
     expect(page.locator("#expBadge")).to_be_visible()
     expect(page.locator("#expBadge")).to_have_text("Experimental")
     assert visible_tabs(page) == ["actuation", "rapid", "snap", "lighting", "studio"]
-    expect(page.locator("#actTest")).to_be_disabled()    # never the key tester, and it says why
+    expect(page.locator("#liveNote")).to_be_hidden()     # never the key tester, and it says why
     expect(page.locator("#actTestWhy")).to_have_text("Key tester isn't available on experimental models.")
     expect(page.locator("#actReadings")).to_be_hidden()
+    assert calls(page, "start_test") == []
     page.click('button[data-view="device"]')
     expect(page.locator("#devInfo")).to_contain_text("1532:02A7")
     assert page.errors == []
@@ -273,7 +274,8 @@ def test_v3_actuation_controls_are_unchanged(open_model):
 def test_v2_analog_offers_actuation_on_its_own_scale(open_model):
     page = open_model("0266")
     assert visible_tabs(page) == ["actuation", "lighting", "studio"]   # no Rapid Trigger or Snap Tap
-    expect(page.locator("#actTest")).to_be_disabled()
+    expect(page.locator("#liveNote")).to_be_hidden()
+    assert calls(page, "start_test") == []
     d = page.locator("#depth")
     assert [d.get_attribute(a) for a in ("min", "max", "step")] == ["1.62", "3.56", "0.01"]
     assert page.locator(".scale span").all_text_contents() == ["1.62 mm, lightest", "3.56 mm, deepest"]
@@ -362,3 +364,26 @@ def test_the_mac_shows_no_platform_notice(open_model):
     expect(page.locator("#platformNotice")).to_be_hidden()
     page.click('#sources button[data-view="studio"]')
     assert page.locator("#smBundle").get_attribute("placeholder") == "or bundle ID, e.g. com.valvesoftware.steam"
+
+
+def test_plugging_in_starts_the_tester_on_actuation(unplugged):
+    page = unplugged("02A6")
+    reconnect(page)
+    expect(page.locator("#conn")).to_have_text("Connected, firmware 1.03")
+    page.click('button[data-view="actuation"]')
+    wait_for_call(page, "start_test")
+    expect(page.locator("#liveNote")).to_contain_text("Live")
+    assert page.errors == []
+
+
+def test_reconnect_from_the_empty_stage_on_actuation_starts_the_tester(browser):  # noqa: F811
+    """No keyboard, the window still on Actuation (as the app left it): plugging in and Reconnect starts it there."""
+    pg = browser.new_page(viewport={"width": 1280, "height": 900})
+    pg.add_init_script(RECORDER)
+    pg.goto(BASE + "&model=none&plug=02A6")
+    expect(pg.locator("#conn")).to_have_text("Not connected")
+    pg.evaluate("view = 'actuation'")
+    pg.click("#emptyReconnect")
+    expect(pg.locator("#conn")).to_have_text("Connected, firmware 1.03")
+    wait_for_call(pg, "start_test")
+    pg.close()

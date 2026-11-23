@@ -1,22 +1,21 @@
 # HANDOFF
 
-Current state of Huntsman for Mac, updated 2026-11-22.
+Current state of Huntsman for Mac, updated 2026-11-23.
 
 ## Status
-- **0.4.1 ready on branch `auto-key-tester`** (not pushed): the live key tester ("live view", no Test button) plus its
-  UX-audit and review fixes, version bumped (`__version__`, both Info.plists 0.4.1 build 5), CHANGELOG "0.4.1 –
-  2026-11-22", README/landing page/CONTRIBUTING updated, fresh `docs/screenshot-actuation.png` and
-  `docs/demo-key-tester.gif` (made by `tools/make_media.py` from demo mode). **Waiting on the owner's hardware check
-  of the live view on the V3 Pro** (start/stop as the real window comes to the front or goes behind, the Input
-  Monitoring prompt, the 5-minute pause). Then: PR `auto-key-tester` → `master`, tag `v0.4.1`, publish the release
-  (the Windows workflow attaches `Huntsman-for-Windows-0.4.1.zip` itself). Record only verified results.
-- **Released:** v0.4.0 (2026-11-22, https://github.com/samir777-eng/huntsman-for-mac/releases/tag/v0.4.0), with
-  `Huntsman-for-Windows-0.4.0.zip` attached by `.github/workflows/windows-build.yml`. `master` = v0.4.0 (merge of
-  branch `windows`, kept for history). v0.1.0–v0.3.0 are also tagged.
-- **v0.4.0 was released at the owner's request before the planned hardware check.** Still to check on the V3 Pro, one
-  at a time: actuation with the Mixed readout + Apply confirmation, Snap Tap switch/board picking, Studio preview
-  while off, the 6 new presets, the live view (ask first: it stops typing). Record results (verified only) in
-  README/CHANGELOG/HANDOFF. The Windows build has still never run on a Windows PC with a keyboard.
+- **Released:** v0.4.1 (2026-11-23, https://github.com/samir777-eng/huntsman-for-mac/releases/tag/v0.4.1): the live
+  key tester ("live view", no Test button) plus its UX-audit and review fixes. `Huntsman-for-Windows-0.4.1.zip` is
+  attached by `.github/workflows/windows-build.yml`. `master` = v0.4.1 (merge of branch `auto-key-tester`).
+  v0.1.0–v0.4.0 are also tagged. Media: `tools/make_media.py` remakes `docs/screenshot-actuation.png` and
+  `docs/demo-key-tester.gif` from demo mode.
+- **Released at the owner's go-ahead before the live view was checked on the keyboard.** Still to check on the V3 Pro:
+  start/stop as the real window comes to the front or goes behind (Cmd-Tab must bring typing back at once), screen
+  lock, the Input Monitoring prompt, the 5-minute pause + Resume, opening on the last tab. Record verified results in
+  README/CHANGELOG/HANDOFF; fix anything found in a 0.4.2.
+- 0.4.0 checks done on the V3 Pro: window, menu bar, actuation, lighting, Studio after quit, key tester (2026-11-18);
+  no-keyboard screen + Reconnect (2026-11-20); Mixed readout + Apply confirmation, Snap Tap switch/board picking,
+  Studio preview while off, the 6 new presets (2026-11-22). The Windows build has still never run on a Windows PC
+  with a keyboard.
 - **Repo:** public, GitHub `samir777-eng/huntsman-for-mac`, default branch `master`, SEO description + 18 topics.
 - **Tests:** 1372 passing (2 skipped) on the Mac: `python -m pytest -q tests` (simulated keyboard, fake transports,
   headless Chromium UI tests in demo mode). Dev env: `requirements.txt` + `requirements-dev.txt`, then

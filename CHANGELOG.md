@@ -2,7 +2,7 @@
 
 All notable changes to this project are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
-## 0.4.1 – 2026-11-22
+## 0.4.1 – 2026-11-23
 
 ### Changed
 - The key tester runs live ("live view"): the *Test with a key press* and *Stop testing* buttons are gone. On the
@@ -130,9 +130,8 @@ All notable changes to this project are listed here. Versions follow [Semantic V
   point rules come from its reading of the firmware.
 - The Mac app on the V3 Pro (02A6): the window, the menu bar icon, actuation, lighting, Studio after the app quits and
   the key tester were checked on 2026-11-18, before the UX-audit changes; the no-keyboard screen and Reconnect on
-  2026-11-20. Not checked on the keyboard yet: the Mixed readout and the Apply confirmation, Snap Tap's switch and
-  picking keys on the board, Studio's preview while off, the six new presets, and the key tester since the UX-audit
-  changes. The golden tests show every byte sent to it is unchanged.
+  2026-11-20. Checked after release, on 2026-11-22: the Mixed readout and the Apply confirmation, Snap Tap's switch and
+  picking keys on the board, Studio's preview while off, and the six new presets (all passed). The golden tests show every byte sent to it is unchanged.
 
 ## 0.3.0 – 2026-11-17
 

@@ -416,9 +416,8 @@ then checked too (2026-11-18): the meter and readings update, and typing comes b
 
 **Version 0.4.0** was partly checked on the same keyboard before its UX changes (2026-11-18): the window, the menu
 bar icon, actuation, lighting, Studio after quitting the app, and the key tester; the no-keyboard screen and
-Reconnect on 2026-11-20. Not checked on the keyboard yet: the Mixed readout and Apply confirmation, Snap Tap's switch
-and picking keys on the board, Studio's preview while off, the six new presets, and the key tester since the UX
-changes. The golden tests show every byte sent to the V3 Pro is unchanged. The Windows build and the V2 Analog's
+Reconnect on 2026-11-20. Its UX changes were checked on 2026-11-22: the Mixed readout and Apply confirmation, Snap
+Tap's switch and picking keys on the board, Studio's preview while off, and the six new presets. All passed. The golden tests show every byte sent to the V3 Pro is unchanged. The Windows build and the V2 Analog's
 actuation are untested.
 
 **Version 0.4.1** (the live view) hasn't been checked on the keyboard yet: starting and stopping as the window comes

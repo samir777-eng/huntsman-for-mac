@@ -13,3 +13,5 @@ pip-cache/
 # the Mac installer build (tools/build_mac_pkg.sh)
 /build/
 /dist/
+# the WebView2 bootstrapper the Windows installer build downloads (never committed)
+MicrosoftEdgeWebview2Setup.exe

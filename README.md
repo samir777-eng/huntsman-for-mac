@@ -72,15 +72,16 @@ On Windows? There's an experimental, untested build: see [Windows (experimental)
 
 ## Windows (experimental)
 
-Version 0.4.0 adds a Windows build: the same app, as `Huntsman.exe`, with no Python or installer needed.
+Version 0.4.0 added a Windows build: the same app, as `Huntsman.exe`, with no Python needed. Since 0.6.0 it comes
+with an installer, `Huntsman-for-Windows-<version>-Setup.exe`; the zip stays as the portable option.
 
 > [!WARNING]
 > **Untested.** The Windows build has never run on a Windows PC with a keyboard. All that has run is the test suite
 > (simulated keyboard) on GitHub's `windows-latest` runners, and a smoke test there of the built `Huntsman.exe`
 > (`--version` and `--self-test`: it loads its code and data files, without opening a keyboard or a window). The
 > window, the tray icon, start at login, typing reactions, smart lighting, the Synapse check and every exchange with a
-> keyboard have not been seen working. A report either way helps: see
-> [CONTRIBUTING.md](CONTRIBUTING.md#testing-on-windows).
+> keyboard have not been seen working. The installer (0.6.0) has only run there too, silently, with no one looking at
+> its pages. A report either way helps: see [CONTRIBUTING.md](CONTRIBUTING.md#testing-on-windows).
 
 What's different on Windows:
 
@@ -104,25 +105,48 @@ What's different on Windows:
 
 ### Install on Windows
 
-1. **Download** `Huntsman-for-Windows-<version>.zip` from the
+1. **Download** `Huntsman-for-Windows-<version>-Setup.exe` from the
    [latest release](https://github.com/samir777-eng/huntsman-for-mac/releases/latest).
-2. **Unzip it** (right-click → *Extract All*) somewhere you'll keep it, for example `Documents`. You get a `Huntsman`
-   folder; keep everything in it together.
-3. **Close Razer Synapse**, including its icon in the notification area, or the app leaves the keyboard alone.
-4. **Run `Huntsman.exe`.** It isn't code-signed, so Windows SmartScreen may say *Windows protected your PC*: click
-   **More info**, then **Run anyway**.
+2. **Run it.** It isn't code-signed, so Windows SmartScreen may say *Windows protected your PC*: click **More info**,
+   then **Run anyway**.
+3. **Click through the wizard:** Welcome, License (GPL), the folder, Install, then Finish with *Open Huntsman for
+   Mac* ticked. It installs for you only, with no administrator password, to
+   `%LOCALAPPDATA%\Programs\Huntsman for Mac`, and adds a Start menu entry and an entry in **Settings → Apps**. A
+   desktop icon is optional (off unless you tick it).
+4. **Close Razer Synapse**, including its icon in the notification area, or the app leaves the keyboard alone.
 5. Turn on **Keyboard → Experimental support** and read its warning.
 
+Installing a newer Setup.exe over an installed copy upgrades it. If the lighting service is running, the installer
+closes it first and starts it again afterwards.
+
+Checked only on GitHub's Windows runner (Windows Server, build 10.0.26100, 2026-11-24), with a silent install: the
+folder, Start menu entry, Settings → Apps entry, the installed app's self-test, an upgrade over a running lighting
+service, and the uninstall below. Nobody has seen the wizard's pages, the SmartScreen prompt, or the installed app
+with a keyboard yet.
+
+**Portable (zip).** `Huntsman-for-Windows-<version>.zip` is the same app without an installer. Unzip it (right-click
+→ *Extract All*) somewhere you'll keep it, for example `Documents`, keep the `Huntsman` folder together, and run
+`Huntsman.exe` (SmartScreen as above). It adds no Start menu entry and no uninstaller.
+
+**Moving from the zip.** Run Setup.exe. When start at login points at the zip copy, Setup stops that copy's lighting
+service and moves start at login to the installed copy; then delete the old `Huntsman` folder. Checked on GitHub's
+Windows runner with a 0.6 zip copy, on a fresh install and over an installed copy. A 0.5 zip copy has no quit
+command, so Setup ends its service without putting the keyboard's own lighting back (not checked).
+
 The window uses the **Microsoft Edge WebView2 Runtime**. It's built into Windows 11; on Windows 10 it may be missing,
-and then the window can't open. Install the *Evergreen* runtime from
-[Microsoft's WebView2 page](https://developer.microsoft.com/microsoft-edge/webview2/) and run `Huntsman.exe` again.
+and then the window can't open. The installer checks for it and, if it's missing, runs Microsoft's WebView2
+installer silently; if that fails, the Finish page says where to get it. On the runner the check found the runtime
+already there, so installing it on a PC without it hasn't been tried. With the zip, install it yourself: the
+*Evergreen* runtime from [Microsoft's WebView2 page](https://developer.microsoft.com/microsoft-edge/webview2/), then
+run `Huntsman.exe` again.
 
 ### Start at login, tray icon and files
 
 - Opening the app starts the **lighting service** (the tray icon; it may be hidden under the **^** arrow) and turns
   on **start at login** for the current user, no administrator rights needed: the registry value
   `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run` → `Huntsman for Mac lighting`, set to
-  `"<your folder>\Huntsman\Huntsman.exe" --service`. If you move the folder, open the app once from its new place.
+  `"<install folder>\Huntsman.exe" --service` (installed: `%LOCALAPPDATA%\Programs\Huntsman for Mac`; zip: your
+  `Huntsman` folder). If you move the zip's folder, open the app once from its new place.
   If you delete that value, the app leaves it deleted (it remembers in `state.json` that it added it once) until you
   turn Studio on in the app, which adds it back.
 - The tray icon turns Studio on or off, switches presets, opens the app, and has **Quit lighting service**, which
@@ -136,8 +160,14 @@ and then the window can't open. Install the *Evergreen* runtime from
 
 ### Uninstall on Windows
 
+**Installed copy:** **Settings → Apps → Huntsman for Mac → Uninstall**. It closes an open window, stops the lighting
+service (the keyboard goes back to its own lighting), and removes the program files, the Start menu entry and the
+start-at-login value, if that value starts this copy. Your settings in `%APPDATA%\Huntsman for Mac` are kept; delete
+that folder and `%LOCALAPPDATA%\Huntsman for Mac` (the log and the service's key) to remove them too. Checked on GitHub's Windows runner
+only, as above.
+
 <details>
-<summary>Quit, remove start at login, delete the folders</summary>
+<summary>Zip copy: quit, remove start at login, delete the folders</summary>
 
 1. Tray icon → **Quit lighting service**, and close the window.
 2. Remove start at login. In a Command Prompt:
@@ -808,10 +838,10 @@ No. It talks to the keyboard directly over USB from macOS.
 <details>
 <summary><b>Does it work on Windows?</b></summary>
 
-There's an experimental Windows build (`Huntsman-for-Windows-<version>.zip` on the releases page), but it has never
-been run on a Windows PC with a keyboard, so nobody knows yet. On Windows every model needs Experimental support
-switched on, there's no key tester, and the app leaves the keyboard alone while Razer Synapse is running. See
-[Windows (experimental)](#windows-experimental).
+There's an experimental Windows build (`Huntsman-for-Windows-<version>-Setup.exe`, or the portable zip, on the
+releases page), but it has never been run on a Windows PC with a keyboard, so nobody knows yet. On Windows every model
+needs Experimental support switched on, there's no key tester, and the app leaves the keyboard alone while Razer
+Synapse is running. See [Windows (experimental)](#windows-experimental).
 
 </details>
 

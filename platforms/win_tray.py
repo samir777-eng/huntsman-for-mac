@@ -41,6 +41,7 @@ class TrayMenu(MenuState):
         self._pystray, self._image = pystray, image
         self.icon = None
         self._icon_lock = threading.Lock()
+        self._removed = False   # remove() was called: install() and run() do nothing from then on
 
     @property
     def installed(self):
@@ -82,7 +83,7 @@ class TrayMenu(MenuState):
 
     def install(self):
         with self._icon_lock:
-            if self.icon is not None:
+            if self.icon is not None or self._removed:
                 return
             ps = self._ps()
             self.icon = ps.Icon("huntsman-for-mac-lighting", self._image if self._image is not None else icon_image(),
@@ -92,8 +93,13 @@ class TrayMenu(MenuState):
         self.install()
 
     def run(self, on_ready=None):
-        """Show the icon and run its loop until remove(). on_ready() runs once the icon is visible."""
+        """Show the icon and run its loop until remove(). on_ready() runs once the icon is visible. Returns at once
+        when remove() came first (a quit before the loop started): nothing would stop that loop."""
         self.install()
+        with self._icon_lock:
+            icon = None if self._removed else self.icon
+        if icon is None:
+            return
 
         def setup(icon):
             icon.visible = True
@@ -102,7 +108,7 @@ class TrayMenu(MenuState):
                     on_ready()
                 except Exception:
                     traceback.print_exc()
-        self.icon.run(setup)
+        icon.run(setup)
 
     def _refresh(self):
         icon = self.icon
@@ -116,6 +122,7 @@ class TrayMenu(MenuState):
 
     def remove(self):
         with self._icon_lock:
+            self._removed = True
             icon, self.icon = self.icon, None
         if icon is not None:
             try:

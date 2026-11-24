@@ -2,6 +2,24 @@
 
 All notable changes to this project are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 0.4.2 – 2026-11-24
+
+### Added
+- Press ⌘ (the Windows key) on the Huntsman to leave the live view: it types again at once, so Cmd-Tab or Cmd-Q in the
+  same motion works. In live view the Huntsman's own shortcuts don't reach macOS, so before this only the mouse or
+  another keyboard could get you out. Live view then stays off until you click *Resume* or come back to the window.
+
+### Changed
+- *Try again* and *Open Privacy settings* in the live view's notice are buttons (they looked like plain text).
+- The empty gap between the live view's status line and "Last key" is gone.
+- README: macOS lists the key tester's Input Monitoring under **python3.13** / **python**, not "Huntsman for Mac".
+
+### Checked on hardware (V3 Pro, 2026-11-24)
+- The 0.4.1 live view: clicking another window types again at once, coming back starts it again, switching tab, the
+  lock screen, Input Monitoring off (notice, Open Privacy settings, Try again), the 5-minute pause and Resume, opening
+  on the last tab.
+- 0.4.2: ⌘ stops live view, Cmd-Tab in one motion works, holding ⌘ stops it once, the gap is gone.
+
 ## 0.4.1 – 2026-11-23
 
 ### Changed

@@ -241,8 +241,10 @@ shows the last key, where it typed, where it reset and how deep you pressed. A b
 isn't typing; the first time, the panel explains why once. You can still pick keys and Apply while it runs.
 
 Because the Huntsman doesn't type in live view, it stops, and the keyboard types again, as soon as you click another
-window (or Cmd-Tab), open another tab, minimise the window, close the window or quit, and when the
-keyboard is disconnected or you Reconnect. Coming back to the window or the tab starts it again. While it's paused the
+window, press ⌘ (the Windows key) on the Huntsman, open another tab, minimise the window, close the window or quit,
+and when the keyboard is disconnected or you Reconnect. In live view the Huntsman's own shortcuts don't reach macOS, so
+⌘ is the way out from the keyboard: it types again at once, and Cmd-Tab or Cmd-Q pressed in the same motion works.
+After ⌘, live view stays off until you click **Resume** or leave the window and come back. Coming back to the window or the tab starts it again. While it's paused the
 trace and readings stay where they are, dimmed, so nothing jumps. After 5 minutes without a key press it pauses: click
 **Resume** on the trace, or come back to the window or the tab. If it can't start, the panel says why once, with
 **Try again** (and **Open Privacy settings** when Input Monitoring isn't allowed); it doesn't keep retrying.
@@ -420,9 +422,11 @@ Reconnect on 2026-11-20. Its UX changes were checked on 2026-11-22: the Mixed re
 Tap's switch and picking keys on the board, Studio's preview while off, and the six new presets. All passed. The golden tests show every byte sent to the V3 Pro is unchanged. The Windows build and the V2 Analog's
 actuation are untested.
 
-**Version 0.4.1** (the live view) hasn't been checked on the keyboard yet: starting and stopping as the window comes
-to the front or goes behind, the Input Monitoring prompt, and the pause after 5 minutes. The test suite covers them
-with a simulated keyboard.
+The live view (0.4.1, with 0.4.2's ⌘ exit) was checked on the V3 Pro on 2026-11-24: clicking another window types
+again at once and coming back starts it again, switching tab, the lock screen (the password types on the Huntsman),
+Input Monitoring turned off (notice, **Open Privacy settings**, **Try again**), the 5-minute pause and **Resume**,
+opening on the last tab, and ⌘: it stops live view, a Cmd-Tab in the same motion switches apps, and holding ⌘ stops it
+once. All passed.
 
 ## Install
 
@@ -483,7 +487,7 @@ macOS asks the first time a feature needs one of these.
 
 | Permission | For | Listed as |
 |---|---|---|
-| Input Monitoring | The key tester | Huntsman for Mac |
+| Input Monitoring | The key tester | python3.13 and python (see below) |
 | Input Monitoring | Studio's typing effects and heatmap | Huntsman Lighting |
 | Microphone | Studio's sound effects | Huntsman Lighting |
 
@@ -499,8 +503,9 @@ The key tester reads the keyboard's travel reports, which macOS treats as input 
 nothing was asked:
 
 1. Open **System Settings → Privacy & Security → Input Monitoring**.
-2. Turn on **Huntsman for Mac**. If it isn't listed but **Python** is, turn that on instead. If neither is listed,
-   click **+** and choose `~/Applications/Huntsman for Mac.app`.
+2. Turn on **python3.13** and **python**. The app runs on Python, so macOS keeps this permission under the Python it
+   runs on (checked on macOS 26, 2026-11-24), not under "Huntsman for Mac". If neither is listed, click **+** and
+   choose `~/Applications/Huntsman for Mac.app`.
 3. Quit and reopen the app.
 
 Re-installing replaces the app, so macOS may ask again, or the switch may need to be turned off and on.
@@ -648,7 +653,7 @@ stops and restarts it.
 <details>
 <summary><b>The keyboard stopped typing</b></summary>
 
-If the app is in front on the Actuation tab, that's the live view: click another window and the keyboard types again.
+If the app is in front on the Actuation tab, that's the live view: press ⌘ (the Windows key) or click another window and the keyboard types again.
 Otherwise it was left in live view (for example, the app was killed). Unplug it and plug it back in; opening the app,
 or running any `huntsman.py` command, also puts it back to typing.
 

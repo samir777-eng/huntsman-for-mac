@@ -134,6 +134,7 @@ jobs:
           $exe = Join-Path $dir "Huntsman.exe"
           $data = Join-Path $env:APPDATA "Huntsman for Mac"
           $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+          if (-not (Test-Path $runKey)) { New-Item -Path $runKey -Force | Out-Null }   # absent on a fresh runner profile
           $runName = "Huntsman for Mac lighting"
           $uninstKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{3B18B4A2-4894-4CDB-9662-6307C10A5D1F}_is1"
           $menu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Huntsman for Mac.lnk"

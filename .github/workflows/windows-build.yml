@@ -146,7 +146,9 @@ jobs:
           function Services { @(Ours | Where-Object { $_.CommandLine -match '--service' }) }
           function Install($name) {
             $log = Join-Path $env:RUNNER_TEMP "$name.log"
-            $p = Start-Process -FilePath $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=`"$log`"" -Wait -PassThru
+            # Setup.exe waits for its own .tmp child; -Wait would also wait for the lighting service an upgrade restarts
+            $p = Start-Process -FilePath $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=`"$log`"" -PassThru
+            $p.WaitForExit()
             Get-Content $log | Out-Host
             if ($p.ExitCode -ne 0) { throw "$name exited with $($p.ExitCode)" }
             return $log

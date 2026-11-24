@@ -3,6 +3,24 @@
 Current state of Huntsman for Mac, updated 2026-11-24.
 
 ## Status
+- **0.5.0, Mac installer (branch `mac-pkg`, PR to master and release pending; plan docs/plans/2026-11-24-mac-pkg.md):**
+  `Huntsman-for-Mac-<version>.pkg` (Apple silicon, macOS 14+), wizard Introduction → License (GPL) → Install (admin
+  password) → done; installs `/Applications/Huntsman for Mac.app` with Python and libusb inside, the service as a
+  nested full-copy `Huntsman Lighting.app`. Keyboard tab → **Uninstall…**. Service fix: requests that arrive while it
+  starts wait for it (`service.START_WAIT`) instead of failing (seen on the first frozen build).
+- **0.5.0 checked on the owner's Mac (V3 Pro, macOS 27.2, 2026-11-24, CI-built pkg signed with the project cert):**
+  the pkg moved the install.sh copy (`~/Applications/Huntsman for Mac.app`) to the Trash and switched the lighting
+  service to the new app, settings kept; first launch set up the LaunchAgent, menu bar icon shows; lighting, actuation
+  and the key tester work from the installed app; Input Monitoring for the key tester is listed as "Huntsman for Mac";
+  installing a newer build over it kept that permission (no new prompt); Uninstall… removed the app, the service, its
+  login item and the receipt, kept settings, keyboard back to typing with its own lighting; reinstall worked.
+  Gatekeeper blocks the pkg on first open ("Apple could not verify … is free of malware", Move to Trash / Done). The
+  owner did not get through System Settings → Open Anyway (found it frustrating); the install went through after
+  `xattr -d com.apple.quarantine <pkg>`. Docs give Open Anyway as the macOS route (unchecked) plus that command.
+- **Signing certificate (self-signed, valid to 2036-11-21; reuse it: a new cert changes the apps' designated
+  requirement, so macOS permissions would likely reset):** GitHub secrets `MAC_SIGN_P12` / `MAC_SIGN_P12_PASSWORD`. Backup in the macOS Keychain:
+  `security find-generic-password -s claude-mind/huntsman-mac-sign-p12 -w` and
+  `security find-generic-password -s claude-mind/huntsman-mac-sign-p12-password -w`. Never paste the values anywhere.
 - **Released:** v0.4.2 (2026-11-24, https://github.com/samir777-eng/huntsman-for-mac/releases/tag/v0.4.2): ⌘ ends
   the live view, notice buttons, Actuation gap, verified live-view results. `Huntsman-for-Windows-0.4.2.zip` is
   attached by `.github/workflows/windows-build.yml`. `master` = v0.4.2 (merge of PR #9, branch `live-view-fixes`).
@@ -20,19 +38,22 @@ Current state of Huntsman for Mac, updated 2026-11-24.
   Studio preview while off, the 6 new presets (2026-11-22). The Windows build has still never run on a Windows PC
   with a keyboard.
 - **Repo:** public, GitHub `samir777-eng/huntsman-for-mac`, default branch `master`, SEO description + 18 topics.
-- **Tests:** 1394 passing (2 skipped) on the Mac: `python -m pytest -q tests` (simulated keyboard, fake transports,
+- **Tests:** 1510 passing (5 skipped) on the Mac: `python -m pytest -q tests` (simulated keyboard, fake transports,
   headless Chromium UI tests in demo mode). Dev env: `requirements.txt` + `requirements-dev.txt`, then
   `playwright install chromium`. GitHub Actions `CI` (.github/workflows/ci.yml) runs it on macos-latest and
   windows-latest (Windows: `requirements-win.txt`; 37 `mac_only` tests skipped, see tests/conftest.py).
-- **Installed on the maintainer's Mac:** master at d238b89 (v0.4.2). Note: AppleScript `quit app "Huntsman for Mac"`
+- **Installed on the maintainer's Mac:** a CI-built 0.5.0 pkg, build 7, from branch `mac-pkg` at 3544c91 (2026-11-24), in /Applications;
+  the install.sh copy went to the Trash. Note: AppleScript `quit app "Huntsman for Mac"`
   is ignored by the app; quit with Cmd-Q/menu or SIGTERM (restores typing).
 - **CI stays on GitHub-hosted runners** (owner decision 2026-11-22): the repo is public, and fork PRs could run code on
   the self-hosted fleet; rule recorded in ~/Downloads/Projects/ci-monitor/fleet/README.md. Don't onboard it.
 
 ## What the product is
 Unofficial macOS control app for the Razer Huntsman V3 Pro (USB 1532:02A6), which Razer Synapse for Mac doesn't
-support. Since 0.3.0 six more models are detected as **experimental** (see Models below). Both parts live inside `~/Applications/Huntsman for Mac.app` (install.sh copies the code and a `--copies`
-venv into the bundle and signs it ad hoc; unsigned apps can't read ~/Downloads):
+support. Since 0.3.0 six more models are detected as **experimental** (see Models below). Both parts live inside
+one bundle: `/Applications/Huntsman for Mac.app` from the .pkg (0.5.0, PyInstaller, signed with the project cert), or
+`~/Applications/Huntsman for Mac.app` from install.sh (source: copies the code and a `--copies` venv into the bundle
+and signs it ad hoc; unsigned apps can't read ~/Downloads; developers and Intel Macs):
 1. **The app** (`app.py` + `ui/`, pywebview): control panel with tabs Actuation, Rapid Trigger, Snap Tap, Lighting
    (keyboard's own effects + per-key paint), Studio, Keyboard (gear); the key tester is inside Actuation.
 2. **The lighting service** "Huntsman Lighting" (`service.py`, nested `Contents/Library/LoginItems/Huntsman
@@ -108,8 +129,30 @@ venv into the bundle and signs it ad hoc; unsigned apps can't read ~/Downloads):
 - `app.py`: pywebview Api (actuation, firmware lighting, key tester, Studio proxy) · `huntsman.py`: CLI.
 - `ui/`: index.html, style.css, app.js, studio.js, demo.js (+ generated demo-layout.js / demo-studio.js via
   `tools/make_demo_layout.py` / `tools/make_demo_studio.py`; tests fail if stale). `ui/index.html?demo` = no hardware.
+- Mac installer (0.5.0): `packaging/mac/` (`huntsman-mac.spec` two PyInstaller apps; `plists.py` frozen Info.plists,
+  LSMinimumSystemVersion 14.0; `service_entry.py`; `pkg/` distribution.xml, welcome/conclusion, preinstall stops the
+  window + service, postinstall trashes the install.sh copy and repoints/restarts an existing LaunchAgent).
+  `tools/build_mac_pkg.sh build|package|all` (build without secrets; package signs, verifies, self-tests, pkgs).
+  `.github/workflows/mac-build.yml` (GitHub-hosted macos-15 arm64; cert into a temp keychain only for the package
+  phase; installs the pkg on the runner and self-tests from /Applications; release job attaches
+  `Huntsman-for-Mac-<version>.pkg`, tag must equal the version; a release never ships ad hoc).
+  `requirements-mac-build.txt`. Frozen-only code paths (`sys.frozen`): `huntsman_core.libusb_path()` (bundled libusb
+  first), `app.start_service` writes/bootstraps the LaunchAgent if missing or stale, `service.open_app` via bundle id,
+  log redirection to `~/Library/Logs/Huntsman for Mac.log`, `app.uninstall_mac` (osascript admin `rm -rf` +
+  `pkgutil --forget io.github.huntsman-for-mac.pkg`; `platform_status()["can_uninstall"]` only for the
+  /Applications copy), `--version` / `--self-test` on both executables. No `huntsman.py` CLI in the pkg app.
+  Tests: tests/test_mac_frozen.py, tests/test_mac_packaging.py.
 - Data: `~/Library/Application Support/Huntsman for Mac/` (state.json, presets.json, heatmap.json,
   first-launch-snapshot.json, *.lock, service.sock). Log: `~/Library/Logs/Huntsman for Mac.log`.
+
+## Packaging facts (0.5.0)
+- macOS Installer skips a bundle whose installed `CFBundleVersion` is the same as the pkg's, so bump
+  `CFBundleVersion` in both `packaging/Info.plist` and `packaging/Lighting-Info.plist` for every release and every
+  test build you install over another. Currently **7**. `CFBundleShortVersionString` must equal `__version__`
+  (`plists.mac_info` checks).
+- Both bundles are `BundleIsRelocatable = false` (else Installer "upgrades" the ~/Applications copy in place).
+- arm64 only (cffi/numpy/libusb wheels); min macOS 14.0 (numpy wheel). install.sh keeps 12.0.
+- A self-signed cert gives a stable designated requirement, so TCC grants survive updates (seen: Input Monitoring kept).
 
 ## Protocol facts (verified on hardware, V3 Pro firmware 1.03)
 - Actuation = byte 3, release = byte 4 of 02:12/02:92 (release = actuation − 6, min threshold 7, factory 76/70).
@@ -133,9 +176,12 @@ brightness, key tester, Studio presets (rainbow, aurora, matrix, fire, typing gl
 Studio layers/params/presets/Sound/Typing/Smart panels, effects continuing after the app quits.
 
 ## Not yet verified
-- macOS permission name for the service ("Huntsman Lighting" vs "Python"). The key tester's Input Monitoring is held
-  by the Python binaries (bundle venv `python`, Homebrew `python3.13`), not the bundle id (TCC.db, 2026-11-24), so
-  `tccutil reset ListenEvent io.github.huntsman-for-mac` does nothing.
+- macOS permission name for the service ("Huntsman Lighting") for Microphone and Input Monitoring, in the pkg app and
+  install.sh copies. In an install.sh copy the key tester's Input Monitoring is held by the Python binaries (bundle
+  venv `python`, Homebrew `python3.13`), not the bundle id (TCC.db, 2026-11-24), so `tccutil reset ListenEvent
+  io.github.huntsman-for-mac` does nothing there; the pkg app is listed as "Huntsman for Mac" (2026-11-24).
+- Gatekeeper's Open Anyway path for the pkg (owner didn't get through it; xattr worked).
+- pkg install with several users logged in: another user's lighting service isn't stopped (known limitation).
 - Lighting restore at logout/shutdown; KeepAlive restart after a crash; install.sh rollback after a failed build.
 - Smart lighting over a long session (real sleep/lock); BlackHole/system-audio input.
 - All six experimental models (no tester reports yet), incl. LED positions and the 8KHz profile read (05:84).
@@ -151,8 +197,11 @@ Studio layers/params/presets/Sound/Typing/Smart panels, effects continuing after
   with the owner, then merge to master and release.
 
 ## Next (pick with the owner)
-0. (Done 2026-11-24) Live-view hardware check; fixes shipped as 0.4.2.
-0b. Windows build on a real Windows PC with a Huntsman (never run yet).
+0. Merge `mac-pkg` (PR) and publish v0.5.0; check the release job attaches `Huntsman-for-Mac-0.5.0.pkg`.
+0a. Apple Developer ID + notarization (owner decision, $99/yr) to remove the Gatekeeper block on the pkg.
+0b. Windows installer: Inno Setup wizard with WebView2 auto-install (owner's choice, after the Mac pkg). Still open
+    too: the Windows build on a real Windows PC with a Huntsman (never run yet).
+(Done 2026-11-24) Live-view hardware check; fixes shipped as 0.4.2.
 0c. (Done in 0.4.2) Actuation gap; media regenerated. Minor, open: AppleScript quit is ignored by the app.
 1. (Done 2026-11-18) GitHub social preview set to `docs/social-preview.png` (1280×640, from the README banner).
 2. (Done 2026-11-18) Landing page live at https://samir777-eng.github.io/huntsman-for-mac/ (GitHub Pages, master
@@ -169,3 +218,4 @@ Studio layers/params/presets/Sound/Typing/Smart panels, effects continuing after
 - docs/plans/2026-11-18-windows.md, 2026-11-18-v2-analog-actuation.md, 2026-11-18-ux-audit-fixes.md (v0.4.0)
 - docs/plans/2026-11-22-live-key-tester.md (v0.4.1)
 - docs/plans/2026-11-24-live-view-fixes.md (v0.4.2)
+- docs/plans/2026-11-24-mac-pkg.md (v0.5.0)

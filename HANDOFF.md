@@ -1,6 +1,6 @@
 # HANDOFF
 
-Current state of Huntsman for Mac, updated 2026-11-23.
+Current state of Huntsman for Mac, updated 2026-11-24.
 
 ## Status
 - **Released:** v0.4.1 (2026-11-23, https://github.com/samir777-eng/huntsman-for-mac/releases/tag/v0.4.1): the live
@@ -21,9 +21,11 @@ Current state of Huntsman for Mac, updated 2026-11-23.
   headless Chromium UI tests in demo mode). Dev env: `requirements.txt` + `requirements-dev.txt`, then
   `playwright install chromium`. GitHub Actions `CI` (.github/workflows/ci.yml) runs it on macos-latest and
   windows-latest (Windows: `requirements-win.txt`; 37 `mac_only` tests skipped, see tests/conftest.py).
-- **Installed on the maintainer's Mac:** branch `windows` at 0.4.0 pre-UX-fixes (owner checked window, menu bar,
-  actuation, lighting, Studio after quit, key tester: all passed, 2026-11-18; no-keyboard screen + Reconnect
-  2026-11-20).
+- **Installed on the maintainer's Mac:** branch `auto-key-tester` at 7dc0f58, before the version bump aa00a64
+  and the wording fix 88ab285 (About still says 0.4.0). Reinstall from `master` (quit the app, `./install.sh`) before the live-view
+  hardware check.
+- **CI stays on GitHub-hosted runners** (owner decision 2026-11-22): the repo is public, and fork PRs could run code on
+  the self-hosted fleet; rule recorded in ~/Downloads/Projects/ci-monitor/fleet/README.md. Don't onboard it.
 
 ## What the product is
 Unofficial macOS control app for the Razer Huntsman V3 Pro (USB 1532:02A6), which Razer Synapse for Mac doesn't
@@ -36,7 +38,7 @@ venv into the bundle and signs it ad hoc; unsigned apps can't read ~/Downloads):
    owns the menu bar icon and the Studio engine, so app-drawn effects keep running after the app quits. The app talks
    to it over `ipc.py` (UNIX socket `data_dir()/service.sock`, JSON lines, pause leases around every keyboard op).
 
-## Models (0.4.0)
+## Models and features
 - `models.py`: table of 7 models (PID, name, matrix, layout file, effects, features, status). Only 02A6 is
   `verified`. Experimental: V3 Pro TKL 02A7, V3 Pro 8KHz 02CF, V3 Pro Mini 02B0 (5×15), V2 026C, V2 TKL 026B (6×18),
   V2 Analog 0266 (8×23, frame size 74). V2/V2 TKL: lighting/per-key/Studio only. Key tester only on verified models.
@@ -59,7 +61,7 @@ venv into the bundle and signs it ad hoc; unsigned apps can't read ~/Downloads):
   `packaging/windows/huntsman.spec` (PyInstaller one-folder `Huntsman.exe`, manifest `platforms/bundle.py`),
   `Huntsman.exe --version` / `--self-test`, workflow `Windows build` (dispatch, packaging pushes, release published →
   `Huntsman-for-Windows-<version>.zip` attached). Frozen self-test passes on windows-latest; nothing run on a real
-  Windows PC with a keyboard. Next: W4 docs (README/landing Windows section, SmartScreen, CHANGELOG).
+  Windows PC with a keyboard. W4 docs done (README/landing Windows section, SmartScreen, CHANGELOG).
 - Review fixes in 0.4.0: while Synapse runs nothing reaches the keyboard
   (`HidTransport` refuses to open/exchange, `hc.synapse_block()`, app/service drop handles, `Api.platform_status()`
   is the window's only poll, `model()` answers from the last model with `offline`); build workflow `contents: read`
@@ -78,7 +80,7 @@ venv into the bundle and signs it ad hoc; unsigned apps can't read ~/Downloads):
   Normal 50 %, "Onboard profile". Review fixes: the Apply confirm names only the keys that will change ("99 keys will
   change from 2.0 mm to 1.0 mm"; skipped when the scope is at one depth), no preset pressed while Mixed, Snap Tap pick
   order resets on leaving the tab/Reconnect, focus moves to the stage Reconnect when panes/board go inert, disabled Snap Tap
-  button reads "Apply", `Studio._previewing` resets if the preview loop or its spawn raises. Needs a hardware check
+  button reads "Apply", `Studio._previewing` resets if the preview loop or its spawn raises. Hardware-checked 2026-11-22
   (actuation, Snap Tap, preview).
 - Layouts: `layout.json` (02A6) + `layouts/<PID>.json`; LED positions for experimental models are guesses
   (reasoning in the models.py docstring) until testers send LED check results.
@@ -86,7 +88,7 @@ venv into the bundle and signs it ad hoc; unsigned apps can't read ~/Downloads):
   `state.json["experimental"]` is on (Keyboard tab switch or `huntsman.py experimental on`); never driver mode;
   unknown commands refused. Golden-byte tests (`tests/golden_02a6.json`) pin every 02A6 packet.
 - First-launch snapshot records its PID; restore refuses another model's snapshot. One snapshot per Mac user.
-- Key tester lives in Actuation and runs live (0.4.1, branch `auto-key-tester`, plan
+- Key tester lives in Actuation and runs live (0.4.1, plan
   docs/plans/2026-11-22-live-key-tester.md): no button; starts while Actuation is in front, stops on tab/app change,
   hidden, close, disconnect, 5 min idle. UX-audit fixes: opens on the last tab (state.ui.tab; first launch Lighting),
   one-time intro (state.ui.liveSeen), stable layout with a Resume chip, `Api.open_privacy`. Media:
@@ -144,6 +146,14 @@ Studio layers/params/presets/Sound/Typing/Smart panels, effects continuing after
   with the owner, then merge to master and release.
 
 ## Next (pick with the owner)
+0. **Live-view hardware check on the V3 Pro** (released unchecked in 0.4.1), one item at a time, after reinstalling
+   from master: Cmd-Tab away → typing back at once (most important); back → live again; switching tab → typing;
+   screen lock; Input Monitoring prompt (Deny → notice + Open Privacy settings + Try again); 5-minute pause + Resume
+   chip; opens on the last tab. Record verified results in README ("Version 0.4.1" paragraph), CHANGELOG 0.4.1 "Not
+   checked on hardware", HANDOFF. Anything failing → fix in 0.4.2 (same workflow).
+0b. Windows build on a real Windows PC with a Huntsman (never run yet).
+0c. Cosmetic: empty gap in the Actuation panel between the live status line and "Last key" (see
+    docs/screenshot-actuation.png).
 1. (Done 2026-11-18) GitHub social preview set to `docs/social-preview.png` (1280×640, from the README banner).
 2. (Done 2026-11-18) Landing page live at https://samir777-eng.github.io/huntsman-for-mac/ (GitHub Pages, master
    /docs, `docs/index.html`; tests in tests/test_site.py). Keep its facts in step with the README.
@@ -156,3 +166,5 @@ Studio layers/params/presets/Sound/Typing/Smart panels, effects continuing after
 - docs/plans/2026-11-17-v2-lighting-studio.md (v0.2.0)
 - docs/plans/2026-11-17-v3-more-models.md (v0.3.0)
 - docs/plans/2026-11-18-landing-page.md (GitHub Pages)
+- docs/plans/2026-11-18-windows.md, 2026-11-18-v2-analog-actuation.md, 2026-11-18-ux-audit-fixes.md (v0.4.0)
+- docs/plans/2026-11-22-live-key-tester.md (v0.4.1)

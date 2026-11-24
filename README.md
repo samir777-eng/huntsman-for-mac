@@ -18,6 +18,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/samir777-eng/huntsman-for-mac/releases/latest"><b>⬇️ Download</b></a> ·
   <a href="#quick-start"><b>Quick start</b></a> ·
   <a href="#windows-experimental"><b>Windows</b></a> ·
   <a href="#features"><b>Features</b></a> ·

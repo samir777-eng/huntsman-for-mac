@@ -58,8 +58,8 @@
       <input class="travel" type="range" id="depth" min="0.1" max="4" step="0.1" value="2" aria-label="Actuation depth">
       <div class="scale"><span>0.1 mm, lightest</span><span>4.0 mm, deepest</span></div>
       <div class="presets" id="presets"></div>
-      <div class="notice live-intro" id="liveIntro" hidden><p><strong>Live view.</strong> While this window is in front on Actuation, the Huntsman sends each key's travel here instead of typing, so you can see every press. Click another window to type again.</p><button class="link">Got it</button></div>
-      <p class="live-note" id="liveNote"><span id="liveText" role="status"></span> <button class="link" id="liveGo" hidden>Try again</button> <button class="link" id="livePrivacy" hidden>Open Privacy settings</button></p>
+      <div class="notice live-intro" id="liveIntro" hidden><p><strong>Live view.</strong> While this window is in front on Actuation, the Huntsman sends each key's travel here instead of typing, so you can see every press. Press ⌘ (the Windows key) or click another window to type again.</p><button class="link">Got it</button></div>
+      <p class="live-note" id="liveNote"><span id="liveText" role="status"></span> <button class="secondary" id="liveGo" hidden>Try again</button> <button class="secondary" id="livePrivacy" hidden>Open Privacy settings</button></p>
       <p class="hint" id="actTestWhy" hidden></p>
       <div id="actReadings">
         <p class="readings-title" id="tKey">Last key: –</p>
@@ -291,7 +291,7 @@
     <div class="progress" id="progress" role="progressbar" aria-label="Talking to the keyboard" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><div class="progress-bar"></div></div>
     <div class="test-banner" id="testBanner" hidden>
       <span class="rec" aria-hidden="true"></span>
-      <span>Live view: the Huntsman doesn't type while this window is in front. Click another window to type again.</span>
+      <span>Live view: the Huntsman doesn't type while this window is in front. Press ⌘ (the Windows key) or click another window to type again.</span>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <section class="no-kb" id="noKb" aria-labelledby="noKbTitle" hidden>

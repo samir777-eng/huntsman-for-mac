@@ -802,8 +802,12 @@ window.onDepth = batch => {            // batch: [[keyId, mm], ...] from the app
 };
 // Pushed when the app ends a session by itself: 5 minutes without key travel (paused until asked again) or a failed
 // switch back to typing (said once, also as an error toast)
-window.onTestEnded = (reason, ok) => {
-  testing = false; liveHeld = ok === false ? { why: reason } : { idle: true, why: reason || "Live view paused." }; testerUi();
+// kind "cmd": ⌘ on the Huntsman ended it (depth_stream.LEAVE). Held off like the idle pause; it comes back with Resume
+// or once the window is in front again after leaving it (left: it may already have gone, by the shortcut pressed next)
+window.onTestEnded = (reason, ok, kind) => {
+  testing = false;
+  liveHeld = ok === false ? { why: reason } : { idle: true, cmd: kind === "cmd", left: !inFront(), why: reason || "Live view paused." };
+  testerUi();
   if (ok === false) toast(reason, true);
 };
 function meterLines() {
@@ -877,7 +881,10 @@ function testerUi() {
 }
 // Live: the tester runs while Actuation is in front (window focused and visible) on a model with the key tester, and
 // stops when any of that changes. Starts and stops are queued so they never overlap; focus changes are debounced.
-let liveHeld = null;        // paused until focus, coming back to Actuation or the button: {idle, why} or {why} (a failure)
+// liveHeld: live view held off until Resume / Try again, or (idle) the window comes back: {why} a failure (perm: Input
+// Monitoring refused, offers Privacy settings); {idle: true, why} the idle pause; {idle: true, cmd: true, left, why} ⌘ on
+// the Huntsman ended it, lifted by focus only once the window has left (left) since
+let liveHeld = null;
 let liveStarting = false, startingShown = false, liveTimer = null, liveOp = Promise.resolve();
 const inFront = () => document.hasFocus() && document.visibilityState === "visible";
 const liveWanted = () => liveWanted.ignoringFront() && inFront() && !liveHeld;
@@ -890,8 +897,8 @@ function liveUi() {
   $("#liveNote").hidden = !hasFeature("key_tester");
   $("#liveNote").classList.toggle("notice", fail);
   // the one live region: the state only, never "Starting" (the chip shows that, after a moment)
-  setText($("#liveText"), testing ? "Live view on. Click another window to type again."   // spoken once per start
-    : held ? (held.idle ? `${held.why} The Huntsman types normally.` : held.why)
+  setText($("#liveText"), testing ? `Live view on. ${byName("LEFT_GUI") != null ? "Press ⌘ or click" : "Click"} another window to type again.`   // spoken once per start
+    : held ? (held.cmd ? `${held.why} Click Resume to see live view again.` : held.idle ? `${held.why} The Huntsman types normally.` : held.why)
     : liveStarting ? "" : !inFront() && liveWanted.ignoringFront() ? "Live view paused: this window isn't in front. The Huntsman types normally." : "");
   $("#liveGo").hidden = !fail || testing; $("#livePrivacy").hidden = !fail || !held.perm || testing;
   setText($("#traceChipText"), testing ? "" : liveStarting ? (startingShown ? "Starting live view…" : "")
@@ -920,9 +927,10 @@ const liveAgain = () => { keepFocus(); liveHeld = null; liveSync(); };
 $("#liveGo").onclick = $("#traceResume").onclick = liveAgain;   // board clicks only select keys
 $("#livePrivacy").onclick = () => call("open_privacy").catch(() => {});
 $("#liveIntro button").onclick = () => { keepFocus(); $("#liveIntro").hidden = true; };
-addEventListener("blur", () => { liveUi(); liveSync(300); });
-addEventListener("focus", () => { if (liveHeld?.idle) liveHeld = null; liveUi(); liveSync(300); });   // a failure waits for Try again
-document.addEventListener("visibilitychange", () => { liveUi(); liveSync(document.visibilityState === "hidden" ? 0 : 300); });
+const leaving = () => { if (liveHeld?.cmd) liveHeld.left = true; };
+addEventListener("blur", () => { leaving(); liveUi(); liveSync(300); });
+addEventListener("focus", () => { if (liveHeld?.idle && (!liveHeld.cmd || liveHeld.left)) liveHeld = null; liveUi(); liveSync(300); });   // a failure waits for Try again
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") leaving(); liveUi(); liveSync(document.visibilityState === "hidden" ? 0 : 300); });
 addEventListener("beforeunload", () => { if (testing) api.stop_test(); });
 
 /* ---------- progress of long reads and writes (app.py calls window.onProgress) ---------- */

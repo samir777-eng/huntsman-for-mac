@@ -770,13 +770,17 @@ class Api:
                     finally:
                         release(stuck=not ok)
                     if reason and self._test is session[0]:   # a newer session's window state isn't this one's
-                        self._pusher.push("onTestEnded", reason, ok)
+                        # "cmd": ⌘ on the Huntsman ended it; the window holds live view off as for the idle pause
+                        self._pusher.push("onTestEnded", reason, ok, "cmd" if reason == depth_stream.LEAVE else "")
                 in_background(follow_up)
 
             session = [None]
             self._test = session[0] = depth_stream.DepthSession(kb, batch, ended)
             try:
                 started = self._test.start()
+            except depth_stream.StillInDriverMode:
+                release(stuck=True)   # not typing: left to expire, so the service switches it back before frames
+                raise
             except BaseException:
                 release()   # never started, or stopped again (a failed switch-back already kept the hold)
                 raise

@@ -170,6 +170,37 @@ def test_key_tester_holds_a_lease_until_it_ends(app, fake, monkeypatch):
     assert svc.leases == set()
 
 
+@pytest.mark.parametrize("reason,kind", [("cmd", "cmd"), ("Live view paused after 5 minutes without a key press.", "")])
+def test_key_tester_tells_the_window_when_cmd_ended_it(app, fake, monkeypatch, reason, kind):
+    """⌘ on the Huntsman stops the session in the stream thread (normal stop path: lease released, settings
+    re-sent); the window then learns it was ⌘, so it holds live view off like the idle pause."""
+    svc = FakeService()
+    api = make_api(app, svc)
+    sessions = _session(app, monkeypatch)
+    pushed = []
+    api._pusher.push = lambda fn, *a: pushed.append((fn, a))
+    reason = app.depth_stream.LEAVE if reason == "cmd" else reason
+    assert api.start_test()["ok"]
+    sessions[0].stop(reason)
+    assert svc.leases == set()
+    assert ("onTestEnded", (reason, True, kind)) in pushed
+
+
+def test_key_tester_switch_back_failing_inside_start_abandons_the_lease(app, fake, monkeypatch):
+    svc = FakeService()
+    api = make_api(app, svc)
+    sessions = _session(app, monkeypatch)
+
+    def start():
+        raise app.depth_stream.StillInDriverMode(app.depth_stream.UNPLUG)
+    monkeypatch.setattr(app.depth_stream, "DepthSession", lambda kb, b, e: sessions.append(None) or
+                        type("S", (), {"start": staticmethod(start), "running": False})())
+    assert api.start_test()["ok"] is False
+    # the call's own lease is released; the tester's is left to expire, so the service switches the keyboard back
+    assert len(svc.leases) == 1
+    assert api._test_lease is None
+
+
 def test_key_tester_failed_switch_back_leaves_the_lease_to_expire(app, fake, monkeypatch):
     svc = FakeService()
     api = make_api(app, svc)

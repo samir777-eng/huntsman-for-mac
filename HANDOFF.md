@@ -3,12 +3,14 @@
 Current state of Huntsman for Mac, updated 2026-11-24.
 
 ## Status
-- **0.5.0, Mac installer (branch `mac-pkg`, PR to master and release pending; plan docs/plans/2026-11-24-mac-pkg.md):**
+- **Released v0.5.0 (2026-11-24, https://github.com/samir777-eng/huntsman-for-mac/releases/tag/v0.5.0; v0.5.0 = merge of
+  PR #11 (e2b9196); plan docs/plans/2026-11-24-mac-pkg.md). Assets: `Huntsman-for-Mac-0.5.0.pkg` (build 8; the apps inside are signed with the project
+  cert, checked) and `Huntsman-for-Windows-0.5.0.zip`, both attached by CI.**
   `Huntsman-for-Mac-<version>.pkg` (Apple silicon, macOS 14+), wizard Introduction → License (GPL) → Install (admin
   password) → done; installs `/Applications/Huntsman for Mac.app` with Python and libusb inside, the service as a
   nested full-copy `Huntsman Lighting.app`. Keyboard tab → **Uninstall…**. Service fix: requests that arrive while it
   starts wait for it (`service.START_WAIT`) instead of failing (seen on the first frozen build).
-- **0.5.0 checked on the owner's Mac (V3 Pro, macOS 27.2, 2026-11-24, CI-built pkg signed with the project cert):**
+- **0.5.0 checked on the owner's Mac (V3 Pro, macOS 27.2, 2026-11-24, CI-built pkg whose apps are signed with the project cert):**
   the pkg moved the install.sh copy (`~/Applications/Huntsman for Mac.app`) to the Trash and switched the lighting
   service to the new app, settings kept; first launch set up the LaunchAgent, menu bar icon shows; lighting, actuation
   and the key tester work from the installed app; Input Monitoring for the key tester is listed as "Huntsman for Mac";
@@ -21,10 +23,8 @@ Current state of Huntsman for Mac, updated 2026-11-24.
   requirement, so macOS permissions would likely reset):** GitHub secrets `MAC_SIGN_P12` / `MAC_SIGN_P12_PASSWORD`. Backup in the macOS Keychain:
   `security find-generic-password -s claude-mind/huntsman-mac-sign-p12 -w` and
   `security find-generic-password -s claude-mind/huntsman-mac-sign-p12-password -w`. Never paste the values anywhere.
-- **Released:** v0.4.2 (2026-11-24, https://github.com/samir777-eng/huntsman-for-mac/releases/tag/v0.4.2): ⌘ ends
-  the live view, notice buttons, Actuation gap, verified live-view results. `Huntsman-for-Windows-0.4.2.zip` is
-  attached by `.github/workflows/windows-build.yml`. `master` = v0.4.2 (merge of PR #9, branch `live-view-fixes`).
-  v0.1.0–v0.4.1 are also tagged. Media: `tools/make_media.py` remakes `docs/screenshot-actuation.png` and
+- **Earlier:** v0.4.2 (2026-11-24): ⌘ ends the live view, notice buttons, Actuation gap, verified live-view results.
+  v0.1.0–v0.4.2 are tagged. Media: `tools/make_media.py` remakes `docs/screenshot-actuation.png` and
   `docs/demo-key-tester.gif` from demo mode.
 - **0.4.2 (PR #9, plan docs/plans/2026-11-24-live-view-fixes.md):** ⌘ (Windows key, LEFT_GUI) on
   the Huntsman ends live view from the stream thread (`depth_stream.LEAVE`, 0.5 mm); notice buttons are real buttons;
@@ -197,7 +197,8 @@ Studio layers/params/presets/Sound/Typing/Smart panels, effects continuing after
   with the owner, then merge to master and release.
 
 ## Next (pick with the owner)
-0. Merge `mac-pkg` (PR) and publish v0.5.0; check the release job attaches `Huntsman-for-Mac-0.5.0.pkg`.
+0. (Done 2026-11-24) v0.5.0 released with the pkg attached. The maintainer's Mac runs test build 7; installing the
+   release pkg (build 8) over it is optional.
 0a. Apple Developer ID + notarization (owner decision, $99/yr) to remove the Gatekeeper block on the pkg.
 0b. Windows installer: Inno Setup wizard with WebView2 auto-install (owner's choice, after the Mac pkg). Still open
     too: the Windows build on a real Windows PC with a Huntsman (never run yet).

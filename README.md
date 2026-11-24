@@ -455,7 +455,7 @@ If you installed it before with `install.sh`, the installer moves that copy (`~/
 the Trash and switches the lighting service to the new app. Your settings in
 `~/Library/Application Support/Huntsman for Mac` are kept.
 
-The pkg is signed with the project's own self-signed certificate. It isn't signed with an Apple Developer ID or
+The apps inside the pkg are signed with the project's own self-signed certificate; the pkg itself is unsigned. Neither is signed with an Apple Developer ID or
 notarized by Apple, so macOS blocks it the first time you open it (see
 [macOS says it can't verify the installer](#troubleshooting)). A Developer ID-signed, notarized installer isn't
 available yet.

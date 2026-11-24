@@ -10,7 +10,8 @@ All notable changes to this project are listed here. Versions follow [Semantic V
   `/Applications/Huntsman for Mac.app` on the Mac with its own Python and libusb inside: no Homebrew, Python or
   Terminal needed. The lighting service (`Huntsman Lighting.app`) is a separate app inside it. Built by the `Mac build`
   workflow (`tools/build_mac_pkg.sh`, PyInstaller) on GitHub's Apple silicon runners and signed with the project's own
-  self-signed certificate. It isn't signed with an Apple Developer ID or notarized, so macOS blocks it the first time
+  self-signed certificate (the apps inside; the pkg itself is unsigned). Neither is signed with an Apple Developer ID
+  or notarized, so macOS blocks the pkg the first time
   (README → Troubleshooting).
 - The installed app sets up the lighting service itself the first time it opens (LaunchAgent
   `io.github.huntsman-for-mac.lighting`).

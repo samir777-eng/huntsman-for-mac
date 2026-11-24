@@ -8,7 +8,7 @@ Current state of Huntsman for Mac, updated 2026-11-24.
   attached by `.github/workflows/windows-build.yml`. `master` = v0.4.2 (merge of PR #9, branch `live-view-fixes`).
   v0.1.0–v0.4.1 are also tagged. Media: `tools/make_media.py` remakes `docs/screenshot-actuation.png` and
   `docs/demo-key-tester.gif` from demo mode.
-- **0.4.2 (branch `live-view-fixes`, plan docs/plans/2026-11-24-live-view-fixes.md):** ⌘ (Windows key, LEFT_GUI) on
+- **0.4.2 (PR #9, plan docs/plans/2026-11-24-live-view-fixes.md):** ⌘ (Windows key, LEFT_GUI) on
   the Huntsman ends live view from the stream thread (`depth_stream.LEAVE`, 0.5 mm); notice buttons are real buttons;
   the Actuation gap is gone.
 - **Live view checked on the V3 Pro, 2026-11-24 (all pass):** click another window → types at once; back → live
@@ -24,8 +24,8 @@ Current state of Huntsman for Mac, updated 2026-11-24.
   headless Chromium UI tests in demo mode). Dev env: `requirements.txt` + `requirements-dev.txt`, then
   `playwright install chromium`. GitHub Actions `CI` (.github/workflows/ci.yml) runs it on macos-latest and
   windows-latest (Windows: `requirements-win.txt`; 37 `mac_only` tests skipped, see tests/conftest.py).
-- **Installed on the maintainer's Mac:** master at d238b89 (v0.4.2). Note: AppleScript `quit app "Huntsman for Mac"` is ignored by the app; quit with Cmd-Q/menu or
-  SIGTERM (restores typing).
+- **Installed on the maintainer's Mac:** master at d238b89 (v0.4.2). Note: AppleScript `quit app "Huntsman for Mac"`
+  is ignored by the app; quit with Cmd-Q/menu or SIGTERM (restores typing).
 - **CI stays on GitHub-hosted runners** (owner decision 2026-11-22): the repo is public, and fork PRs could run code on
   the self-hosted fleet; rule recorded in ~/Downloads/Projects/ci-monitor/fleet/README.md. Don't onboard it.
 

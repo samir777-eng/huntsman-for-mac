@@ -3,14 +3,14 @@
 Current state of Huntsman for Mac, updated 2026-11-24.
 
 ## Status
-- **Released v0.5.0 (2026-11-24, https://github.com/samir777-eng/huntsman-for-mac/releases/tag/v0.5.0; `master` = merge of
-  PR #11; plan docs/plans/2026-11-24-mac-pkg.md). Assets: `Huntsman-for-Mac-0.5.0.pkg` (build 8, signed with the project
+- **Released v0.5.0 (2026-11-24, https://github.com/samir777-eng/huntsman-for-mac/releases/tag/v0.5.0; v0.5.0 = merge of
+  PR #11 (e2b9196); plan docs/plans/2026-11-24-mac-pkg.md). Assets: `Huntsman-for-Mac-0.5.0.pkg` (build 8; the apps inside are signed with the project
   cert, checked) and `Huntsman-for-Windows-0.5.0.zip`, both attached by CI.**
   `Huntsman-for-Mac-<version>.pkg` (Apple silicon, macOS 14+), wizard Introduction → License (GPL) → Install (admin
   password) → done; installs `/Applications/Huntsman for Mac.app` with Python and libusb inside, the service as a
   nested full-copy `Huntsman Lighting.app`. Keyboard tab → **Uninstall…**. Service fix: requests that arrive while it
   starts wait for it (`service.START_WAIT`) instead of failing (seen on the first frozen build).
-- **0.5.0 checked on the owner's Mac (V3 Pro, macOS 27.2, 2026-11-24, CI-built pkg signed with the project cert):**
+- **0.5.0 checked on the owner's Mac (V3 Pro, macOS 27.2, 2026-11-24, CI-built pkg whose apps are signed with the project cert):**
   the pkg moved the install.sh copy (`~/Applications/Huntsman for Mac.app`) to the Trash and switched the lighting
   service to the new app, settings kept; first launch set up the LaunchAgent, menu bar icon shows; lighting, actuation
   and the key tester work from the installed app; Input Monitoring for the key tester is listed as "Huntsman for Mac";

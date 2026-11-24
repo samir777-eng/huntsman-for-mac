@@ -16,7 +16,7 @@ Current state of Huntsman for Mac, updated 2026-11-24.
   directly (0.6+ only) and counts the service as running; the helper's marker line "lighting service was running:
   yes/no/unknown" decides the restart (unknown = running). Zip move: if the Run value starts another Huntsman.exe,
   Setup stops that copy and starts the installed service, whose `ensure_autostart` repoints the Run value.
-- **0.6.0 CI evidence (GitHub's Windows runner, Windows Server 10.0.26100, run 45470785367, 2026-11-24):** silent
+- **0.6.0 CI evidence (GitHub's Windows runner, Windows Server 10.0.26100, run 45475092330, 2026-11-24):** silent
   install to the per-user folder without admin, Start menu and Settings → Apps entries; installed app's self-test
   passes; upgrade over a running lighting service stops it first and restarts it after; uninstall closes an open
   window, stops the service, removes files, Start menu entry and Run value, keeps %APPDATA%; WebView2 check ran and

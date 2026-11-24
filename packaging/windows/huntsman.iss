@@ -15,7 +15,12 @@
 ; - Upgrade and uninstall: the running copy is stopped first by setup-helper.ps1 ("stop"): its window is closed,
 ;   then Huntsman.exe --quit-service asks the lighting service to quit over its IPC (it restores the keyboard's own
 ;   lighting, like the tray's "Quit lighting service"), then anything of that exact exe still running is ended.
-;   After an upgrade the lighting service is started again, only when it was running before.
+;   When PowerShell can't run the helper (policy, Constrained Language Mode), --quit-service is run directly.
+;   After an upgrade the lighting service is started again when it was (or may have been) running before. The
+;   helper and the service run as the original user, also when Setup itself was run as administrator: an elevated
+;   service would lock the normal window out of its pipe.
+; - Moving from an unzipped copy: when the start-at-login Run value starts another Huntsman.exe, that copy is
+;   stopped and the installed service started; the service then points the Run value at itself (ensure_autostart).
 ; - Uninstall: also removes the start-at-login Run value "Huntsman for Mac lighting" when it starts this copy
 ;   (Huntsman.exe --remove-autostart, with a fallback here). Settings in %APPDATA%\Huntsman for Mac are kept.
 ;
@@ -96,24 +101,55 @@ var
   WebView2Failed: Boolean;
   ServiceWasRunning: Boolean;
 
-function SetEnvironmentVariable(lpName: String; lpValue: String): BOOL;
-  external 'SetEnvironmentVariableW@kernel32.dll stdcall';
-
-{ Run setup-helper.ps1 (Helper) with Action, hidden, waiting; Name=Value pairs go in the environment, never on the
-  command line. Its own log lines are copied into this log. False when PowerShell couldn't be started (ResultCode
-  is then a Win32 error); otherwise ResultCode is the helper's exit code. }
-function RunHelper(const Action, Helper: String; var ResultCode: Integer): Boolean;
+{ A path as hex digits of its UTF-16 code units, 4 per character: setup-helper.ps1 reads it back (FromHex), and
+  nothing on its command line needs quoting. }
+function Hex(const S: String): String;
 var
-  HelperLog: String;
-  Lines: TArrayOfString;
+  I: Integer;
+begin
+  Result := '';
+  for I := 1 to Length(S) do
+    Result := Result + Format('%.4x', [Ord(S[I])]);
+end;
+
+{ As the original (non-elevated) user when Setup runs as administrator; the uninstaller runs as it was started. }
+function RunAsUser(const Filename, Params, WorkingDir: String; Wait: TExecWait; var ResultCode: Integer): Boolean;
+begin
+  if IsUninstaller then
+    Result := Exec(Filename, Params, WorkingDir, SW_HIDE, Wait, ResultCode)
+  else
+    Result := ExecAsOriginalUser(Filename, Params, WorkingDir, SW_HIDE, Wait, ResultCode);
+end;
+
+function HasLine(const Lines: TArrayOfString; const Line: String): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 0 to GetArrayLength(Lines) - 1 do
+    if Lines[I] = Line then
+      Result := True;
+end;
+
+{ Run setup-helper.ps1 (Helper) with Action on Target, hidden, waiting (AsUser: as the original user). Its own
+  lines come back in Lines and are copied into this log. False when PowerShell couldn't be started (ResultCode
+  is then a Win32 error); otherwise ResultCode is the helper's exit code. }
+function RunHelper(const Action, Helper, Target: String; AsUser: Boolean; var Lines: TArrayOfString;
+                   var ResultCode: Integer): Boolean;
+var
+  HelperLog, PowerShell, Params: String;
   I: Integer;
 begin
   HelperLog := AddBackslash(GetTempDir) + 'huntsman-setup-helper.log';
   DeleteFile(HelperLog);
-  SetEnvironmentVariable('HUNTSMAN_SETUP_LOG', HelperLog);
-  Result := Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-                 '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + Helper + '" ' + Action, '',
-                 SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  PowerShell := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+  Params := '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + Helper + '" ' + Action + ' ' +
+            Hex(Target) + ' ' + Hex(HelperLog);
+  if AsUser then
+    Result := RunAsUser(PowerShell, Params, '', ewWaitUntilTerminated, ResultCode)
+  else
+    Result := Exec(PowerShell, Params, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  SetArrayLength(Lines, 0);
   if LoadStringsFromFile(HelperLog, Lines) then
     for I := 0 to GetArrayLength(Lines) - 1 do
       Log('setup-helper ' + Action + ': ' + Lines[I]);
@@ -144,14 +180,16 @@ end;
 procedure InstallWebView2;
 var
   ResultCode: Integer;
+  Lines: TArrayOfString;
 begin
   if WebView2Installed then
     Exit;
   WizardForm.StatusLabel.Caption := 'Installing the Microsoft Edge WebView2 Runtime...';
   ExtractTemporaryFile('MicrosoftEdgeWebview2Setup.exe');
   ExtractTemporaryFile('setup-helper.ps1');
-  SetEnvironmentVariable('HUNTSMAN_WEBVIEW2', ExpandConstant('{tmp}\MicrosoftEdgeWebview2Setup.exe'));
-  if not RunHelper('webview2', ExpandConstant('{tmp}\setup-helper.ps1'), ResultCode) then
+  { Not as the original user: an elevated Setup may install the runtime for the whole machine. }
+  if not RunHelper('webview2', ExpandConstant('{tmp}\setup-helper.ps1'),
+                   ExpandConstant('{tmp}\MicrosoftEdgeWebview2Setup.exe'), False, Lines, ResultCode) then
   begin
     WebView2Failed := True;   { not fatal: the app is installed, the Finish page says how to get the runtime }
     Log('WebView2 Runtime could not be installed: ' + SysErrorMessage(ResultCode));
@@ -165,21 +203,93 @@ begin
   end;
 end;
 
-{ Stop the copy installed in Dir (setup-helper.ps1 stop: its window, then its lighting service, then the rest).
-  True when its lighting service was running. }
-function StopHuntsman(const Dir, Helper: String): Boolean;
+{ Huntsman.exe 0.6.0 and later know --quit-service; an older one would open its window instead. }
+function KnowsQuitService(const Exe: String): Boolean;
+var
+  MS, LS: Cardinal;
+begin
+  Result := GetVersionNumbers(Exe, MS, LS) and (((MS shr 16) > 0) or ((MS and $FFFF) >= 6));
+end;
+
+{ Without the helper: ask the lighting service to quit directly. Bounded by Huntsman.exe itself (its IPC timeout
+  plus app.QUIT_WAIT, about 20 s). }
+procedure QuitServiceDirectly(const Exe: String);
 var
   ResultCode: Integer;
 begin
-  Result := False;
-  if not FileExists(AddBackslash(Dir) + 'Huntsman.exe') then
+  if not KnowsQuitService(Exe) then
+  begin
+    Log('Not asking ' + Exe + ' to quit: older than 0.6.0');
     Exit;
-  SetEnvironmentVariable('HUNTSMAN_EXE', AddBackslash(Dir) + 'Huntsman.exe');
-  if RunHelper('stop', Helper, ResultCode) then
+  end;
+  if RunAsUser(Exe, '--quit-service', ExtractFileDir(Exe), ewWaitUntilTerminated, ResultCode) then
+    Log(Format('--quit-service exited with %d', [ResultCode]))
+  else
+    Log('--quit-service did not run: ' + SysErrorMessage(ResultCode));
+end;
+
+{ Stop the copy installed in Dir (setup-helper.ps1 stop: its window, then its lighting service, then the rest).
+  True when its lighting service was running, or when that isn't known. }
+function StopHuntsman(const Dir, Helper: String): Boolean;
+var
+  Exe: String;
+  ResultCode: Integer;
+  Lines: TArrayOfString;
+begin
+  Result := False;
+  Exe := AddBackslash(Dir) + 'Huntsman.exe';
+  if not FileExists(Exe) then
+    Exit;
+  if RunHelper('stop', Helper, Exe, True, Lines, ResultCode) and
+     ((ResultCode = 0) or (ResultCode = ServiceWasRunningCode)) then
   begin
     Log(Format('setup-helper stop exited with %d', [ResultCode]));
-    Result := ResultCode = ServiceWasRunningCode;
+    if HasLine(Lines, 'lighting service was running: yes') or (ResultCode = ServiceWasRunningCode) then
+      Result := True
+    else if HasLine(Lines, 'lighting service was running: no') then
+      Result := False
+    else
+      Result := True;   { no marker line: unknown, counted as running }
+  end
+  else
+  begin
+    Log(Format('setup-helper stop failed (%d): asking the lighting service to quit directly', [ResultCode]));
+    QuitServiceDirectly(Exe);
+    Result := True;   { unknown: counted as running, so an upgrade starts it again }
   end;
+end;
+
+{ The start-at-login Run value starts another Huntsman.exe (an unzipped copy): True, with its path in OldExe. }
+function OtherCopyInRunValue(var OldExe: String): Boolean;
+var
+  Value: String;
+  P: Integer;
+begin
+  Result := False;
+  if not RegQueryStringValue(HKCU, RunKey, RunValue, Value) then
+    Exit;
+  if Pos(Lowercase('"' + ExpandConstant('{app}\Huntsman.exe') + '"'), Lowercase(Value)) = 1 then
+    Exit;
+  if (Length(Value) < 2) or (Value[1] <> '"') then
+    Exit;
+  Value := Copy(Value, 2, Length(Value) - 1);
+  P := Pos('"', Value);
+  if P = 0 then
+    Exit;
+  OldExe := Copy(Value, 1, P - 1);
+  Result := (Lowercase(ExtractFileName(OldExe)) = 'huntsman.exe') and FileExists(OldExe);
+end;
+
+{ The installed lighting service, as the original user, in its own folder. }
+procedure StartService;
+var
+  ResultCode: Integer;
+begin
+  if ExecAsOriginalUser(ExpandConstant('{app}\Huntsman.exe'), '--service', ExpandConstant('{app}'), SW_HIDE,
+                        ewNoWait, ResultCode) then
+    Log('Lighting service started')
+  else
+    Log('Lighting service could not be started: ' + SysErrorMessage(ResultCode));
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
@@ -191,17 +301,24 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  ResultCode: Integer;
+  OldExe: String;
+  Migrated: Boolean;
 begin
   if CurStep <> ssPostInstall then
     Exit;
   InstallWebView2;
-  { An upgrade: the lighting service comes back only when it was running before. }
-  if ServiceWasRunning then
-    if Exec(ExpandConstant('{app}\Huntsman.exe'), '--service', '', SW_HIDE, ewNoWait, ResultCode) then
-      Log('Lighting service started again')
-    else
-      Log('Lighting service could not be started again: ' + SysErrorMessage(ResultCode));
+  { Moving from an unzipped copy: its service would start first at every login. Stop it; the installed service
+    started below points the Run value at itself (service.py ensure_autostart). }
+  Migrated := False;
+  if OtherCopyInRunValue(OldExe) then
+  begin
+    Log('The Run value starts another copy, ' + OldExe + ': stopping it');
+    StopHuntsman(ExtractFileDir(OldExe), ExpandConstant('{tmp}\setup-helper.ps1'));
+    Migrated := True;
+  end;
+  { An upgrade: the lighting service comes back when it was (or may have been) running before. }
+  if ServiceWasRunning or Migrated then
+    StartService;
 end;
 
 procedure CurPageChanged(CurPageID: Integer);

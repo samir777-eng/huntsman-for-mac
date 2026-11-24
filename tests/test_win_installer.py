@@ -205,12 +205,25 @@ def test_helper_matches_only_this_exact_exe():
     assert "StartsWith" not in helper and "-like" not in helper
 
 
-def test_helper_takes_paths_from_the_environment_not_the_command_line():
+def test_helper_takes_paths_hex_encoded_so_nothing_needs_quoting():
+    """Paths (any character, an apostrophe in a user name too) reach the helper as hex digits of their UTF-16
+    code units: nothing to quote, and unlike environment variables they survive ExecAsOriginalUser (the
+    helper then runs in the original, non-elevated Setup process)."""
     helper, code = _helper(), _code()
-    assert "$env:HUNTSMAN_EXE" in helper and "$env:HUNTSMAN_WEBVIEW2" in helper
-    assert "SetEnvironmentVariableW@kernel32.dll stdcall" in code
+    assert "ValidatePattern('^([0-9A-Fa-f]{4})*$')" in helper and "FromHex" in helper
+    assert "$env:HUNTSMAN" not in helper and "SetEnvironmentVariable" not in code
+    hexer = re.search(r"function Hex\(.*?\nend;", code, re.S).group(0)
+    assert "Format('%.4x', [Ord(S[I])])" in hexer
     assert "PowerShellQuote" not in code and "-Command" not in code
     assert "-File" in code
+
+
+def test_the_hex_encoding_round_trips():
+    """The same encoding in Python: what the Pascal side writes, the PowerShell side reads back."""
+    path = "C:\\Users\\O\u2019Brien \u00e9\\AppData\\Local\\Programs\\Huntsman for Mac\\Huntsman.exe"
+    hexed = "".join(f"{ord(c):04X}" for c in path)
+    assert re.fullmatch(r"([0-9A-Fa-f]{4})*", hexed)
+    assert "".join(chr(int(hexed[i:i + 4], 16)) for i in range(0, len(hexed), 4)) == path
 
 
 def test_helper_gives_an_old_exe_no_unknown_flag_and_never_waits_forever():
@@ -224,15 +237,61 @@ def test_helper_gives_an_old_exe_no_unknown_flag_and_never_waits_forever():
 def test_helper_reports_whether_the_service_was_running():
     stop = _ps_function(_helper(), "stop")
     assert "--service" in stop and "exit 10" in stop
+    assert "'lighting service was running: '" in stop          # a marker line the installer reads back
+    stop_fn = re.search(r"function StopHuntsman\(.*?\nend;", _code(), re.S).group(0)
+    assert "'lighting service was running: yes'" in stop_fn and "'lighting service was running: no'" in stop_fn
+
+
+def test_iss_falls_back_to_quit_service_when_powershell_is_blocked():
+    """AllSigned policy, Constrained Language Mode, no powershell.exe: the helper fails or answers oddly. The
+    service is then still asked to quit directly (0.6.0+ only), and counted as running (restarted after)."""
+    stop_fn = re.search(r"function StopHuntsman\(.*?\nend;", _code(), re.S).group(0)
+    assert re.search(r"\(ResultCode = 0\) or \(ResultCode = ServiceWasRunningCode\)", stop_fn)
+    assert "QuitServiceDirectly(" in stop_fn
+    direct = re.search(r"procedure QuitServiceDirectly\(.*?\nend;", _code(), re.S).group(0)
+    assert "KnowsQuitService(" in direct and "'--quit-service'" in direct
+    knows = re.search(r"function KnowsQuitService\(.*?\nend;", _code(), re.S).group(0)
+    assert "GetVersionNumbers(" in knows and "shr 16" in knows and ">= 6" in knows
+    assert re.search(r"Result := True;\s*\{ unknown", stop_fn)   # unknown counts as running
+
+
+def test_iss_runs_the_helper_and_the_service_as_the_original_user():
+    """Setup run as administrator: a service (or a --quit-service) started elevated would lock the normal window
+    out of its pipe."""
     code = _code()
-    assert "ServiceWasRunning := " in code
+    run_as_user = re.search(r"function RunAsUser\(.*?\nend;", code, re.S).group(0)
+    assert "ExecAsOriginalUser(" in run_as_user and "IsUninstaller" in run_as_user
+    helper = re.search(r"function RunHelper\(.*?\nend;", code, re.S).group(0)
+    assert "RunAsUser(" in helper
+    start = re.search(r"procedure StartService;.*?\nend;", code, re.S).group(0)
+    assert "ExecAsOriginalUser(ExpandConstant('{app}\\Huntsman.exe'), '--service', ExpandConstant('{app}')" in start
+    assert "ewNoWait" in start
+
+
+def test_iss_moves_a_zip_copys_service_over_to_the_installed_one():
+    """The Run value starts another copy (an unzipped one): that copy is stopped and the installed service
+    started; the installed service's ensure_autostart then points the Run value at itself."""
+    code = _code()
+    post = re.search(r"procedure CurStepChanged\(.*?\nend;", code, re.S).group(0)
+    assert "OtherCopyInRunValue(" in post and "StartService" in post
+    other = re.search(r"function OtherCopyInRunValue\(.*?\nend;", code, re.S).group(0)
+    assert "RegQueryStringValue(HKCU, RunKey, RunValue" in other and "Huntsman.exe" in other
+    src = (ROOT / "service.py").read_text(encoding="utf-8")
+    body = src[src.index("def _main_windows"):]
+    assert "ensure_autostart()" in body.split("menu.run(")[0]   # the service itself repoints the Run value
 
 
 def test_iss_restarts_the_service_after_an_upgrade_only_if_it_was_running():
     code = _code()
     post = re.search(r"procedure CurStepChanged\(.*?\nend;", code, re.S).group(0)
-    assert "ssPostInstall" in post and re.search(r"if ServiceWasRunning then", post)
-    assert "'--service'" in post and "ewNoWait" in post
+    assert "ssPostInstall" in post and re.search(r"if ServiceWasRunning or Migrated then", post)
+    assert "StartService" in post
+
+
+def test_helper_cannot_hang_on_wmi():
+    for line in _helper().splitlines():
+        if "Get-CimInstance" in line:
+            assert re.search(r"-OperationTimeoutSec \d+", line), line
 
 
 def test_helper_is_ascii_and_licensed():
@@ -318,8 +377,11 @@ def test_workflow_runs_when_the_installer_changes():
     wf, _ = _wf()
     paths = wf["on"]["push"]["paths"]
     assert "packaging/windows/**" in paths
-    for p in ("app.py", "service.py", "ipc.py", "platforms/**"):   # what the installer runs and stops
+    for p in ("app.py", "service.py", "ipc.py", "platforms/**", "huntsman_core.py", "studio.py", "lighting/**",
+              "models.py", "depth_stream.py", "ui/**", "tests/test_win_installer.py", "layouts/**", "layout.json",
+              "keymap.json", "inputs/**", "menubar.py"):   # what goes into the build and what the installer runs
         assert p in paths, p
+        assert (ROOT / p.split("/")[0]).exists(), p
 
 
 def test_workflow_downloads_the_webview2_bootstrapper_and_never_commits_it():
@@ -359,6 +421,8 @@ def test_workflow_smoke_tests_a_silent_install_and_uninstall():
     assert "function StartWindow" in run                        # an open window is stopped too
     assert "service didn't come up" in run and "::warning::the lighting service" not in run
     assert "restarted after the upgrade" in run and "not started by the install" in run
+    assert "HuntsmanZip" in run and "zip copy's service is still running" in run   # moving from the zip
+    assert "Run value doesn't start the installed copy" in run
     assert "APPDATA" in run                                     # the settings folder survives the uninstall
     assert "throw" in run
 

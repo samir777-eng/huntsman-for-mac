@@ -186,6 +186,8 @@ class LightingService:
                     s.set_enabled(True)
 
     def gui_ready(self):
+        if self._shut:   # quit (maybe during start): smart lighting must not start after the restore
+            return
         self.studio.gui_ready()
 
     def on_quit(self, fn):
@@ -279,13 +281,17 @@ class LightingService:
         return None
 
     def set_studio_enabled(self, on, restore=True):
-        """Studio on or off, for the window and the menu. Refused with the plain reason while blocked."""
-        if on:
-            reason = self.studio_blocked()
-            if reason:
-                raise ValueError(reason)
-        self._guard_wants_on = False   # the user's own choice from now on
-        self.studio.set_enabled(on, restore=restore)
+        """Studio on or off, for the window and the menu. Refused with the plain reason while blocked, and once
+        the service is quitting (a request in flight, the Synapse re-check thread): nothing would restore it."""
+        with self._life:
+            if self._shut:
+                raise ValueError("the lighting service is quitting")
+            if on:
+                reason = self.studio_blocked()
+                if reason:
+                    raise ValueError(reason)
+            self._guard_wants_on = False   # the user's own choice from now on
+            self.studio.set_enabled(on, restore=restore)
 
     # ---------- Windows: Razer Synapse ----------
 

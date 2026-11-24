@@ -131,3 +131,23 @@ def test_the_tray_icon_image_is_drawn_without_asset_files():
 def test_importing_the_tray_needs_no_pystray():
     assert "pystray" not in sys.modules or sys.modules["pystray"] is not None
     assert menubar._TARGET_CLASS is None   # and no Cocoa either
+
+
+def test_run_after_remove_returns_at_once():
+    """A quit can remove the tray before its loop starts (the service quit during start): run() must not then
+    block forever in a loop nobody will stop."""
+    tray = win_tray.TrayMenu(presets=["Calm"], pystray=fake_pystray(), image=object(), **handlers([]))
+    tray.remove()
+    ready = []
+    tray.run(on_ready=lambda: ready.append(1))
+    assert tray.icon is None and ready == []
+
+
+def test_remove_after_install_still_stops_the_icon():
+    tray = win_tray.TrayMenu(presets=["Calm"], pystray=fake_pystray(), image=object(), **handlers([]))
+    tray.install()
+    icon = tray.icon
+    tray.remove()
+    assert icon.stopped == 1
+    tray.run()
+    assert icon.ran == 0 and tray.icon is None

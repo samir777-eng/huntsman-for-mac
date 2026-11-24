@@ -2,6 +2,43 @@
 
 All notable changes to this project are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 0.6.0 – 2026-11-24
+
+### Added
+- A Windows installer: `Huntsman-for-Windows-<version>-Setup.exe` on the release, made with Inno Setup and not
+  code-signed. The wizard goes Welcome, License (GPL), folder, Install, Finish (with *Open Huntsman for Mac*). It
+  installs for the current user only, with no administrator password, to `%LOCALAPPDATA%\Programs\Huntsman for Mac`,
+  and adds a Start menu entry and an entry in Settings → Apps. A desktop icon is optional, off by default.
+- If the Microsoft Edge WebView2 Runtime is missing, the installer runs Microsoft's WebView2 installer silently. If
+  that fails, the install still finishes and the Finish page says where to get the runtime.
+- Upgrading over an installed copy closes its window and its lighting service first, and starts the service again
+  afterwards if it was running.
+- Uninstall (Settings → Apps) closes an open window, stops the lighting service, and removes the files, the Start
+  menu entry and the start-at-login value (only when that value starts this copy). Settings in
+  `%APPDATA%\Huntsman for Mac` are kept.
+- `Huntsman.exe --quit-service` and `--remove-autostart`, which the installer and uninstaller run.
+- The zip stays on the release as the portable option.
+
+### Fixed
+- A quit that arrives while the lighting service is still starting now restores the keyboard's own lighting (Mac and
+  Windows).
+- The Studio preview no longer starts the lighting service by itself, so an open window can't bring it back after a
+  quit.
+
+### Checked (CI only: GitHub's Windows runner, Windows Server build 10.0.26100, 2026-11-24)
+- A silent install went to `%LOCALAPPDATA%\Programs\Huntsman for Mac` without admin, with the Start menu entry and
+  the Settings → Apps entry.
+- The installed app passed its self-test.
+- An upgrade over a running lighting service closed it first and started it again afterwards.
+- Uninstall closed an open window, stopped the service, removed the files, the Start menu entry and the
+  start-at-login value, and kept the settings in `%APPDATA%\Huntsman for Mac`.
+- The WebView2 check ran and found the runtime already installed.
+
+### Not checked
+- Anything on a real Windows PC: the wizard's pages as a person sees them, the SmartScreen prompt (*Windows protected
+  your PC* → More info → Run anyway), and the app with a keyboard.
+- The WebView2 installer actually installing the runtime on a PC that doesn't have it.
+
 ## 0.5.0 – 2026-11-24
 
 ### Added

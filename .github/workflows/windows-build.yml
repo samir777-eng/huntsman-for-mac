@@ -20,6 +20,18 @@ on:
       - app.py
       - service.py
       - ipc.py
+      - huntsman_core.py
+      - studio.py
+      - models.py
+      - depth_stream.py
+      - menubar.py
+      - lighting/**
+      - inputs/**
+      - ui/**
+      - layouts/**
+      - layout.json
+      - keymap.json
+      - tests/test_win_installer.py
       - requirements-win.txt
       - .github/workflows/windows-build.yml
   release:
@@ -216,7 +228,31 @@ jobs:
           if (-not $after -or ($after | Where-Object { $before -contains $_ })) { throw "the lighting service was not restarted after the upgrade" }
           "service restarted after the upgrade: $before -> $after"
 
-          # 4. Silent uninstall with the service (and, if the runner can show one, a window) running.
+          # 4. Moving from an unzipped copy: its service runs and the Run value starts it. Setup stops it, starts the
+          #    installed service, and that one points the Run value at itself.
+          $zipDir = Join-Path $env:RUNNER_TEMP "HuntsmanZip"
+          Copy-Item -Recurse -Path dist\Huntsman -Destination $zipDir
+          $zipExe = Join-Path $zipDir "Huntsman.exe"
+          function ZipServices { @(Get-CimInstance Win32_Process -Filter "Name = 'Huntsman.exe'" | Where-Object { $_.ExecutablePath -eq $zipExe -and $_.CommandLine -match '--service' }) }
+          Start-Process -FilePath $exe -ArgumentList "--quit-service" -Wait
+          for ($i = 0; $i -lt 20 -and (Services).Count; $i++) { Start-Sleep -Seconds 1 }
+          if ((Services).Count) { throw "the installed service didn't quit before the zip test" }
+          Start-Process -FilePath $zipExe -ArgumentList "--service" | Out-Null
+          for ($i = 0; $i -lt 20 -and -not (ZipServices).Count; $i++) { Start-Sleep -Seconds 1 }
+          Start-Sleep -Seconds 5
+          if (-not (ZipServices).Count) { throw "the zip copy's service didn't come up" }
+          Set-ItemProperty -Path $runKey -Name $runName -Value "`"$zipExe`" --service"
+          $log = Install "from-zip"
+          $want = "`"$exe`" --service"
+          for ($i = 0; $i -lt 30 -and (Get-ItemProperty -Path $runKey -Name $runName).$runName -ne $want; $i++) { Start-Sleep -Seconds 1 }
+          $now = (Get-ItemProperty -Path $runKey -Name $runName).$runName
+          "Run value after the move: $now"
+          if ($now -ne $want) { throw "the Run value doesn't start the installed copy: $now" }
+          if ((ZipServices).Count) { throw "the zip copy's service is still running" }
+          if (-not (Services).Count) { throw "the installed service isn't running after the move from the zip copy" }
+          "moved from the zip copy: Run value and service now the installed copy's"
+
+          # 5. Silent uninstall with the service (and, if the runner can show one, a window) running.
           if (-not (Get-ItemProperty -Path $runKey -Name $runName -ErrorAction SilentlyContinue)) { Set-ItemProperty -Path $runKey -Name $runName -Value "`"$exe`" --service" }
           if (-not ((Get-Content $state -Raw | ConvertFrom-Json).autostart_added)) { throw "the service didn't record autostart_added" }
           $window = StartWindow

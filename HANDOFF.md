@@ -3,6 +3,20 @@
 Current state of Huntsman for Mac, updated 2026-11-24.
 
 ## Status
+- **0.6.0 (Windows installer) on branch `windows-installer`; PR to master and the v0.6.0 release still pending.**
+  Plan docs/plans/2026-11-24-windows-installer.md. `Huntsman-for-Windows-<version>-Setup.exe` (Inno Setup, unsigned):
+  Welcome → License (GPL) → folder → Install → Finish ("Open Huntsman for Mac"); per user, no admin, to
+  `%LOCALAPPDATA%\Programs\Huntsman for Mac`, Start menu entry, Settings → Apps entry, optional desktop icon (off).
+  Installs the WebView2 Runtime silently if missing. The zip stays as the portable option. Review fixes in the same
+  branch: a quit while the service starts restores the lighting (Mac and Windows); `Api.studio_preview` never starts
+  the service.
+- **0.6.0 CI evidence (GitHub's Windows runner, Windows Server 10.0.26100, run 45468153906, 2026-11-24):** silent
+  install to the per-user folder without admin, Start menu and Settings → Apps entries; installed app's self-test
+  passes; upgrade over a running lighting service stops it first and restarts it after; uninstall closes an open
+  window, stops the service, removes files, Start menu entry and Run value, keeps %APPDATA%; WebView2 check ran and
+  found the runtime. **Not verified (no real PC):** the wizard pages as a person sees them, SmartScreen (More info →
+  Run anyway), the WebView2 bootstrapper actually installing on a PC without the runtime, the whole app with a
+  keyboard.
 - **Released v0.5.0 (2026-11-24, https://github.com/samir777-eng/huntsman-for-mac/releases/tag/v0.5.0; v0.5.0 = merge of
   PR #11 (e2b9196); plan docs/plans/2026-11-24-mac-pkg.md). Assets: `Huntsman-for-Mac-0.5.0.pkg` (build 8; the apps inside are signed with the project
   cert, checked) and `Huntsman-for-Windows-0.5.0.zip`, both attached by CI.**
@@ -38,7 +52,7 @@ Current state of Huntsman for Mac, updated 2026-11-24.
   Studio preview while off, the 6 new presets (2026-11-22). The Windows build has still never run on a Windows PC
   with a keyboard.
 - **Repo:** public, GitHub `samir777-eng/huntsman-for-mac`, default branch `master`, SEO description + 18 topics.
-- **Tests:** 1510 passing (5 skipped) on the Mac: `python -m pytest -q tests` (simulated keyboard, fake transports,
+- **Tests:** 1573 passing (5 skipped) on the Mac: `python -m pytest -q tests` (simulated keyboard, fake transports,
   headless Chromium UI tests in demo mode). Dev env: `requirements.txt` + `requirements-dev.txt`, then
   `playwright install chromium`. GitHub Actions `CI` (.github/workflows/ci.yml) runs it on macos-latest and
   windows-latest (Windows: `requirements-win.txt`; 37 `mac_only` tests skipped, see tests/conftest.py).
@@ -142,16 +156,32 @@ and signs it ad hoc; unsigned apps can't read ~/Downloads; developers and Intel 
   `pkgutil --forget io.github.huntsman-for-mac.pkg`; `platform_status()["can_uninstall"]` only for the
   /Applications copy), `--version` / `--self-test` on both executables. No `huntsman.py` CLI in the pkg app.
   Tests: tests/test_mac_frozen.py, tests/test_mac_packaging.py.
+- Windows installer (0.6.0): `packaging/windows/huntsman.iss` (Inno Setup; fixed AppId GUID, never change it;
+  `PrivilegesRequired=lowest`; x64, Windows 10+; WebView2 registry check + bundled Evergreen bootstrapper, downloaded by
+  CI, never committed; keep the file ASCII). `packaging/windows/setup-helper.ps1` (run hidden by the installer; paths
+  in env vars): `stop` closes the exe's windows, runs `Huntsman.exe --quit-service` (30 s limit), ends what's left of
+  that exact exe, exit 10 = service was running; `webview2` runs the bootstrapper `/silent /install` (10 min limit).
+  `app.py`: `--quit-service` (`stop_running_service`: IPC "quit", waits for the instance lock), `--remove-autostart`
+  (`win_autostart.remove_if_ours`, resets `autostart_added`). `service.py`: "quit" request calls the tray's quit.
+  `.github/workflows/windows-build.yml`: Inno Setup **6.7.1** via choco (pinned; version checked through
+  `choco list`, ISCC.exe has no file version), then a smoke test: install, `--version`/`--self-test` from the install
+  folder, reinstall over a running service, uninstall with a window open, asserts files/shortcut/Run value gone and
+  %APPDATA% kept. In PowerShell, `Start-Process -Wait` waits for the whole process tree (it would hang on the service
+  an upgrade restarts): use `$p.WaitForExit()` for Setup.exe. Release job attaches the Setup.exe next to the zip.
+  Tests: tests/test_win_installer.py.
 - Data: `~/Library/Application Support/Huntsman for Mac/` (state.json, presets.json, heatmap.json,
   first-launch-snapshot.json, *.lock, service.sock). Log: `~/Library/Logs/Huntsman for Mac.log`.
 
-## Packaging facts (0.5.0)
+## Packaging facts (0.5.0, 0.6.0)
 - macOS Installer skips a bundle whose installed `CFBundleVersion` is the same as the pkg's, so bump
   `CFBundleVersion` in both `packaging/Info.plist` and `packaging/Lighting-Info.plist` for every release and every
-  test build you install over another. Currently **8** (the maintainer's Mac has test build 7). `CFBundleShortVersionString` must equal `__version__`
+  test build you install over another, and whenever the version changes (also for a Windows-only release).
+  Currently **9** (0.6.0; v0.5.0 shipped 8, the maintainer's Mac has test build 7). `CFBundleShortVersionString` must equal `__version__`
   (`plists.mac_info` checks).
 - Both bundles are `BundleIsRelocatable = false` (else Installer "upgrades" the ~/Applications copy in place).
 - arm64 only (cffi/numpy/libusb wheels); min macOS 14.0 (numpy wheel). install.sh keeps 12.0.
+- Windows: setup-helper.ps1 sends `--quit-service` only to an installed exe of 0.6.0 or later (file version); an
+  older exe would open its window instead, so older copies are just ended.
 - A self-signed cert gives a stable designated requirement, so TCC grants survive updates (seen: Input Monitoring kept).
 
 ## Protocol facts (verified on hardware, V3 Pro firmware 1.03)
@@ -176,6 +206,8 @@ brightness, key tester, Studio presets (rainbow, aurora, matrix, fire, typing gl
 Studio layers/params/presets/Sound/Typing/Smart panels, effects continuing after the app quits.
 
 ## Not yet verified
+- Windows installer (0.6.0) on a real PC: wizard pages, SmartScreen, WebView2 bootstrapper on a PC without the
+  runtime (CI only had it already), upgrade/uninstall outside CI.
 - macOS permission name for the service ("Huntsman Lighting") for Microphone and Input Monitoring, in the pkg app and
   install.sh copies. In an install.sh copy the key tester's Input Monitoring is held by the Python binaries (bundle
   venv `python`, Homebrew `python3.13`), not the bundle id (TCC.db, 2026-11-24), so `tccutil reset ListenEvent
@@ -197,11 +229,13 @@ Studio layers/params/presets/Sound/Typing/Smart panels, effects continuing after
   with the owner, then merge to master and release.
 
 ## Next (pick with the owner)
-0. (Done 2026-11-24) v0.5.0 released with the pkg attached. The maintainer's Mac runs test build 7; installing the
+(Done 2026-11-24) v0.5.0 released with the pkg attached. The maintainer's Mac runs test build 7; installing the
    release pkg (build 8) over it is optional.
-0a. Apple Developer ID + notarization (owner decision, $99/yr) to remove the Gatekeeper block on the pkg.
-0b. Windows installer: Inno Setup wizard with WebView2 auto-install (owner's choice, after the Mac pkg). Still open
-    too: the Windows build on a real Windows PC with a Huntsman (never run yet).
+0. Merge the `windows-installer` PR and release v0.6.0 (Setup.exe + zip + pkg attached by CI).
+0a. Apple Developer ID + notarization (owner decision, $99/yr) to remove the Gatekeeper block on the pkg; pending the
+    owner's enrolment.
+0b. A real Windows PC check, now covering the installer too: wizard pages, SmartScreen, WebView2 install on a PC
+    without it, upgrade/uninstall, and the app with a Huntsman (never run yet).
 (Done 2026-11-24) Live-view hardware check; fixes shipped as 0.4.2.
 0c. (Done in 0.4.2) Actuation gap; media regenerated. Minor, open: AppleScript quit is ignored by the app.
 1. (Done 2026-11-18) GitHub social preview set to `docs/social-preview.png` (1280×640, from the README banner).
@@ -220,3 +254,4 @@ Studio layers/params/presets/Sound/Typing/Smart panels, effects continuing after
 - docs/plans/2026-11-22-live-key-tester.md (v0.4.1)
 - docs/plans/2026-11-24-live-view-fixes.md (v0.4.2)
 - docs/plans/2026-11-24-mac-pkg.md (v0.5.0)
+- docs/plans/2026-11-24-windows-installer.md (v0.6.0)

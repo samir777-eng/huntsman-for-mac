@@ -380,3 +380,22 @@ def test_a_quit_right_after_studio_came_on_restores_the_lighting(app, hooks, clo
     s.on_quit(s.shutdown)
     assert s.handle("quit", {})["ok"]
     assert not eng.running and ("restore",) in eng.log and s.restored
+
+
+def test_gui_ready_after_a_quit_starts_nothing(svc):
+    """The quit-during-start restore ran: smart lighting (gui_ready) must not start afterwards."""
+    calls = []
+    svc.studio.gui_ready = lambda: calls.append(1)
+    svc.shutdown()
+    svc.gui_ready()
+    assert calls == []
+
+
+def test_studio_cannot_be_switched_on_after_the_quit(svc):
+    """A request already in flight, or the Synapse re-check thread, after shutdown(): refused, nothing runs."""
+    import pytest as _pytest
+    svc.shutdown()
+    with _pytest.raises(ValueError, match="quitting"):
+        svc.set_studio_enabled(True)
+    assert not svc.studio.engine.running
+    assert "quitting" in err(svc.handle("studio_enable", {"on": True}))

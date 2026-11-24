@@ -2,6 +2,51 @@
 
 All notable changes to this project are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 0.5.0 – 2026-11-24
+
+### Added
+- A Mac installer: `Huntsman-for-Mac-<version>.pkg` on the release, for Apple silicon (M1 or later) and macOS 14 or
+  later. The wizard goes Introduction, License (GPL), Install (your Mac password), done, and puts
+  `/Applications/Huntsman for Mac.app` on the Mac with its own Python and libusb inside: no Homebrew, Python or
+  Terminal needed. The lighting service (`Huntsman Lighting.app`) is a separate app inside it. Built by the `Mac build`
+  workflow (`tools/build_mac_pkg.sh`, PyInstaller) on GitHub's Apple silicon runners and signed with the project's own
+  self-signed certificate. It isn't signed with an Apple Developer ID or notarized, so macOS blocks it the first time
+  (README → Troubleshooting).
+- The installed app sets up the lighting service itself the first time it opens (LaunchAgent
+  `io.github.huntsman-for-mac.lighting`).
+- Keyboard tab → **Uninstall…** (installed app only): after a confirmation and your Mac password it removes the app,
+  the lighting service and its login item, and the installer's receipt, then quits. Settings are kept.
+
+### Changed
+- Installing the pkg over an install.sh copy moves that copy (`~/Applications/Huntsman for Mac.app`) to the Trash and
+  switches the lighting service to the new app. Settings are kept.
+- `uninstall.sh` also removes `/Applications/Huntsman for Mac.app` (with `sudo`) and forgets the installer's receipt.
+- install.sh is now the from-source route, for developers and Intel Macs.
+- README and landing page: install with the pkg first; Input Monitoring for the key tester is listed as
+  **Huntsman for Mac** in the installed app (python3.13 / python only for install.sh copies).
+
+### Fixed
+- The lighting service holds requests that arrive while it's still starting, instead of failing one (seen on the first
+  frozen build).
+
+### Checked on hardware (V3 Pro, macOS 27.2, 2026-11-24, CI-built pkg)
+- The wizard installed the app; the earlier install.sh copy went to the Trash, the lighting service moved to the new
+  app, and settings were kept.
+- First launch set up the lighting service and the menu bar icon appeared. Lighting, actuation and the key tester
+  worked from the installed app.
+- Input Monitoring for the key tester is listed as **Huntsman for Mac**. Installing a newer build over it kept the
+  permission, with no new prompt.
+- **Uninstall…** removed the app, the lighting service and its login item and the receipt, kept the settings, and the
+  keyboard went back to typing with its own lighting. Installing again afterwards worked.
+- macOS blocked the pkg the first time. It was opened after removing the download mark
+  (`xattr -d com.apple.quarantine`).
+
+### Not checked
+- macOS's **Open Anyway** route (System Settings → Privacy & Security) for the pkg.
+- The name macOS shows for the lighting service's Microphone and Input Monitoring permissions in the installed app.
+- Installing while other users are logged in: their lighting service isn't stopped during the install.
+- Intel Macs (no pkg; use install.sh).
+
 ## 0.4.2 – 2026-11-24
 
 ### Added

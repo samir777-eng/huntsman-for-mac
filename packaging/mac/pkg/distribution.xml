@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 Huntsman for Mac contributors -->
+<!-- The installer wizard (productbuild, tools/build_mac_pkg.sh): Introduction, License (the GPL, LICENSE.txt is
+     copied from the repository at build time), Install, Summary. Apple silicon, macOS 14.0 or later, the system
+     volume only (/Applications). The build fills in the pkg-ref version. -->
+<installer-gui-script minSpecVersion="2">
+    <title>Huntsman for Mac</title>
+    <welcome file="welcome.html" mime-type="text/html"/>
+    <license file="LICENSE.txt" mime-type="text/plain"/>
+    <conclusion file="conclusion.html" mime-type="text/html"/>
+    <options customize="never" require-scripts="false" hostArchitectures="arm64" rootVolumeOnly="true"/>
+    <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
+    <volume-check>
+        <allowed-os-versions><os-version min="14.0"/></allowed-os-versions>
+    </volume-check>
+    <choices-outline><line choice="default"><line choice="app"/></line></choices-outline>
+    <choice id="default"/>
+    <choice id="app" visible="false"><pkg-ref id="io.github.huntsman-for-mac.pkg"/></choice>
+    <pkg-ref id="io.github.huntsman-for-mac.pkg" version="@VERSION@" onConclusion="none">app.pkg</pkg-ref>
+</installer-gui-script>

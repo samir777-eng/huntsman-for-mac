@@ -1,0 +1,167 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Huntsman for Mac contributors
+# The Mac installer: tools/build_mac_pkg.sh on a GitHub-hosted Apple silicon runner (macos-15; never the owner's own
+# runners: the repository is public). The build phase (pip install, PyInstaller) runs with no secrets anywhere; only
+# then is the self-signed certificate from the secrets MAC_SIGN_P12 / MAC_SIGN_P12_PASSWORD imported into a
+# temporary keychain (deleted at the end, whatever fails), and the package phase signs both apps, verifies them,
+# runs both frozen --self-test and makes the pkg. Without the secrets (forks) it signs ad hoc, except for a release,
+# which fails instead: a release never ships an ad-hoc signature. The pkg is then installed on the runner with
+# `sudo installer` and both executables are self-tested again from /Applications. Runs by hand (workflow_dispatch)
+# and on pushes that touch the packaging or the app's code, so frozen-only breakage shows before a release;
+# publishing a release also attaches Huntsman-for-Mac-<version>.pkg, from a separate job that alone may write to the
+# repository and that fails unless the tag (minus a leading v) is the built version. Event values reach scripts only
+# through env.
+name: Mac build
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - packaging/mac/**
+      - packaging/Info.plist
+      - packaging/Lighting-Info.plist
+      - app.py
+      - huntsman_core.py
+      - service.py
+      - depth_stream.py
+      - studio.py
+      - menubar.py
+      - ipc.py
+      - models.py
+      - platforms/**
+      - lighting/**
+      - inputs/**
+      - layouts/**
+      - layout.json
+      - keymap.json
+      - ui/**
+      - requirements*.txt
+      - tools/build_mac_pkg.sh
+      - .github/workflows/mac-build.yml
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 40
+    outputs:
+      version: ${{ steps.build.outputs.version }}
+      pkg: ${{ steps.build.outputs.pkg }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-mac-build.txt
+      - name: Install
+        run: python -m pip install -r requirements-mac-build.txt
+      - name: Build (PyInstaller; no secrets in this or any earlier step)
+        run: PYTHON=python tools/build_mac_pkg.sh build
+      - name: Signing identity (self-signed certificate from the secrets; ad hoc without them, never for a release)
+        env:
+          P12: ${{ secrets.MAC_SIGN_P12 }}
+          P12_PASSWORD: ${{ secrets.MAC_SIGN_P12_PASSWORD }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ -z "$P12" ]; then
+            if [ "$EVENT" = "release" ]; then
+              echo "::error::MAC_SIGN_P12 is missing: a release is never signed ad hoc"
+              exit 1
+            fi
+            echo "No MAC_SIGN_P12 secret: signing ad hoc."
+            exit 0
+          fi
+          KC="$RUNNER_TEMP/huntsman-sign.keychain-db"
+          KC_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KC_PASSWORD" "$KC"
+          echo "HUNTSMAN_SIGN_KEYCHAIN=$KC" >> "$GITHUB_ENV"
+          security set-keychain-settings -lut 3600 "$KC"
+          security unlock-keychain -p "$KC_PASSWORD" "$KC"
+          trap 'rm -f "$RUNNER_TEMP/sign.p12"' EXIT
+          printf '%s' "$P12" | base64 --decode > "$RUNNER_TEMP/sign.p12"
+          security import "$RUNNER_TEMP/sign.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/sign.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KC_PASSWORD" "$KC" >/dev/null
+          # add it to the search list, keeping the keychains already there (one argument each)
+          KEYCHAINS=("$KC")
+          while IFS= read -r k; do
+            k="${k#"${k%%[![:space:]]*}"}"; k="${k#\"}"; k="${k%\"}"
+            if [ -n "$k" ]; then KEYCHAINS+=("$k"); fi
+          done < <(security list-keychains -d user)
+          security list-keychains -d user -s "${KEYCHAINS[@]}"
+          # a self-signed certificate isn't trusted, so it is listed without -v; its SHA-1 names it for codesign
+          ID="$(security find-identity -p codesigning "$KC" | awk '/\)/ {print $2; exit}')"
+          if [ -z "$ID" ]; then
+            echo "::error::no code-signing identity in MAC_SIGN_P12"
+            exit 1
+          fi
+          echo "HUNTSMAN_SIGN_IDENTITY=$ID" >> "$GITHUB_ENV"
+      - name: Sign, verify, self-test and package
+        id: build
+        run: |
+          PYTHON=python tools/build_mac_pkg.sh package
+          VERSION="$(python -c 'import huntsman_core; print(huntsman_core.__version__)')"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "pkg=Huntsman-for-Mac-$VERSION.pkg" >> "$GITHUB_OUTPUT"
+          codesign -dv --verbose=2 "build/mac/dist/Huntsman for Mac.app" 2>&1 | grep -E '^(Identifier|Authority|Signature)' || true
+      - name: Install the pkg on the runner and self-test from /Applications
+        timeout-minutes: 10
+        env:
+          PKG: ${{ steps.build.outputs.pkg }}
+          VERSION: ${{ steps.build.outputs.version }}
+        run: |
+          sudo installer -pkg "dist/$PKG" -target /
+          pkgutil --pkg-info io.github.huntsman-for-mac.pkg
+          APP="/Applications/Huntsman for Mac.app"
+          codesign --verify --deep --strict "$APP"
+          smoke() {
+            [ "$("$1" --version)" = "Huntsman for Mac $VERSION" ]
+            "$1" "$2" > selftest.log || { cat selftest.log; exit 1; }
+            grep -q "self-test passed" selftest.log
+            tail -1 selftest.log
+          }
+          smoke "/Applications/Huntsman for Mac.app/Contents/MacOS/HuntsmanForMac" --self-test
+          smoke "$APP/Contents/Library/LoginItems/Huntsman Lighting.app/Contents/MacOS/HuntsmanLighting" --self-test
+          ls -ld "$APP"
+          du -sh "$APP" "dist/$PKG"
+      - name: Delete the signing keychain
+        if: always()
+        run: |
+          if [ -n "${HUNTSMAN_SIGN_KEYCHAIN:-}" ]; then security delete-keychain "$HUNTSMAN_SIGN_KEYCHAIN" || true; fi
+      - uses: actions/upload-artifact@v5
+        with:
+          name: Huntsman-for-Mac-${{ steps.build.outputs.version }}
+          path: dist/${{ steps.build.outputs.pkg }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: Huntsman-for-Mac-${{ needs.build.outputs.version }}
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.event.release.tag_name }}
+          VERSION: ${{ needs.build.outputs.version }}
+          PKG: ${{ needs.build.outputs.pkg }}
+        run: |
+          if [ "${TAG#v}" != "$VERSION" ]; then
+            echo "::error::release tag $TAG doesn't match the built version $VERSION"
+            exit 1
+          fi
+          gh release upload "$TAG" "$PKG" --clobber

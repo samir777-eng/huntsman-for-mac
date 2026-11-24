@@ -54,6 +54,10 @@ QUIT_TITLE = "Quit lighting service"
 # next login or when the app needs it.
 QUIT_STEPS = ("stop the server", "stop Studio and restore the keyboard's lighting", "exit")
 GUARD_EVERY = 5.0
+# The socket is up before start() has built Studio: requests that come in meanwhile wait this long for it, less than
+# the client's timeout (ipc.TIMEOUT) so a held request is answered before the client gives up and sends it again.
+START_WAIT = ipc.TIMEOUT - 1.0
+STARTING = "The lighting service is still starting. Try again in a moment."
 
 SPECS = {
     "ping": {}, "summary": {}, "studio_state": {}, "reset_heat": {}, "running_apps": {},
@@ -135,10 +139,17 @@ class LightingService:
         self._guard_reason = None                # Windows: why writes are refused (Razer Synapse), as last told
         self._guard_wants_on = False             # Studio was on (or meant to be) when Synapse took the keyboard
         self._guard_listeners = []
+        self._started = threading.Event()   # set once start() is done (even if it failed)
 
     # ---------- start and stop ----------
 
     def start(self):
+        try:
+            self._start()
+        finally:
+            self._started.set()
+
+    def _start(self):
         from lighting.engine import Engine
         from lighting.frame import Keymap
         try:
@@ -173,6 +184,7 @@ class LightingService:
     def shutdown(self):
         """Stop the engine and listeners and restore the keyboard's lighting (even under a lease: the service is
         going away). Studio's on/off setting is kept for the next start. Safe to call twice."""
+        self._started.set()   # requests held for start() are answered now (STARTING if it never finished)
         if self._shut or self.studio is None:
             return
         self._shut = self._quitting = True
@@ -422,6 +434,10 @@ class LightingService:
         spec = SPECS.get(cmd)
         if spec is None:
             return {"ok": False, "error": f"unknown command {cmd!r}"}
+        if cmd == "ping":
+            return {"ok": True, "data": True}
+        if not self._started.wait(START_WAIT) or self.studio is None:   # still starting, or start() failed
+            return {"ok": False, "error": STARTING}
         try:
             a = ipc.check_args(spec, args)
             return {"ok": True, "data": self._commands()[cmd](**a)}
@@ -533,7 +549,8 @@ def ensure_autostart():
 
 
 def open_app():
-    """Open the window app: the bundle this service sits in, else by bundle id. Windows: Huntsman.exe (or app.py)
+    """Open the window app: the bundle this service sits in, else by bundle id; always by bundle id in the
+    installed app (frozen: the code isn't laid out as in a source install). Windows: Huntsman.exe (or app.py)
     without a console window."""
     if platforms.is_windows():
         from platforms import win_autostart
@@ -543,7 +560,8 @@ def open_app():
             traceback.print_exc()
         return
     outer = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
-    cmd = ["/usr/bin/open", outer] if outer.endswith(".app") else ["/usr/bin/open", "-b", APP_BUNDLE_ID]
+    by_path = outer.endswith(".app") and not getattr(sys, "frozen", False)
+    cmd = ["/usr/bin/open", outer] if by_path else ["/usr/bin/open", "-b", APP_BUNDLE_ID]
     try:
         subprocess.Popen(cmd)
     except OSError:

@@ -1,0 +1,40 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Huntsman for Mac contributors
+# Runs as root before the installer writes /Applications/Huntsman for Mac.app. For the user at the screen: stops
+# the lighting service (launchd's SIGTERM makes it give the keyboard its own lighting back) and the app's window
+# (the installed one and an install.sh copy; SIGTERM switches a running key test back to typing), so the bundle can
+# be replaced. Never fails the install. The functions are separate so tests can source this file and replace them.
+set -u
+
+LABEL="io.github.huntsman-for-mac.lighting"
+
+console_user() { /usr/bin/stat -f %Su /dev/console; }
+user_uid() { /usr/bin/id -u "$1"; }
+_launchctl() { /bin/launchctl "$@"; }
+_pkill() { /usr/bin/pkill "$@"; }
+_pgrep() { /usr/bin/pgrep "$@"; }
+_sleep() { /bin/sleep "$@"; }
+
+main() {
+  local user uid i
+  user="$(console_user 2>/dev/null)" || user=""
+  case "$user" in ""|root|loginwindow) return 0 ;; esac
+  uid="$(user_uid "$user" 2>/dev/null)" || return 0
+  _launchctl bootout "gui/$uid/$LABEL" >/dev/null 2>&1 || true
+  _pkill -TERM -u "$uid" -x HuntsmanForMac >/dev/null 2>&1 || true
+  _pkill -TERM -u "$uid" -f "Contents/Resources/code/app.py" >/dev/null 2>&1 || true
+  for i in 1 2 3 4 5 6 7 8 9 10; do   # up to 5 s for the window to put the keyboard back
+    if ! _pgrep -u "$uid" -x HuntsmanForMac >/dev/null 2>&1 \
+       && ! _pgrep -u "$uid" -f "Contents/Resources/code/app.py" >/dev/null 2>&1; then
+      break
+    fi
+    _sleep 0.5
+  done
+  return 0
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+  exit 0
+fi

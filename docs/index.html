@@ -32,7 +32,7 @@
   "description": "Free, open-source macOS app for the Razer Huntsman V3 Pro: per-key actuation from 0.1 to 4.0 mm, Rapid Trigger, Snap Tap, per-key RGB and a lighting studio. No Synapse needed.",
   "operatingSystem": "macOS",
   "applicationCategory": "UtilitiesApplication",
-  "softwareVersion": "0.4.2",
+  "softwareVersion": "0.5.0",
   "license": "https://spdx.org/licenses/GPL-3.0-or-later.html",
   "url": "https://samir777-eng.github.io/huntsman-for-mac/",
   "downloadUrl": "https://github.com/samir777-eng/huntsman-for-mac/releases/latest",
@@ -308,7 +308,7 @@ footer p{margin:0 0 12px}
 <main id="main">
   <section class="hero" id="top" aria-labelledby="hero-title">
     <div class="wrap">
-      <p class="pill"><b>v0.4.2</b> · Free &amp; open source · macOS · Windows build (experimental)</p>
+      <p class="pill"><b>v0.5.0</b> · Free &amp; open source · macOS · Windows build (experimental)</p>
       <h1 id="hero-title">Huntsman <span class="grad" style="display:inline-block">for Mac</span></h1>
       <p class="sub">Tune your Razer Huntsman V3 Pro on a Mac. No Synapse, no Windows, no virtual machine.</p>
       <p class="lead">Per-key actuation from 0.1 to 4.0 mm, Rapid Trigger, Snap Tap, per-key RGB, and a lighting studio that reacts to your typing and your music.</p>
@@ -461,7 +461,7 @@ footer p{margin:0 0 12px}
           </tbody>
         </table>
       </div>
-      <p class="fine">On the experimental models none of this has been seen working yet, and nothing that changes them is sent until you turn on <strong>Keyboard → Experimental support</strong>. Macs: tested on Apple silicon with macOS 26. Intel Macs and earlier macOS versions are untested; they will probably work, and a report either way helps. On <a href="#windows">Windows</a> every model, the V3 Pro too, is experimental and untested, with no key tester.</p>
+      <p class="fine">On the experimental models none of this has been seen working yet, and nothing that changes them is sent until you turn on <strong>Keyboard → Experimental support</strong>. Macs: tested on Apple silicon with macOS 26, and the 0.5.0 installer on macOS 27.2. The installer needs Apple silicon and macOS 14 or later; on an Intel Mac, install from source. Intel Macs and macOS versions before 26 are untested, and a report either way helps. On <a href="#windows">Windows</a> every model, the V3 Pro too, is experimental and untested, with no key tester.</p>
     </div>
   </section>
 
@@ -469,25 +469,37 @@ footer p{margin:0 0 12px}
     <div class="wrap">
       <div class="section-head">
         <p class="eyebrow">Quick start</p>
-        <h2 id="install-title">Three steps and <span class="grad">you're tuning.</span></h2>
+        <h2 id="install-title">Download, install, <span class="grad">start tuning.</span></h2>
+        <p class="lead">A normal Mac installer for Apple silicon (M1 or later) and macOS 14 or later. No Homebrew, Python or Terminal needed.</p>
       </div>
-      <ol class="steps" style="list-style:none;margin:0;padding:0">
+      <ol class="steps four" style="list-style:none;margin:0;padding:0">
         <li class="step">
-          <h3>Get the code</h3>
-          <div class="code"><div class="code-bar"><span>Terminal</span><button class="copy" type="button" hidden aria-label="Copy clone commands" data-copy="git clone https://github.com/samir777-eng/huntsman-for-mac.git&#10;cd huntsman-for-mac">Copy</button></div><pre><code>git clone https://github.com/samir777-eng/huntsman-for-mac.git
-cd huntsman-for-mac</code></pre></div>
-        </li>
-        <li class="step">
-          <h3>Install it</h3>
-          <div class="code"><div class="code-bar"><span>Terminal</span><button class="copy" type="button" hidden aria-label="Copy install command" data-copy="./install.sh">Copy</button></div><pre><code>./install.sh</code></pre></div>
-          <p>Installs the app in <code>~/Applications</code>, libusb through Homebrew if it's missing, and the lighting service.</p>
+          <h3>Download</h3>
+          <p><code>Huntsman-for-Mac-&lt;version&gt;.pkg</code> from the <a href="https://github.com/samir777-eng/huntsman-for-mac/releases/latest">latest release</a>.</p>
         </li>
         <li class="step">
           <h3>Open it</h3>
-          <p>The installer opens <strong>Huntsman for Mac</strong> when it's done. Next time, find it in <code>~/Applications</code> or Spotlight.</p>
+          <p>It isn't signed with an Apple Developer ID, so macOS blocks it the first time. Click <strong>Done</strong>, then <strong>System Settings → Privacy &amp; Security → Open Anyway</strong> and your password (not yet confirmed by us; if it doesn't work, see the Terminal line below).</p>
+        </li>
+        <li class="step">
+          <h3>Install</h3>
+          <p>Introduction, License (GPL), Install (your Mac password). The app goes in <code>/Applications</code> with its own Python and libusb.</p>
+        </li>
+        <li class="step">
+          <h3>Open the app</h3>
+          <p>From Applications or Spotlight. The first time, it sets up the lighting service and the keyboard icon appears in the menu bar.</p>
         </li>
       </ol>
-      <p class="req">You need Python 3.11 or newer, and Homebrew if libusb isn't installed yet. Full details, updating and uninstalling are in the <a href="https://github.com/samir777-eng/huntsman-for-mac#install">README</a>.</p>
+      <div class="cta" style="justify-content:flex-start">
+        <a class="btn btn-primary" href="https://github.com/samir777-eng/huntsman-for-mac/releases/latest">Download the .pkg</a>
+      </div>
+      <p class="req" style="overflow-wrap:anywhere">Stuck at Open Anyway? Remove the download mark in Terminal with <code>xattr -d com.apple.quarantine ~/Downloads/Huntsman-for-Mac-&lt;version&gt;.pkg</code> and open the pkg again. A Developer ID-signed, notarized installer isn't available yet. If you installed with <code>install.sh</code> before, the installer moves that copy to the Trash and keeps your settings. To remove the app: <strong>Keyboard → Uninstall…</strong>.</p>
+
+      <h3 style="margin-top:40px">From source (developers, Intel Macs)</h3>
+      <div class="code"><div class="code-bar"><span>Terminal</span><button class="copy" type="button" hidden aria-label="Copy install commands" data-copy="git clone https://github.com/samir777-eng/huntsman-for-mac.git&#10;cd huntsman-for-mac&#10;./install.sh">Copy</button></div><pre><code>git clone https://github.com/samir777-eng/huntsman-for-mac.git
+cd huntsman-for-mac
+./install.sh</code></pre></div>
+      <p class="req">Installs the app in <code>~/Applications</code>, libusb through Homebrew if it's missing, and the lighting service, then opens the app. You need Python 3.11 or newer, and Homebrew if libusb isn't installed yet. Full details, updating and uninstalling are in the <a href="https://github.com/samir777-eng/huntsman-for-mac#install">README</a>.</p>
     </div>
   </section>
 

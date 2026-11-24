@@ -12,7 +12,7 @@
   <a href="https://github.com/samir777-eng/huntsman-for-mac/releases/latest"><img src="https://img.shields.io/github/v/release/samir777-eng/huntsman-for-mac?label=release&style=for-the-badge&color=6ad7ff&labelColor=0a0a0b" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-6ad7ff?style=for-the-badge&labelColor=0a0a0b" alt="License: GPL-3.0-or-later"></a>
   <a href="#supported-hardware"><img src="https://img.shields.io/badge/tested%20on-Apple%20silicon-6ad7ff?style=for-the-badge&logo=apple&logoColor=white&labelColor=0a0a0b" alt="Tested on Apple silicon"></a>
-  <a href="#install"><img src="https://img.shields.io/badge/python-3.11%2B-6ad7ff?style=for-the-badge&logo=python&logoColor=white&labelColor=0a0a0b" alt="Python 3.11+"></a>
+  <a href="https://github.com/samir777-eng/huntsman-for-mac/releases/latest"><img src="https://img.shields.io/badge/download-.pkg%20installer-6ad7ff?style=for-the-badge&logo=apple&logoColor=white&labelColor=0a0a0b" alt="Download the Mac installer (.pkg)"></a>
   <a href="#synapse-for-mac-vs-huntsman-for-mac"><img src="https://img.shields.io/badge/Synapse-not%20needed-6ad7ff?style=for-the-badge&labelColor=0a0a0b" alt="No Synapse needed"></a>
   <a href="#windows-experimental"><img src="https://img.shields.io/badge/Windows-experimental%2C%20untested-ffc66b?style=for-the-badge&labelColor=0a0a0b" alt="Windows build: experimental, untested"></a>
 </p>
@@ -47,25 +47,22 @@ typing and your music.
 
 ## Quick start
 
-Three steps and you're tuning:
+For a Mac with Apple silicon (M1 or later) and macOS 14 or later. No Homebrew, Python or Terminal needed.
 
-1. **Get the code**
+1. **Download** `Huntsman-for-Mac-<version>.pkg` from the
+   [latest release](https://github.com/samir777-eng/huntsman-for-mac/releases/latest).
+2. **Open it.** The first time, macOS blocks it and says Apple could not verify it is free of malware, because it
+   isn't signed with an Apple Developer ID. Click **Done**, then go to **System Settings → Privacy & Security**, click
+   **Open Anyway** and enter your password. We haven't got this route to work in our own test yet: if it doesn't work
+   for you either, run `xattr -d com.apple.quarantine ~/Downloads/Huntsman-for-Mac-<version>.pkg` in Terminal and
+   open the pkg again (see [macOS says it can't verify the installer](#troubleshooting)).
+3. **Install.** Introduction, License (GPL), then Install, which asks for your Mac password.
+4. **Open Huntsman for Mac** from Applications or Spotlight. The first time, it sets up the lighting service, and the
+   keyboard icon appears in the menu bar.
 
-   ```bash
-   git clone https://github.com/samir777-eng/huntsman-for-mac.git
-   cd huntsman-for-mac
-   ```
-
-2. **Install it**
-
-   ```bash
-   ./install.sh
-   ```
-
-3. **Open it.** The installer opens **Huntsman for Mac** when it's done. Next time, find it in `~/Applications` or
-   Spotlight.
-
-You need Python 3.11 or newer, and Homebrew if libusb isn't installed yet. Details in [Install](#install).
+**From source (developers, Intel Macs):** `git clone https://github.com/samir777-eng/huntsman-for-mac.git`, then
+`./install.sh` in that folder. You need Python 3.11 or newer, and Homebrew if libusb isn't installed yet. Details in
+[Install](#install).
 
 On Windows? There's an experimental, untested build: see [Windows (experimental)](#windows-experimental).
 
@@ -357,8 +354,9 @@ Trigger or Snap Tap tabs and no key tester. The V2 Analog has actuation only, on
 the computer, not on the keyboard, so the app doesn't offer them. If more than one supported keyboard is plugged in,
 the app uses the first one it finds in the order of this table.
 
-Macs: tested on Apple silicon with macOS 26. Intel Macs and earlier macOS versions are untested; they will probably
-work, and a report either way helps.
+Macs: tested on Apple silicon with macOS 26, and the 0.5.0 installer on macOS 27.2. The installer (.pkg) needs Apple
+silicon and macOS 14 or later. On an Intel Mac, install [from source](#from-source-developers-intel-macs); Intel Macs
+and macOS versions before 26 are untested, and a report either way helps.
 
 Windows: untested on a PC, and every model, the V3 Pro too, is experimental there, with no key tester. See
 [Windows (experimental)](#windows-experimental).
@@ -409,6 +407,7 @@ Checked on 2026-11-17 with a Huntsman V3 Pro (1532:02A6), firmware 1.03, wired, 
 | Lighting Studio: built-in presets, layers, settings, saving presets, Sound, Typing and Smart panels, music through the microphone | Smart lighting over a long session (real sleep and screen lock) |
 | Studio effects keep running after the app quits | System sound through a loopback device such as BlackHole |
 | | install.sh putting the previous app back after a failed build |
+| | The installer with several users logged in at once, and macOS's **Open Anyway** route for it |
 | | Anything on [Windows](#windows-experimental): the build has never run on a PC with a keyboard |
 
 **Version 0.3.0** was checked again on the same keyboard: the window, actuation, Rapid Trigger and Snap Tap, keyboard
@@ -428,7 +427,43 @@ Input Monitoring turned off (notice, **Open Privacy settings**, **Try again**), 
 opening on the last tab, and ⌘: it stops live view, a Cmd-Tab in the same motion switches apps, and holding ⌘ stops it
 once. All passed.
 
+**Version 0.5.0's installer** was checked on the V3 Pro on 2026-11-24, on macOS 27.2, with a pkg built by GitHub Actions
+and signed with the project's self-signed certificate. The wizard installed the app in `/Applications`, moved the
+earlier install.sh copy to the Trash, switched the lighting service to the new app and kept the settings. On first
+launch the app set up the lighting service and the menu bar icon appeared; lighting, actuation and the key tester
+worked. Input Monitoring for the key tester is listed as **Huntsman for Mac**, and installing a newer build over it kept
+that permission. **Uninstall…** removed the app, the lighting service and the installer's receipt, kept the settings,
+and the keyboard went back to typing with its own lighting; installing again afterwards worked. macOS blocked the pkg
+the first time, as expected for an installer without an Apple Developer ID; in this test it was opened after removing
+the download mark in Terminal, not through **Open Anyway**.
+
 ## Install
+
+### The installer (.pkg)
+
+You need a Mac with Apple silicon (M1 or later) and macOS 14 or later, with the keyboard plugged in by USB. Download
+`Huntsman-for-Mac-<version>.pkg` from the [latest release](https://github.com/samir777-eng/huntsman-for-mac/releases/latest)
+and follow [Quick start](#quick-start). It installs:
+
+- **Huntsman for Mac.app** in `/Applications`, with its own Python and libusb inside. You don't need Homebrew, Python
+  or Terminal.
+- **The lighting service**, `Huntsman Lighting.app`, inside the app (`Contents/Library/LoginItems`). The first time you
+  open the app, it sets up the LaunchAgent (`io.github.huntsman-for-mac.lighting`) that starts the service now and at
+  every login.
+
+If you installed it before with `install.sh`, the installer moves that copy (`~/Applications/Huntsman for Mac.app`) to
+the Trash and switches the lighting service to the new app. Your settings in
+`~/Library/Application Support/Huntsman for Mac` are kept.
+
+The pkg is signed with the project's own self-signed certificate. It isn't signed with an Apple Developer ID or
+notarized by Apple, so macOS blocks it the first time you open it (see
+[macOS says it can't verify the installer](#troubleshooting)). A Developer ID-signed, notarized installer isn't
+available yet.
+
+Known limitation: if other users are logged in at the same time, the installer stops only the lighting service of the
+user at the screen. Theirs keeps running during the install. This case hasn't been tried.
+
+### From source (developers, Intel Macs)
 
 You need:
 
@@ -437,7 +472,15 @@ You need:
   Newer versions are used if nothing older is found; the installer says they're untested.
 - [Homebrew](https://brew.sh), if libusb isn't installed yet: the installer uses it to add libusb.
 
-Then run `./install.sh` from the project folder (see [Quick start](#quick-start)). It installs:
+Then:
+
+```bash
+git clone https://github.com/samir777-eng/huntsman-for-mac.git
+cd huntsman-for-mac
+./install.sh
+```
+
+It installs:
 
 - **Huntsman for Mac.app** in `~/Applications`. It carries its own copy of the code and Python environment, and is
   signed ad hoc on your Mac (no Apple developer account involved).
@@ -446,6 +489,8 @@ Then run `./install.sh` from the project folder (see [Quick start](#quick-start)
   (`io.github.huntsman-for-mac.lighting`) that starts it now and at every login. It replaces the `apply-saved` login
   item of earlier versions, which the installer removes.
 
+The installer opens **Huntsman for Mac** when it's done. Next time, find it in `~/Applications` or Spotlight.
+
 > [!TIP]
 > **Try it without a keyboard:** open `ui/index.html?demo` in a browser. Add `&model=02B0` (or any USB product ID from
 > the table) to preview another model; a list in the header switches between them.
@@ -453,7 +498,13 @@ Then run `./install.sh` from the project folder (see [Quick start](#quick-start)
 ### Update
 
 <details>
-<summary>Three steps: quit, pull, install</summary>
+<summary>Open the newer .pkg, or pull and run install.sh again</summary>
+
+**Installer:** download the newer `Huntsman-for-Mac-<version>.pkg` and open it. It quits the app and the lighting
+service itself, then starts the service again from the new app. Installing a newer build this way kept the key tester's
+Input Monitoring permission.
+
+**From source:**
 
 1. Quit the app (Cmd-Q). The installer stops and restarts the lighting service itself.
 2. `git pull`
@@ -469,12 +520,20 @@ with.
 <details>
 <summary>Remove the app, and optionally your settings</summary>
 
-Quit the app first, then:
+**Installer:** open the app's **Keyboard** tab (the gear) and click **Uninstall…**. After you confirm, macOS asks for
+your password. It removes the app, the lighting service and its login item, and the installer's receipt, then quits.
+Your settings stay in `~/Library/Application Support/Huntsman for Mac` in case you install it again; delete that folder
+and `~/Library/Logs/Huntsman for Mac.log` to remove them too.
+
+**From source:** quit the app first, then:
 
 ```bash
 ./uninstall.sh          # stops the lighting service, removes the app and its login item; keeps your settings and the log
 ./uninstall.sh --all    # also deletes your settings, the first-launch snapshot and the log
 ```
+
+`uninstall.sh` also removes the installer's copy, `/Applications/Huntsman for Mac.app`, if there is one (it asks for
+your password through `sudo`), and forgets the installer's receipt.
 
 Stopping the lighting service puts the keyboard's own lighting back; nothing else on the keyboard changes. Use
 *Restore factory depth* in the app first if you want the keyboard back to its defaults.
@@ -487,12 +546,12 @@ macOS asks the first time a feature needs one of these.
 
 | Permission | For | Listed as |
 |---|---|---|
-| Input Monitoring | The key tester | python3.13 and python (see below) |
+| Input Monitoring | The key tester | Huntsman for Mac (installer); python3.13 and python (install.sh, see below) |
 | Input Monitoring | Studio's typing effects and heatmap | Huntsman Lighting |
 | Microphone | Studio's sound effects | Huntsman Lighting |
 
 The lighting service has its own small app bundle so that macOS should list it as **Huntsman Lighting**. That name
-hasn't been confirmed on hardware yet; it may show up as **Python** instead.
+hasn't been confirmed on hardware yet (a copy installed with `install.sh` may show up as **Python** instead).
 
 ### Input Monitoring for the key tester
 
@@ -503,12 +562,15 @@ The key tester reads the keyboard's travel reports, which macOS treats as input 
 nothing was asked:
 
 1. Open **System Settings → Privacy & Security → Input Monitoring**.
-2. Turn on **python3.13** and **python**. The app runs on Python, so macOS keeps this permission under the Python it
-   runs on (checked on macOS 26, 2026-11-24), not under "Huntsman for Mac". If neither is listed, click **+** and
-   choose `~/Applications/Huntsman for Mac.app`.
+2. Turn on **Huntsman for Mac** if you used the installer (checked on macOS 27.2, 2026-11-24).
+
+   With an install.sh copy, turn on **python3.13** and **python** instead. That copy runs on Python, so
+   macOS keeps this permission under the Python it runs on (checked on macOS 26, 2026-11-24), not under "Huntsman for
+   Mac". If neither is listed, click **+** and choose `~/Applications/Huntsman for Mac.app`.
 3. Quit and reopen the app.
 
-Re-installing replaces the app, so macOS may ask again, or the switch may need to be turned off and on.
+Installing a newer .pkg over the app kept this permission. Re-running install.sh replaces the app, so macOS may ask
+again, or the switch may need to be turned off and on.
 
 </details>
 
@@ -533,8 +595,9 @@ Huntsman for Mac, and has **Quit lighting service**, which stops Studio and puts
 <details>
 <summary>When it starts, restarts and pauses</summary>
 
-- The service starts at login and when the installer finishes. When it starts, it sends per-key colours, Rapid
-  Trigger and Snap Tap to the keyboard again and starts Studio if it was on.
+- The service starts at login and when an install or update finishes (after a first install from the .pkg, when you
+  first open the app). When it starts, it sends per-key colours, Rapid Trigger and Snap Tap to the keyboard again and
+  starts Studio if it was on.
 - It's set up to restart if it crashes (not checked on hardware yet). After *Quit lighting service* it stays off
   until the next login or the next time you open the app: the window starts it again when it opens (it reads
   Studio's state from the service).
@@ -546,7 +609,7 @@ Huntsman for Mac, and has **Quit lighting service**, which stops Studio and puts
 
 ## Command line
 
-The installed app includes a command-line tool:
+An install.sh copy includes a command-line tool (the installer's app doesn't):
 
 ```bash
 APP=~/Applications/"Huntsman for Mac.app"/Contents/Resources
@@ -619,16 +682,37 @@ Razer documentation. So it's careful:
 </details>
 
 <details>
-<summary><b>"libusb is missing"</b></summary>
+<summary><b>macOS says it can't verify the installer</b></summary>
 
-Run `brew install libusb`, then `./install.sh` again.
+macOS says Apple could not verify the pkg is free of malware, with **Move to Trash** and **Done**. It does this because
+the pkg isn't signed with an Apple Developer ID or notarized by Apple; a signed, notarized installer isn't available yet.
+
+1. Click **Done** (not Move to Trash).
+2. Open **System Settings → Privacy & Security** and click **Open Anyway**, then enter your password. This is the
+   route macOS offers; we haven't confirmed it ourselves yet.
+3. If that doesn't get you through, remove the download mark in Terminal and double-click the pkg again:
+
+   ```bash
+   xattr -d com.apple.quarantine ~/Downloads/Huntsman-for-Mac-<version>.pkg
+   ```
+
+   Put the version you downloaded in place of `<version>` (or type `xattr -d com.apple.quarantine ` and drag the pkg
+   into the Terminal window). This is how the installer was opened in our own test.
 
 </details>
 
 <details>
-<summary><b>The app doesn't open, or macOS says it's damaged or from an unidentified developer</b></summary>
+<summary><b>"libusb is missing"</b></summary>
 
-- The installer removes the download quarantine flag and signs the app ad hoc. If it printed a signing warning, run
+This only happens with an install.sh copy (the installer's app has libusb inside). Run `brew install libusb`, then
+`./install.sh` again.
+
+</details>
+
+<details>
+<summary><b>An install.sh copy doesn't open, or macOS says it's damaged or from an unidentified developer</b></summary>
+
+- install.sh removes the download quarantine flag and signs the app ad hoc. If it printed a signing warning, run
   `./install.sh` again and keep the output for a bug report.
 - You can also right-click the app, choose **Open**, and confirm.
 - Check the log: `~/Library/Logs/Huntsman for Mac.log`.
@@ -636,17 +720,17 @@ Run `brew install libusb`, then `./install.sh` again.
 </details>
 
 <details>
-<summary><b>The app stops working after a Python upgrade</b></summary>
+<summary><b>An install.sh copy stops working after a Python upgrade</b></summary>
 
-Run `./install.sh` again.
+Run `./install.sh` again. The installer's app carries its own Python, so this doesn't affect it.
 
 </details>
 
 <details>
-<summary><b>Installer says the app is running</b></summary>
+<summary><b>install.sh says the app is running</b></summary>
 
-Quit the window (Cmd-Q), then run the installer again. The lighting service doesn't need quitting; the installer
-stops and restarts it.
+Quit the window (Cmd-Q), then run `./install.sh` again. The lighting service doesn't need quitting; install.sh stops
+and restarts it.
 
 </details>
 
@@ -785,6 +869,8 @@ interface (no driver swap), the app and the lighting service talk over a named p
   presets and the engine that streams per-key frames
 - `inputs/`: key presses (IOKit), sound levels (sounddevice) and smart-lighting signals (idle, sleep, lock, front app)
 - `huntsman.py`: the command line
+- `packaging/`: the Mac installer (`packaging/mac/`, built with `tools/build_mac_pkg.sh` and the `Mac build` workflow)
+  and the Windows build (`packaging/windows/`)
 - `platforms/`: which OS this is, folders and file locks, and the Windows pieces (hidapi transport, tray icon, start
   at login, Raw Input typing, smart-lighting events, the Synapse check, the build manifest)
 

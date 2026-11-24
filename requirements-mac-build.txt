@@ -1,0 +1,13 @@
+# The Mac installer build (packaging/mac, tools/build_mac_pkg.sh, .github/workflows/mac-build.yml), Python 3.13 on
+# Apple silicon: the app's own requirements, plus PyInstaller (same pins as the Windows build) and libusb-package,
+# whose wheel carries the libusb-1.0.dylib bundled into the app (Homebrew's needs a newer macOS than the app's 14.0).
+# A source install (install.sh) doesn't use this file.
+-r requirements.txt
+libusb-package==1.0.30.1
+importlib_resources==7.1.0
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.10
+altgraph==0.17.5
+macholib==1.16.4
+packaging==26.4
+setuptools==84.2.1

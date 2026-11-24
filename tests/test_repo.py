@@ -5,7 +5,7 @@ import importlib.util
 import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SKIP_DIRS = {".git", ".venv", "venv", "env", "__pycache__", ".pytest_cache"}
+SKIP_DIRS = {".git", ".venv", "venv", "env", "__pycache__", ".pytest_cache", "build", "dist"}   # build, dist: the Mac build
 
 
 def _demo_layout_tool():

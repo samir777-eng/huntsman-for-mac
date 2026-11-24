@@ -19,13 +19,14 @@ open_transport), and the gate treats every model as experimental there and never
 import contextlib
 import json
 import os
+import sys
 import threading
 import time
 
 import models
 import platforms
 
-__version__ = "0.4.2"
+__version__ = "0.5.0"
 
 VID, PID = 0x1532, 0x02A6   # PID: the verified model; the connected one is active_model().pid
 TID = 0x1F
@@ -400,12 +401,24 @@ def open_transport():
     return UsbTransport()
 
 
+HOMEBREW_LIBUSB = ("/opt/homebrew/lib/libusb-1.0.dylib", "/usr/local/lib/libusb-1.0.dylib")
+
+
+def libusb_path():
+    """The libusb to load: in the installed app (frozen, packaging/mac) the copy bundled next to its code
+    (Contents/Frameworks, from the libusb-package wheel) first; then Homebrew's (a source install). None if none."""
+    cands = []
+    if getattr(sys, "frozen", False) and getattr(sys, "_MEIPASS", None):
+        cands.append(os.path.join(sys._MEIPASS, "libusb-1.0.dylib"))
+    cands += HOMEBREW_LIBUSB
+    return next((p for p in cands if os.path.exists(p)), None)
+
+
 class UsbTransport:
     def __init__(self):
         import usb.core
         import usb.backend.libusb1
-        lib = next((p for p in ("/opt/homebrew/lib/libusb-1.0.dylib", "/usr/local/lib/libusb-1.0.dylib")
-                    if os.path.exists(p)), None)
+        lib = libusb_path()
         if lib is None:
             raise DeviceError("libusb is missing: run  brew install libusb")
         be = usb.backend.libusb1.get_backend(find_library=lambda _: lib)

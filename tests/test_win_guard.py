@@ -318,7 +318,8 @@ def test_platform_status_on_the_mac_is_empty(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setattr(hc, "Keyboard", lambda *a, **k: pytest.fail("platform_status connected to the keyboard"))
     api = make_api(appmod, FakeService())
-    assert api.platform_status() == {"ok": True, "data": {"platform": "mac", "blocked": None, "notices": []}}
+    assert api.platform_status() == {"ok": True, "data": {"platform": "mac", "blocked": None, "notices": [],
+                                                          "can_uninstall": False}}   # not the installed app
 
 
 def test_the_lighting_service_opens_nothing_while_synapse_runs(windows, monkeypatch):

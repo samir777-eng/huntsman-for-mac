@@ -236,3 +236,61 @@ def test_only_one_service_runs(tmp_path):
     assert service.acquire_instance_lock(str(tmp_path / "service.lock")) is None
     os.close(first)
     assert service.acquire_instance_lock(str(tmp_path / "service.lock")) is not None
+
+
+# ---------- requests that arrive while the service is still starting ----------
+
+def test_a_request_during_start_waits_for_studio_instead_of_failing(app, hooks, clock):
+    # The socket is up before start() has built Studio (seen on the frozen 0.5.0 build: a "summary" from the window
+    # failed once with "'NoneType' object has no attribute 'summary'"). It now waits for start() to finish.
+    import threading
+    import service
+    s = service.LightingService(engine_cls=FakeEngine, inputs=hooks["inputs"], clock=clock)
+    got = {}
+    t = threading.Thread(target=lambda: got.update(r=s.handle("summary", {})))
+    t.start()
+    t.join(0.2)
+    assert t.is_alive()                     # held, not answered with an error
+    s.start()
+    t.join(5)
+    try:
+        assert not t.is_alive() and got["r"]["ok"], got
+    finally:
+        s.shutdown()
+
+
+def test_ping_answers_while_starting(app, hooks, clock):
+    import service
+    s = service.LightingService(engine_cls=FakeEngine, inputs=hooks["inputs"], clock=clock)
+    assert s.handle("ping", {}) == {"ok": True, "data": True}
+
+
+def test_a_request_gets_a_plain_error_if_start_never_finishes(app, hooks, clock, monkeypatch):
+    import service
+    monkeypatch.setattr(service, "START_WAIT", 0.1)
+    s = service.LightingService(engine_cls=FakeEngine, inputs=hooks["inputs"], clock=clock)
+    r = s.handle("summary", {})
+    assert not r["ok"] and r["error"] == "The lighting service is still starting. Try again in a moment."
+
+
+def test_the_service_answers_before_the_app_gives_up():
+    # A held request must be answered (or refused) before ipc's client times out and sends it again, or it runs twice.
+    import ipc
+    import service
+    assert service.START_WAIT < ipc.TIMEOUT
+
+
+def test_a_failed_start_gives_a_plain_error_not_a_traceback(app, hooks, clock, monkeypatch):
+    import service
+    s = service.LightingService(engine_cls=FakeEngine, inputs=hooks["inputs"], clock=clock)
+    monkeypatch.setattr(s, "_start", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+    with pytest.raises(RuntimeError):
+        s.start()
+    assert s.handle("summary", {}) == {"ok": False, "error": service.STARTING}
+
+
+def test_shutdown_before_start_releases_waiting_requests(app, hooks, clock):
+    import service
+    s = service.LightingService(engine_cls=FakeEngine, inputs=hooks["inputs"], clock=clock)
+    s.shutdown()
+    assert s._started.is_set()

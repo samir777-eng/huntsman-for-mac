@@ -322,10 +322,12 @@ def test_no_empty_gap_between_the_live_status_and_last_key(page):
     wait_for_call(page, "start_test")
     expect(page.locator("#liveText")).to_contain_text("Live view on")
     note, text, title = (box(page.locator(s)) for s in ("#liveNote", "#liveText", "#tKey"))
-    assert note[3] - text[3] <= 2, (note, text)        # the status line holds no empty lines under its text
+    # under half a line: font metrics differ per OS (Windows CI leaves ~2.4 px), an empty line is a whole one
+    half = page.locator("#liveText").evaluate("e => parseFloat(getComputedStyle(e).fontSize)") / 2
+    assert note[3] - text[3] < half, (note, text)      # the status line holds no empty lines under its text
     # what is left is the panel's own spacing (its 14 px gap and the title's 10 px margin), as above the status line
     above = text[1] - box(page.locator("#presets"))[3]
-    assert abs((title[1] - text[3]) - above) <= 2, (title, text, above)
+    assert abs((title[1] - text[3]) - above) < half, (title, text, above)
     live_top = box(page.locator("#tKey"))[1]
     front(page, focus=False)                           # paused: other text, same place
     expect(page.locator("#liveText")).to_contain_text("isn't in front")

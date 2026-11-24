@@ -1,0 +1,80 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Huntsman for Mac contributors
+# Runs as root after the installer wrote /Applications/Huntsman for Mac.app. For the user at the screen:
+#   - an install.sh copy (~/Applications/Huntsman for Mac.app) goes to that user's Trash, moved as that user so it
+#     stays theirs (never over something already there: then "Huntsman for Mac <time>.app"). If the Trash refuses
+#     it (macOS privacy protection), it is renamed in place to "Huntsman for Mac (old).app", so opening the app by
+#     its bundle id finds only the new one. Never when ~/Applications is (a link to) /Applications: that copy is the
+#     app just installed. Settings in ~/Library/Application Support/Huntsman for Mac stay.
+#   - an existing lighting-service LaunchAgent (install.sh's, or an earlier pkg's) is pointed at the new bundle and
+#     started again. A fresh install gets nothing here: the app writes the LaunchAgent the first time it opens.
+# Never fails the install. The functions are separate so tests can source this file and replace them.
+set -u
+
+LABEL="io.github.huntsman-for-mac.lighting"
+APP_ID="io.github.huntsman-for-mac"
+NAME="Huntsman for Mac"
+SYSTEM_APPS="/Applications"   # where the payload went (tests point it elsewhere)
+EXE="/Applications/$NAME.app/Contents/Library/LoginItems/Huntsman Lighting.app/Contents/MacOS/HuntsmanLighting"
+
+console_user() { /usr/bin/stat -f %Su /dev/console; }
+user_uid() { /usr/bin/id -u "$1"; }
+user_home() { /usr/bin/dscl . -read "/Users/$1" NFSHomeDirectory | /usr/bin/sed -n 's/^NFSHomeDirectory: //p'; }
+_launchctl() { /bin/launchctl "$@"; }
+# as_user CMD...: CMD as the console user (USER_NAME, USER_UID), in their login session
+as_user() { /bin/launchctl asuser "$USER_UID" /usr/bin/sudo -u "$USER_NAME" "$@"; }
+_date() { /bin/date +%H.%M.%S; }
+
+# free_name DIR BASE: DIR/BASE.app, or DIR/BASE <time>.app if that is taken; fails if both are
+free_name() {
+  local dest="$1/$2.app"
+  [[ -e "$dest" || -L "$dest" ]] && dest="$1/$2 $(_date).app"
+  [[ -e "$dest" || -L "$dest" ]] && return 1
+  printf '%s\n' "$dest"
+}
+
+trash_old_copy() {
+  local home="$1" old trash dest
+  [[ -L "$home/Applications" ]] && return 0
+  old="$home/Applications/$NAME.app"
+  [[ -d "$old" && ! -L "$old" ]] || return 0
+  [[ "$old" -ef "$SYSTEM_APPS/$NAME.app" ]] && return 0
+  trash="$home/.Trash"
+  if { [[ -d "$trash" ]] || as_user /bin/mkdir -p "$trash"; } && dest="$(free_name "$trash" "$NAME")" \
+     && as_user /bin/mv "$old" "$dest"; then
+    return 0
+  fi
+  if dest="$(free_name "$home/Applications" "$NAME (old)")" && as_user /bin/mv "$old" "$dest"; then
+    printf 'postinstall: the Trash refused %s; renamed it to %s\n' "$old" "$dest" >&2
+    return 0
+  fi
+  printf 'postinstall: could not move %s out of the way\n' "$old" >&2
+}
+
+repoint_agent() {
+  local home="$1" agent
+  agent="$home/Library/LaunchAgents/$LABEL.plist"
+  [[ -f "$agent" && ! -L "$agent" ]] || return 0
+  as_user /usr/bin/plutil -replace ProgramArguments -json "[\"$EXE\"]" "$agent" || return 0
+  as_user /usr/bin/plutil -replace AssociatedBundleIdentifiers -json "[\"$APP_ID\"]" "$agent" || true
+  _launchctl bootout "gui/$USER_UID/$LABEL" >/dev/null 2>&1 || true
+  _launchctl bootstrap "gui/$USER_UID" "$agent" >/dev/null 2>&1 || true
+}
+
+main() {
+  local home
+  USER_NAME="$(console_user 2>/dev/null)" || USER_NAME=""
+  case "$USER_NAME" in ""|root|loginwindow) return 0 ;; esac
+  USER_UID="$(user_uid "$USER_NAME" 2>/dev/null)" || return 0
+  home="$(user_home "$USER_NAME" 2>/dev/null)" || return 0
+  [[ -n "$home" && -d "$home" ]] || return 0
+  trash_old_copy "$home"
+  repoint_agent "$home"
+  return 0
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+  exit 0
+fi

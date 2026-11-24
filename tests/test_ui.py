@@ -380,3 +380,60 @@ def test_a_lock_while_live_stops_it_and_says_no_starting(page):
     wait_for_call(page, "stop_test")
     sync_api.expect(page.locator("#testBanner")).to_be_hidden()
     sync_api.expect(page.locator("#liveNote")).not_to_contain_text("Starting")
+
+
+# ---------- Keyboard > Uninstall… (the installed app) ----------
+
+def test_uninstall_button_asks_first_and_says_settings_are_kept(page):
+    page.click('button[data-view="device"]')
+    btn = page.locator("#uninstall")
+    sync_api.expect(btn).to_be_visible()
+    sync_api.expect(btn).to_have_text("Uninstall…")
+    btn.click()
+    dlg = page.locator("#confirmUninstall")
+    sync_api.expect(dlg).to_be_visible()
+    sync_api.expect(dlg).to_contain_text("Uninstall Huntsman for Mac?")
+    sync_api.expect(dlg).to_contain_text("settings and presets are kept")
+    sync_api.expect(dlg).to_contain_text("password")
+    assert calls(page, "uninstall") == []
+
+
+def test_uninstall_cancel_does_nothing(page):
+    page.click('button[data-view="device"]')
+    page.click("#uninstall")
+    page.locator("#confirmUninstall button[value=cancel]").click()
+    sync_api.expect(page.locator("#confirmUninstall")).to_be_hidden()
+    page.wait_for_timeout(200)
+    assert calls(page, "uninstall") == []
+    sync_api.expect(page.locator("#uninstall")).to_be_focused()
+
+
+def test_uninstall_confirmed_calls_the_app_once(page):
+    page.click('button[data-view="device"]')
+    page.click("#uninstall")
+    page.locator("#confirmUninstall button[value=uninstall]").click()
+    wait_for_call(page, "uninstall")
+    sync_api.expect(page.locator("#toast")).to_contain_text("Uninstalled")
+    assert calls(page, "uninstall") == [[]]
+    assert page.errors == []
+
+
+def test_uninstall_failure_shows_why(page):
+    page.evaluate("window.__override.uninstall = () => Promise.resolve({ok: false, error: 'Uninstall cancelled. Huntsman for Mac is still installed.'})")
+    page.click('button[data-view="device"]')
+    page.click("#uninstall")
+    page.locator("#confirmUninstall button[value=uninstall]").click()
+    sync_api.expect(page.locator("#toast")).to_contain_text("still installed")
+    sync_api.expect(page.locator("#uninstall")).to_be_enabled()
+
+
+def test_uninstall_is_hidden_when_the_app_cant_uninstall_itself(browser):
+    pg = browser.new_page(viewport={"width": 1280, "height": 900})
+    pg.add_init_script(RECORDER + """
+window.__override.platform_status = () => Promise.resolve({ok: true, data: {platform: "mac", blocked: null,
+  notices: [], can_uninstall: false}});""")
+    pg.goto(URL)
+    sync_api.expect(pg.locator("#conn")).to_have_text("Connected, firmware 1.03")
+    pg.click('button[data-view="device"]')
+    sync_api.expect(pg.locator("#uninstall")).to_be_hidden()
+    pg.close()

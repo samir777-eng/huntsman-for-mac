@@ -133,17 +133,30 @@ def file_lock(path):
                 pass   # closing the file releases it anyway
 
 
+def _to_devnull(stream):
+    """True when stream writes to /dev/null (what macOS gives an app opened from the Finder or the Dock)."""
+    try:
+        st, null = os.fstat(stream.fileno()), os.stat(os.devnull)
+    except (AttributeError, OSError, ValueError):
+        return False
+    return (st.st_dev, st.st_ino) == (null.st_dev, null.st_ino)
+
+
 def redirect_output():
-    """A windowed program on Windows (Huntsman.exe, pythonw) has no stdout/stderr: send them to the log file, so
-    the app's and the service's messages land in log_path(). Does nothing when both exist (the Mac, a terminal)."""
-    if sys.stderr is not None and sys.stdout is not None:
+    """A windowed program on Windows (Huntsman.exe, pythonw) has no stdout/stderr, and the installed Mac app
+    (frozen, opened from the Finder) writes to /dev/null: send them to the log file, so the app's and the service's
+    messages land in log_path(). Does nothing for a terminal, a pipe or launchd's log file, nor for a source
+    install on the Mac (its launcher already appends to the log)."""
+    mac_frozen = not is_windows() and getattr(sys, "frozen", False)
+    lost = [s is None or (mac_frozen and _to_devnull(s)) for s in (sys.stdout, sys.stderr)]
+    if not any(lost):
         return
     try:
         os.makedirs(log_dir(), exist_ok=True)
         f = open(log_path(), "a", buffering=1, encoding="utf-8")
     except OSError:
         f = open(os.devnull, "w")
-    if sys.stdout is None:
+    if lost[0]:
         sys.stdout = f
-    if sys.stderr is None:
+    if lost[1]:
         sys.stderr = f

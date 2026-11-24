@@ -10,3 +10,6 @@ venv/
 env/
 *_env/
 pip-cache/
+# the Mac installer build (tools/build_mac_pkg.sh)
+/build/
+/dist/

@@ -533,7 +533,8 @@ def ensure_autostart():
 
 
 def open_app():
-    """Open the window app: the bundle this service sits in, else by bundle id. Windows: Huntsman.exe (or app.py)
+    """Open the window app: the bundle this service sits in, else by bundle id; always by bundle id in the
+    installed app (frozen: the code isn't laid out as in a source install). Windows: Huntsman.exe (or app.py)
     without a console window."""
     if platforms.is_windows():
         from platforms import win_autostart
@@ -543,7 +544,8 @@ def open_app():
             traceback.print_exc()
         return
     outer = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
-    cmd = ["/usr/bin/open", outer] if outer.endswith(".app") else ["/usr/bin/open", "-b", APP_BUNDLE_ID]
+    by_path = outer.endswith(".app") and not getattr(sys, "frozen", False)
+    cmd = ["/usr/bin/open", outer] if by_path else ["/usr/bin/open", "-b", APP_BUNDLE_ID]
     try:
         subprocess.Popen(cmd)
     except OSError:

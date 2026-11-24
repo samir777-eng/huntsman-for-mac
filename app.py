@@ -9,7 +9,9 @@ import contextlib
 import copy
 import json
 import os
+import plistlib
 import re
+import shlex
 import subprocess
 import sys
 import threading
@@ -339,10 +341,14 @@ NOT_RUNNING_WINDOWS = ("The lighting service isn't running and couldn't be start
                        "Start Huntsman for Mac again, or check the log in {}.")
 
 
+NOT_RUNNING_INSTALLED = ("The lighting service isn't running and couldn't be started ({}). "
+                         "Install Huntsman for Mac again, or check ~/Library/Logs/Huntsman for Mac.log.")
+
+
 def not_running_message(detail):
     if platforms.is_windows():
         return NOT_RUNNING_WINDOWS.format(detail, platforms.log_path())
-    return NOT_RUNNING.format(detail)
+    return (NOT_RUNNING_INSTALLED if installed_bundle() else NOT_RUNNING).format(detail)
 
 
 def service_socket():
@@ -366,9 +372,122 @@ def ensure_autostart(force=False):
     return wrote
 
 
+# ---------- the installed app (packaging/mac: frozen, in /Applications from the .pkg) ----------
+
+APP_BUNDLE_ID = "io.github.huntsman-for-mac"
+APP_BUNDLE_NAME = "Huntsman for Mac.app"
+PKG_ID = "io.github.huntsman-for-mac.pkg"   # the .pkg's receipt (packaging/mac/pkg)
+LIGHTING_EXE = ("Contents", "Library", "LoginItems", "Huntsman Lighting.app", "Contents", "MacOS", "HuntsmanLighting")
+
+
+def installed_bundle():
+    """The installed app's bundle (the first "Huntsman for Mac.app" in the frozen executable's path, also from the
+    nested service), or None: a source install (install.sh, not frozen), Windows, or a frozen program elsewhere."""
+    if platforms.is_windows() or not getattr(sys, "frozen", False):
+        return None
+    parts = os.path.abspath(sys.executable).split(os.sep)
+    if APP_BUNDLE_NAME not in parts:
+        return None
+    return os.sep.join(parts[:parts.index(APP_BUNDLE_NAME) + 1])
+
+
+def agent_path():
+    return os.path.expanduser(f"~/Library/LaunchAgents/{LIGHTING_LABEL}.plist")
+
+
+def launch_agent(service_exe):
+    """The lighting service's LaunchAgent, as install.sh writes it, plus the app it belongs to (so System
+    Settings > Login Items shows it under Huntsman for Mac)."""
+    log = os.path.join(os.path.expanduser("~"), "Library", "Logs", "Huntsman for Mac.log")
+    return {
+        "Label": LIGHTING_LABEL,
+        "ProgramArguments": [service_exe],
+        "RunAtLoad": True,
+        "KeepAlive": {"SuccessfulExit": False},
+        "LimitLoadToSessionType": "Aqua",
+        "ProcessType": "Interactive",
+        "StandardOutPath": log,
+        "StandardErrorPath": log,
+        "AssociatedBundleIdentifiers": [APP_BUNDLE_ID],
+    }
+
+
+def ensure_launch_agent(bundle):
+    """The installed app sets up its own login item, as the Windows build does with its Run value: when the
+    LaunchAgent is missing, unreadable or starts another copy (install.sh's ~/Applications app, an old path),
+    write it for this bundle's service and load it (unloading the old one first). One that already starts this
+    bundle's service is left exactly as it is. True when it was written."""
+    path = agent_path()
+    want = launch_agent(os.path.join(bundle, *LIGHTING_EXE))
+    have = None
+    try:
+        with open(path, "rb") as f:
+            have = plistlib.load(f)
+    except FileNotFoundError:
+        pass
+    except Exception:   # unreadable: replaced below
+        have = {}
+    if isinstance(have, dict) and have.get("ProgramArguments") == want["ProgramArguments"]:
+        return False
+    domain = f"gui/{os.getuid()}"
+    if have is not None:
+        subprocess.run(["launchctl", "bootout", f"{domain}/{LIGHTING_LABEL}"], capture_output=True, text=True,
+                       timeout=30)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "wb") as f:
+        plistlib.dump(want, f)
+    os.replace(tmp, path)
+    subprocess.run(["launchctl", "bootstrap", domain, path], capture_output=True, text=True, timeout=10)
+    return True
+
+
+INSTALLED_PATH = "/Applications/" + APP_BUNDLE_NAME   # where the .pkg installs it (not relocatable)
+
+
+def uninstall_script(bundle):
+    """The AppleScript that removes the bundle and forgets the .pkg's receipt, as root, after macOS asks for an
+    administrator's password. Settings and the log are not touched."""
+    shell = (f"/bin/rm -rf {shlex.quote(bundle)} && "
+             f"{{ /usr/sbin/pkgutil --forget {PKG_ID} >/dev/null 2>&1 || true; }}")
+    quoted = shell.replace("\\", "\\\\").replace('"', '\\"')
+    return f'do shell script "{quoted}" with administrator privileges'
+
+
+def uninstall_mac(bundle, run=None):
+    """Keyboard > Uninstall… (bundle must be INSTALLED_PATH): stop the lighting service (its SIGTERM handler gives
+    the keyboard its own lighting back), remove the app with an administrator's password (uninstall_script), stop
+    the service again (something may have started it meanwhile), then remove the LaunchAgent.
+    Cancelled or failed at the password: the agent stays and the service starts again, nothing is removed.
+    Settings in Application Support and the log are kept. run: subprocess.run (tests pass a fake)."""
+    run = run or subprocess.run
+    if bundle != INSTALLED_PATH:
+        return {"ok": False, "error": f"Only the installer's copy, {INSTALLED_PATH}, can uninstall itself. "
+                                      "Remove this copy by dragging it to the Trash."}
+    domain = f"gui/{os.getuid()}"
+    bootout = ["launchctl", "bootout", f"{domain}/{LIGHTING_LABEL}"]
+    run(bootout, capture_output=True, text=True, timeout=30)
+    r = run(["/usr/bin/osascript", "-e", uninstall_script(bundle)], capture_output=True, text=True, timeout=600)
+    agent = agent_path()
+    if r.returncode != 0:
+        if os.path.exists(agent):
+            run(["launchctl", "bootstrap", domain, agent], capture_output=True, text=True, timeout=10)
+        why = "cancelled" if "-128" in (r.stderr or "") else f"failed: {(r.stderr or '').strip() or r.returncode}"
+        return {"ok": False, "error": f"Uninstall {why}. Huntsman for Mac is still installed."}
+    # a Studio call during the password prompt may have started the service again from its agent
+    run(bootout, capture_output=True, text=True, timeout=30)
+    try:
+        os.remove(agent)
+    except FileNotFoundError:
+        pass
+    return {"ok": True, "data": True}
+
+
 def start_service():
     """Ask launchd to start the lighting service if it isn't running (never -k: killing a service that is still
-    starting would interrupt a USB write); load its LaunchAgent first if it isn't loaded. On Windows (no launchd):
+    starting would interrupt a USB write); load its LaunchAgent first if it isn't loaded. The installed app
+    (frozen) writes that LaunchAgent first if it is missing or stale (ensure_launch_agent); a source install
+    relies on install.sh's. On Windows (no launchd):
     turn start at login on unless the user removed it (ensure_autostart) and start the service process
     (platforms/win_autostart.py). A second copy that finds the first running exits at once (the instance lock)."""
     if platforms.is_windows():
@@ -379,6 +498,9 @@ def start_service():
             print(f"huntsman: couldn't turn on start at login: {e}", file=sys.stderr)
         win_autostart.spawn(win_autostart.service_argv())
         return
+    bundle = installed_bundle()
+    if bundle:   # the installed app: its login item, written here when missing or stale
+        ensure_launch_agent(bundle)
     target = f"gui/{os.getuid()}/{LIGHTING_LABEL}"
     r = subprocess.run(["launchctl", "kickstart", target], capture_output=True, text=True, timeout=10)
     if r.returncode == 0:
@@ -642,11 +764,37 @@ class Api:
         """For the window's poll: the platform, why the keyboard is left alone (Windows: Razer Synapse runs) and
         Windows settings in the way. Asks only the guard (cached, a process list at most every few seconds): never
         touches the keyboard."""
-        d = {"platform": platforms.current(), "blocked": hc.synapse_block(), "notices": []}
+        d = {"platform": platforms.current(), "blocked": hc.synapse_block(), "notices": [],
+             "can_uninstall": installed_bundle() is not None}
         if platforms.is_windows():
             from platforms import win_guard
             d["notices"] = win_guard.notices()
         return {"ok": True, "data": d}
+
+    def uninstall(self):
+        """Keyboard > Uninstall… (the installed app only; platform_status()["can_uninstall"]): end a key test,
+        then uninstall_mac; quits once everything is removed, else subscribes to the service's events again. A source install is removed with uninstall.sh."""
+        bundle = installed_bundle()
+        if bundle is None:
+            if platforms.is_windows():
+                return {"ok": False, "error": "Uninstall isn't offered in the Windows build: delete its folder."}
+            return {"ok": False, "error": "This copy was installed from source: run ./uninstall.sh in its folder."}
+        self.shutdown()
+        r = uninstall_mac(bundle)
+        if r["ok"]:
+            self._quit_soon()
+        else:   # still installed: the window keeps working, with the service's events
+            self.start_events()
+        return r
+
+    def _quit_soon(self):
+        """Close the window a moment after answering, so the page can say it's done; main() then exits."""
+        def work():
+            time.sleep(1.5)
+            win = self._window
+            if win is not None:
+                win.destroy()
+        in_background(work)
 
     def layout(self):
         """Keys of the connected model (the window asks for model() first, which connects)."""
@@ -1035,15 +1183,48 @@ def main(argv=None):
     api.shutdown()
 
 
+def _dlopen(path):
+    import ctypes
+    return ctypes.CDLL(path)
+
+
+def _native_checks(out):
+    """The Mac: load libusb, IOKit and CoreFoundation and look up one symbol in each, without calling anything
+    (no libusb_init, no USB traffic). libusb from a source install without Homebrew's is only skipped; the
+    installed app must have its own. Returns the number of failures."""
+    import ctypes.util
+    failed = 0
+    usb = hc.libusb_path()
+    if usb is None and not getattr(sys, "frozen", False):
+        out("skip libusb (not installed: brew install libusb)")
+        checks = []
+    else:
+        checks = [("libusb", usb, "libusb_get_version")]
+    checks += [("IOKit", ctypes.util.find_library("IOKit"), "IOHIDManagerCreate"),
+               ("CoreFoundation", ctypes.util.find_library("CoreFoundation"), "CFRunLoopGetCurrent")]
+    for label, path, sym in checks:
+        try:
+            if not path:
+                raise FileNotFoundError("not found")
+            getattr(_dlopen(path), sym)
+            out(f"ok   {label} {path}")
+        except Exception as e:  # noqa: BLE001
+            failed += 1
+            out(f"FAIL {label} ({path}): {type(e).__name__}: {e}")
+    return failed
+
+
 def self_test(out=None):
-    """`Huntsman.exe --self-test`: the build's smoke test. Imports every module the build must contain
-    (platforms/bundle.py) and reads the data files and every model's layout, without opening the keyboard or a
-    window. Windows-only modules are skipped elsewhere. Returns 0 when everything is there, 1 otherwise."""
+    """`--self-test`: a build's smoke test. Imports every module the build must contain (platforms/bundle.py),
+    reads the data files and every model's layout and, on the Mac, loads the native libraries (_native_checks),
+    without opening the keyboard or a window. Windows-only modules are skipped elsewhere, Mac-only ones aren't
+    tried off a Mac. Returns 0 when everything is there, 1 otherwise."""
     import importlib
     from platforms import bundle
     out = out or (lambda line: print(line, flush=True))
     failed = 0
-    for name in bundle.HIDDEN_IMPORTS:
+    mac_host = sys.platform == "darwin"   # the real host: the Mac-only modules can't load anywhere else
+    for name in bundle.HIDDEN_IMPORTS + (bundle.MAC_ONLY if mac_host else []):
         if name in bundle.WINDOWS_ONLY and not platforms.is_windows():
             out(f"skip {name} (Windows only)")
             continue
@@ -1071,6 +1252,8 @@ def self_test(out=None):
         except Exception as e:  # noqa: BLE001
             failed += 1
             out(f"FAIL layout {m.pid:04X} ({m.layout}): {type(e).__name__}: {e}")
+    if mac_host:
+        failed += _native_checks(out)
     out(f"Huntsman for Mac {hc.__version__} self-test {'passed' if not failed else 'FAILED'}"
         f" ({platforms.current()}, frozen={bool(getattr(sys, 'frozen', False))})")
     return 1 if failed else 0

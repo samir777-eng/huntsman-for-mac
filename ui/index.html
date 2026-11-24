@@ -284,6 +284,7 @@
       <button id="reload" class="secondary">Reconnect</button>
       <button id="restore" class="secondary destructive" data-write>Restore factory depth…</button>
       <p class="hint" id="restoreHint">Sets every key back to 1.2 mm and turns off Rapid Trigger and Snap Tap. Lighting is left alone.</p>
+      <button id="uninstall" class="secondary destructive" hidden>Uninstall…</button>
     </div>
   </aside>
 
@@ -356,6 +357,14 @@
   <form method="dialog" class="buttons">
     <button value="cancel" class="secondary" autofocus>Cancel</button>
     <button value="delete" class="danger">Delete</button>
+  </form>
+</dialog>
+<dialog class="confirm" id="confirmUninstall" aria-labelledby="cuTitle" aria-describedby="cuBody">
+  <h2 id="cuTitle">Uninstall Huntsman for Mac?</h2>
+  <p id="cuBody">This removes the app and its lighting service from this Mac, and the keyboard goes back to its own lighting. Your settings and presets are kept, in case you install it again. macOS asks for your password.</p>
+  <form method="dialog" class="buttons">
+    <button value="cancel" class="secondary" autofocus>Cancel</button>
+    <button value="uninstall" class="danger">Uninstall</button>
   </form>
 </dialog>
 <script src="app.js"></script>

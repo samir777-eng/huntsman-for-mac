@@ -293,7 +293,10 @@ function lockUi() {
 // Synapse runs only platform_status (the guard, no keyboard traffic) is asked every few seconds; once Synapse quits
 // the keyboard is connected and read again, so the controls come back.
 let guardTimer = null;
-async function readPlatform() { try { const r = await api.platform_status(); if (r.ok) platform = r.data; } catch (e) {} }
+async function readPlatform() {
+  try { const r = await api.platform_status(); if (r.ok) platform = r.data; } catch (e) {}
+  $("#uninstall").hidden = !platform.can_uninstall;   // the installed app only (a source install has uninstall.sh)
+}
 // One short line each, the long text folded into a disclosure. Rebuilt only when the text changes, so the guard's
 // polling doesn't close a disclosure someone opened or announce the alert again.
 function noticePart(box, lead, more, summary, bold) {
@@ -962,6 +965,19 @@ $("#confirmRestore").addEventListener("close", () => {
   if ($("#confirmRestore").returnValue !== "restore") { $("#restore").focus(); return; }
   busy($("#restore"), async () => { state = await call("restore_original"); applyState(); await readPoints(); toast("Factory depth restored"); });
   $("#restore").focus();
+});
+
+// Keyboard > Uninstall… (the installed app): asks first; the app removes itself (with the admin password) and quits
+$("#uninstall").onclick = () => { $("#confirmUninstall").returnValue = ""; $("#confirmUninstall").showModal(); };
+$("#confirmUninstall").addEventListener("close", async () => {
+  const btn = $("#uninstall");
+  if ($("#confirmUninstall").returnValue !== "uninstall") { btn.focus(); return; }
+  btn.disabled = true;
+  try {
+    const r = await api.uninstall();
+    if (r.ok) toast("Uninstalled. Closing…"); else toast(r.error, true);
+  } catch (e) { toast(String(e), true); }
+  btn.disabled = false; btn.focus();
 });
 
 async function readPoints() {

@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Huntsman for Mac contributors
-"""What the packaged Windows build (packaging/windows/huntsman.spec, PyInstaller) must contain, in one place.
+"""What the packaged builds (PyInstaller: packaging/windows/huntsman.spec, packaging/mac/huntsman-mac.spec) must
+contain, in one place.
 
-The spec reads this file for its hidden imports and data files, and `Huntsman.exe --self-test` (app.self_test)
-imports the same modules and reads the same data, so the build and its smoke test can't drift apart. Plain data
+The specs read this file for their hidden imports and data files, and `--self-test` (app.self_test) imports the same
+modules and reads the same data, so a build and its smoke test can't drift apart. The Windows spec takes
+HIDDEN_IMPORTS; the Mac spec takes mac_modules() (HIDDEN_IMPORTS without WINDOWS_ONLY, plus MAC_ONLY). Plain data
 only: no imports, so the spec can load it without the app's dependencies."""
 
 # Modules the app imports lazily (inside functions), which PyInstaller's analysis of app.py can't see.
@@ -31,6 +33,18 @@ WINDOWS_ONLY = {
     "webview.platforms.winforms", "webview.platforms.edgechromium", "clr_loader", "clr", "pythonnet",
     "pystray", "pystray._win32", "PIL.Image", "PIL.ImageDraw", "hid",
 }
+
+# The Mac build's lazily imported modules (pywebview's Cocoa window, pyobjc, pyusb): only importable on macOS.
+MAC_ONLY = [
+    "webview.platforms.cocoa", "objc", "AppKit", "Foundation", "Quartz", "WebKit", "PyObjCTools.AppHelper",
+    "UniformTypeIdentifiers", "Security", "usb", "usb.core", "usb.util", "usb.backend.libusb1",
+]
+
+
+def mac_modules():
+    """Hidden imports of the Mac build: the shared ones, then MAC_ONLY."""
+    return [m for m in HIDDEN_IMPORTS if m not in WINDOWS_ONLY] + MAC_ONLY
+
 
 # Data files: (path in the repository, folder in the bundle). Folders are copied whole.
 DATA = [

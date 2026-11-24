@@ -54,6 +54,9 @@ QUIT_TITLE = "Quit lighting service"
 # next login or when the app needs it.
 QUIT_STEPS = ("stop the server", "stop Studio and restore the keyboard's lighting", "exit")
 GUARD_EVERY = 5.0
+# The socket is up before start() has built Studio: requests that come in meanwhile wait this long for it.
+START_WAIT = 15.0
+STARTING = "The lighting service is still starting. Try again in a moment."
 
 SPECS = {
     "ping": {}, "summary": {}, "studio_state": {}, "reset_heat": {}, "running_apps": {},
@@ -135,10 +138,17 @@ class LightingService:
         self._guard_reason = None                # Windows: why writes are refused (Razer Synapse), as last told
         self._guard_wants_on = False             # Studio was on (or meant to be) when Synapse took the keyboard
         self._guard_listeners = []
+        self._started = threading.Event()   # set once start() is done (even if it failed)
 
     # ---------- start and stop ----------
 
     def start(self):
+        try:
+            self._start()
+        finally:
+            self._started.set()
+
+    def _start(self):
         from lighting.engine import Engine
         from lighting.frame import Keymap
         try:
@@ -422,6 +432,10 @@ class LightingService:
         spec = SPECS.get(cmd)
         if spec is None:
             return {"ok": False, "error": f"unknown command {cmd!r}"}
+        if cmd == "ping":
+            return {"ok": True, "data": True}
+        if not self._started.wait(START_WAIT):
+            return {"ok": False, "error": STARTING}
         try:
             a = ipc.check_args(spec, args)
             return {"ok": True, "data": self._commands()[cmd](**a)}

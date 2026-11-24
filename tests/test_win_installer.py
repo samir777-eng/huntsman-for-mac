@@ -243,7 +243,7 @@ def test_workflow_compiles_with_a_pinned_inno_setup_after_the_zip():
     inno = _step(lambda s: "innosetup" in s.get("run", "").lower() and "choco" in s.get("run", ""))
     pin = re.search(r'\$pin = "(\d+\.\d+\.\d+)"', inno["run"])
     assert pin and "innosetup --version $pin" in inno["run"]
-    assert "-like \"$pin*\"" in inno["run"]                     # the compiler used is the pinned one
+    assert "choco list innosetup --exact" in inno["run"] and "$got -ne $pin" in inno["run"]   # the pinned one is used
     compile_ = _step(lambda s: "ISCC" in s.get("run", "") and "huntsman.iss" in s.get("run", ""))
     assert "/DAppVersion=" in compile_["run"]
     assert "VERSION" in compile_.get("env", {})

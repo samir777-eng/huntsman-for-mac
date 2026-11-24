@@ -8,10 +8,14 @@
 ;
 ; - WebView2: the window needs the Microsoft Edge WebView2 Runtime (built into Windows 11, may be missing on Windows
 ;   10). When the registry says it is missing, Microsoft's Evergreen bootstrapper (downloaded by the build, never
-;   committed) runs silently. If that fails the install still finishes, and the Finish page says where to get it.
-; - Upgrade and uninstall: the running copy is stopped first. Huntsman.exe --quit-service asks the lighting service
-;   to quit over its IPC (it restores the keyboard's own lighting, like the tray's "Quit lighting service"); then
-;   the window is closed and anything of this folder still running is ended.
+;   committed) runs silently, at most 10 minutes. Run without elevation, as here, it installs the runtime per-user
+;   (no UAC prompt); a per-machine Edge updater, when there is one, later replaces that with a per-machine install
+;   (learn.microsoft.com/microsoft-edge/webview2/concepts/distribution, "Installing the Runtime as per-machine or
+;   per-user", read 2026-11-24). If it fails the install still finishes, and the Finish page says where to get it.
+; - Upgrade and uninstall: the running copy is stopped first by setup-helper.ps1 ("stop"): its window is closed,
+;   then Huntsman.exe --quit-service asks the lighting service to quit over its IPC (it restores the keyboard's own
+;   lighting, like the tray's "Quit lighting service"), then anything of that exact exe still running is ended.
+;   After an upgrade the lighting service is started again, only when it was running before.
 ; - Uninstall: also removes the start-at-login Run value "Huntsman for Mac lighting" when it starts this copy
 ;   (Huntsman.exe --remove-autostart, with a fallback here). Settings in %APPDATA%\Huntsman for Mac are kept.
 ;
@@ -70,6 +74,7 @@ Name: "desktopicon"; Description: "Put an icon on the desktop"; Flags: unchecked
 
 [Files]
 Source: "..\..\dist\Huntsman\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "setup-helper.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#WebView2Bootstrapper}"; Flags: dontcopy
 
 [Icons]
@@ -85,9 +90,37 @@ const
   RunValue = 'Huntsman for Mac lighting';
   WebView2Client = 'Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
   WebView2Page = 'https://developer.microsoft.com/microsoft-edge/webview2/';
+  ServiceWasRunningCode = 10;   { setup-helper.ps1 stop: the lighting service was running }
 
 var
   WebView2Failed: Boolean;
+  ServiceWasRunning: Boolean;
+
+function SetEnvironmentVariable(lpName: String; lpValue: String): BOOL;
+  external 'SetEnvironmentVariableW@kernel32.dll stdcall';
+
+{ Run setup-helper.ps1 (Helper) with Action, hidden, waiting; Name=Value pairs go in the environment, never on the
+  command line. Its own log lines are copied into this log. False when PowerShell couldn't be started (ResultCode
+  is then a Win32 error); otherwise ResultCode is the helper's exit code. }
+function RunHelper(const Action, Helper: String; var ResultCode: Integer): Boolean;
+var
+  HelperLog: String;
+  Lines: TArrayOfString;
+  I: Integer;
+begin
+  HelperLog := AddBackslash(GetTempDir) + 'huntsman-setup-helper.log';
+  DeleteFile(HelperLog);
+  SetEnvironmentVariable('HUNTSMAN_SETUP_LOG', HelperLog);
+  Result := Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+                 '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + Helper + '" ' + Action, '',
+                 SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  if LoadStringsFromFile(HelperLog, Lines) then
+    for I := 0 to GetArrayLength(Lines) - 1 do
+      Log('setup-helper ' + Action + ': ' + Lines[I]);
+  DeleteFile(HelperLog);
+  if not Result then
+    Log('setup-helper ' + Action + ': PowerShell could not be started: ' + SysErrorMessage(ResultCode));
+end;
 
 { The runtime is there when its EdgeUpdate client key has a real version ('pv'): per machine (the 32-bit
   registry view on 64-bit Windows) or per user. }
@@ -116,61 +149,59 @@ begin
     Exit;
   WizardForm.StatusLabel.Caption := 'Installing the Microsoft Edge WebView2 Runtime...';
   ExtractTemporaryFile('MicrosoftEdgeWebview2Setup.exe');
-  if Exec(ExpandConstant('{tmp}\MicrosoftEdgeWebview2Setup.exe'), '/silent /install', '', SW_HIDE,
-          ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then
+  ExtractTemporaryFile('setup-helper.ps1');
+  SetEnvironmentVariable('HUNTSMAN_WEBVIEW2', ExpandConstant('{tmp}\MicrosoftEdgeWebview2Setup.exe'));
+  if not RunHelper('webview2', ExpandConstant('{tmp}\setup-helper.ps1'), ResultCode) then
+  begin
+    WebView2Failed := True;   { not fatal: the app is installed, the Finish page says how to get the runtime }
+    Log('WebView2 Runtime could not be installed: ' + SysErrorMessage(ResultCode));
+  end
+  else if ResultCode = 0 then
     Log('WebView2 Runtime installed')
   else
   begin
-    WebView2Failed := True;   { not fatal: the app is installed, the Finish page says how to get the runtime }
-    Log(Format('WebView2 Runtime could not be installed (exit code %d)', [ResultCode]));
+    WebView2Failed := True;
+    Log(Format('WebView2 Runtime could not be installed (bootstrapper exit code %d)', [ResultCode]));
   end;
 end;
 
-function PowerShellQuote(const S: String): String;
-begin
-  Result := S;
-  StringChangeEx(Result, '''', '''''', True);
-  Result := '''' + Result + '''';
-end;
-
-{ Stop the copy installed in Dir: ask its lighting service to quit (it restores the keyboard's lighting), then
-  close its window, then end whatever of that folder is still running. }
-procedure StopHuntsman(const Dir: String);
+{ Stop the copy installed in Dir (setup-helper.ps1 stop: its window, then its lighting service, then the rest).
+  True when its lighting service was running. }
+function StopHuntsman(const Dir, Helper: String): Boolean;
 var
-  Exe, Script: String;
   ResultCode: Integer;
 begin
-  Exe := AddBackslash(Dir) + 'Huntsman.exe';
-  if not FileExists(Exe) then
+  Result := False;
+  if not FileExists(AddBackslash(Dir) + 'Huntsman.exe') then
     Exit;
-  if Exec(Exe, '--quit-service', Dir, SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-    Log(Format('Huntsman.exe --quit-service exited with %d', [ResultCode]))
-  else
-    Log('Huntsman.exe --quit-service did not run: ' + SysErrorMessage(ResultCode));
-  Script := '$d = ' + PowerShellQuote(AddBackslash(Dir)) + '; ' +
-    '$p = @(Get-Process -Name Huntsman -ErrorAction SilentlyContinue | Where-Object { $_.Path -and ' +
-    '$_.Path.StartsWith($d, [StringComparison]::OrdinalIgnoreCase) }); ' +
-    'foreach ($x in $p) { [void]$x.CloseMainWindow() }; ' +
-    'foreach ($x in $p) { if (-not $x.WaitForExit(5000)) { Stop-Process -Id $x.Id -Force -ErrorAction SilentlyContinue } }; ' +
-    'Write-Output (''stopped '' + $p.Count)';
-  if Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
-          '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' + Script + '"', '', SW_HIDE,
-          ewWaitUntilTerminated, ResultCode) then
-    Log(Format('Closing Huntsman.exe processes in %s exited with %d', [Dir, ResultCode]))
-  else
-    Log('Could not run PowerShell to close Huntsman.exe: ' + SysErrorMessage(ResultCode));
+  SetEnvironmentVariable('HUNTSMAN_EXE', AddBackslash(Dir) + 'Huntsman.exe');
+  if RunHelper('stop', Helper, ResultCode) then
+  begin
+    Log(Format('setup-helper stop exited with %d', [ResultCode]));
+    Result := ResultCode = ServiceWasRunningCode;
+  end;
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
-  StopHuntsman(WizardDirValue);   { an upgrade: the copy being replaced }
+  ExtractTemporaryFile('setup-helper.ps1');   { this version's helper: the copy being replaced may be older }
+  ServiceWasRunning := StopHuntsman(WizardDirValue, ExpandConstant('{tmp}\setup-helper.ps1'));
   Result := '';
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
 begin
-  if CurStep = ssPostInstall then
-    InstallWebView2;
+  if CurStep <> ssPostInstall then
+    Exit;
+  InstallWebView2;
+  { An upgrade: the lighting service comes back only when it was running before. }
+  if ServiceWasRunning then
+    if Exec(ExpandConstant('{app}\Huntsman.exe'), '--service', '', SW_HIDE, ewNoWait, ResultCode) then
+      Log('Lighting service started again')
+    else
+      Log('Lighting service could not be started again: ' + SysErrorMessage(ResultCode));
 end;
 
 procedure CurPageChanged(CurPageID: Integer);
@@ -183,20 +214,20 @@ end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
-  Dir, Exe, Value: String;
+  Dir, Exe, Ours, Value: String;
   ResultCode: Integer;
 begin
   if CurUninstallStep <> usUninstall then
     Exit;
   Dir := ExpandConstant('{app}');
-  StopHuntsman(Dir);
+  StopHuntsman(Dir, AddBackslash(Dir) + 'setup-helper.ps1');
   Exe := AddBackslash(Dir) + 'Huntsman.exe';
   if FileExists(Exe) then
     if Exec(Exe, '--remove-autostart', Dir, SW_HIDE, ewWaitUntilTerminated, ResultCode) then
       Log(Format('Huntsman.exe --remove-autostart exited with %d', [ResultCode]));
-  { Fallback when that couldn't run: the Run value, if it still starts this copy. Another copy's is left alone. }
-  if RegQueryStringValue(HKCU, RunKey, RunValue, Value) and
-     (Pos(Lowercase(AddBackslash(Dir)), Lowercase(Value)) > 0) then
+  { Fallback when that couldn't run: the Run value, if it starts exactly this exe. Another copy's is left alone. }
+  Ours := '"' + ExpandConstant('{app}\Huntsman.exe') + '"';
+  if RegQueryStringValue(HKCU, RunKey, RunValue, Value) and (Pos(Lowercase(Ours), Lowercase(Value)) = 1) then
     if RegDeleteValue(HKCU, RunKey, RunValue) then
       Log('Removed the Run value ' + RunValue);
 end;

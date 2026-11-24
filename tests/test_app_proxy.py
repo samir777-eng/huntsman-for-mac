@@ -270,3 +270,14 @@ def test_main_quits_normally_when_the_window_closes(app, monkeypatch):
     assert made["events"] is True
     assert [f() for f in made["win"].events.closing] == [None]   # never cancelled: the app just quits
     assert shut and not hasattr(app, "install_app_hooks")
+
+
+def test_the_studio_preview_poll_never_starts_the_service(app):
+    """The Studio tab asks for a preview every few seconds: with the service quit (the tray, or the Windows
+    installer's --quit-service before an upgrade) that poll must not start it again."""
+    svc = FakeService(up=False)
+    started = []
+    r = make_api(app, svc, lambda: started.append(1)).studio_preview(10)
+    assert r["ok"] is False and started == [] and "unavailable" not in r
+    svc.up = True
+    assert make_api(app, svc).studio_preview(10)["ok"] is True

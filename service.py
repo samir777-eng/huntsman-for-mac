@@ -58,6 +58,7 @@ GUARD_EVERY = 5.0
 # the client's timeout (ipc.TIMEOUT) so a held request is answered before the client gives up and sends it again.
 START_WAIT = ipc.TIMEOUT - 1.0
 STARTING = "The lighting service is still starting. Try again in a moment."
+QUIT_LOG = "asked to quit; stopping Studio and restoring the keyboard's own lighting"
 
 SPECS = {
     "ping": {}, "quit": {}, "summary": {}, "studio_state": {}, "reset_heat": {}, "running_apps": {},
@@ -141,6 +142,8 @@ class LightingService:
         self._guard_listeners = []
         self._started = threading.Event()   # set once start() is done (even if it failed)
         self._quit = None                        # the tray's "Quit lighting service" (on_quit), for "quit" requests
+        self._life = threading.RLock()           # _shut / _studio_down against start() building Studio
+        self._studio_down = False                # Studio was shut down (once, by shutdown() or start()'s end)
 
     # ---------- start and stop ----------
 
@@ -149,6 +152,8 @@ class LightingService:
             self._start()
         finally:
             self._started.set()
+            if self._shut:   # a quit came in while starting: Studio was built after shutdown() ran
+                self._shutdown_studio()
 
     def _start(self):
         from lighting.engine import Engine
@@ -169,15 +174,16 @@ class LightingService:
         s = studio_mod.Studio(engine, st["studio"], st["smart"], save=self._save_studio, keymap=km,
                               push=self._emit, **self._inputs)
         s.on_change(lambda summary: self._emit("onStudioChanged", summary))
-        self.studio = s
-        if s.settings["enabled"]:
-            reason = self.studio_blocked()
-            if reason:
-                s.settings["enabled"] = False   # shown off; state.json keeps the choice until it's changed
-                log(f"Studio stays off: {reason}")
-                self._guard_wants_on = platforms.is_windows() and self._synapse_blocks()
-            else:
-                s.set_enabled(True)
+        with self._life:   # a quit meanwhile waits for this, or makes it leave Studio off
+            self.studio = s
+            if s.settings["enabled"] and not self._shut:
+                reason = self.studio_blocked()
+                if reason:
+                    s.settings["enabled"] = False   # shown off; state.json keeps the choice until it's changed
+                    log(f"Studio stays off: {reason}")
+                    self._guard_wants_on = platforms.is_windows() and self._synapse_blocks()
+                elif not self._shut:
+                    s.set_enabled(True)
 
     def gui_ready(self):
         self.studio.gui_ready()
@@ -191,11 +197,21 @@ class LightingService:
         """Stop the engine and listeners and restore the keyboard's lighting (even under a lease: the service is
         going away). Studio's on/off setting is kept for the next start. Safe to call twice."""
         self._started.set()   # requests held for start() are answered now (STARTING if it never finished)
-        if self._shut or self.studio is None:
+        with self._life:
+            if self._shut:
+                return
+            self._shut = self._quitting = True   # also before Studio exists: start() then shuts it down at its end
+        self._shutdown_studio()
+
+    def _shutdown_studio(self):
+        with self._life:
+            studio = None if self._studio_down else self.studio
+            if studio is not None:
+                self._studio_down = True
+        if studio is None:
             return
-        self._shut = self._quitting = True
         try:
-            self.studio.shutdown()
+            studio.shutdown()
         except Exception:
             traceback.print_exc()
         with self._lease_lock:
@@ -445,6 +461,7 @@ class LightingService:
         if cmd == "quit":   # answered at once, also while starting: the quit itself runs in the background
             if self._quit is None:
                 return {"ok": False, "error": "this lighting service can't be asked to quit"}
+            log(QUIT_LOG)
             self._quit()
             return {"ok": True, "data": True}
         if not self._started.wait(START_WAIT) or self.studio is None:   # still starting, or start() failed

@@ -294,3 +294,89 @@ def test_shutdown_before_start_releases_waiting_requests(app, hooks, clock):
     s = service.LightingService(engine_cls=FakeEngine, inputs=hooks["inputs"], clock=clock)
     s.shutdown()
     assert s._started.is_set()
+
+
+# ---------- a quit while the service is still starting (Huntsman.exe --quit-service, the tray) ----------
+
+def test_shutdown_before_start_marks_the_service_as_quitting(app, hooks, clock):
+    import service
+    s = service.LightingService(engine_cls=FakeEngine, inputs=hooks["inputs"], clock=clock)
+    s.shutdown()
+    assert s._shut and s._quitting            # the guard and reaper loops end, start() finishes the job
+
+
+def test_a_quit_during_start_still_restores_the_lighting(app, hooks, clock):
+    """quit arrives while start() is building Studio (Studio on from last time): Studio isn't switched on after
+    the quit and is shut down once start() is done, instead of a frame being left on the keys (or a hang)."""
+    import threading
+
+    import service
+    with app.update_state() as st:
+        st["studio"]["enabled"] = True
+    building, go, engines = threading.Event(), threading.Event(), []
+
+    class SlowEngine(FakeEngine):
+        def __init__(self, *a, **kw):
+            building.set()
+            assert go.wait(5)
+            super().__init__(*a, **kw)
+            engines.append(self)
+
+    s = service.LightingService(engine_cls=SlowEngine, inputs=hooks["inputs"], clock=clock)
+    s.on_quit(s.shutdown)
+    t = threading.Thread(target=s.start)
+    t.start()
+    assert building.wait(5)
+    assert s.handle("quit", {}) == {"ok": True, "data": True}
+    go.set()
+    t.join(5)
+    assert not t.is_alive()
+    (eng,) = engines
+    assert not eng.running and ("start",) not in eng.log   # Studio never comes on after the quit
+    assert s._studio_down                                   # and Studio was shut down (listeners stopped)
+
+
+def test_a_quit_during_start_shuts_studio_down_once(app, hooks, clock):
+    import service
+    s = service.LightingService(engine_cls=FakeEngine, inputs=hooks["inputs"], clock=clock)
+    calls = []
+    s.start()
+    real = s.studio.shutdown
+    s.studio.shutdown = lambda: calls.append(1) or real()
+    s.shutdown()
+    s.shutdown()
+    assert calls == [1]
+
+
+def test_quit_is_logged(capsys):
+    import service
+    s = service.LightingService()
+    s.on_quit(lambda: None)
+    service.LightingService.handle(s, "quit", {})
+    assert service.QUIT_LOG in capsys.readouterr().err
+
+
+def test_a_quit_just_before_studio_comes_on_leaves_it_off(app, hooks, clock, monkeypatch):
+    """The other order: Studio is built, then the quit lands before start() turns it on. It must not come on
+    after the quit (nothing would restore the lighting then)."""
+    import service
+    with app.update_state() as st:
+        st["studio"]["enabled"] = True
+    s = service.LightingService(engine_cls=FakeEngine, inputs=hooks["inputs"], clock=clock)
+    monkeypatch.setattr(s, "studio_blocked", lambda: s.shutdown())   # the quit, right at that moment
+    s.start()
+    eng = s.studio.engine
+    assert not eng.running and (("start",) not in eng.log or ("restore",) in eng.log)
+
+
+def test_a_quit_right_after_studio_came_on_restores_the_lighting(app, hooks, clock):
+    import service
+    with app.update_state() as st:
+        st["studio"]["enabled"] = True
+    s = service.LightingService(engine_cls=FakeEngine, inputs=hooks["inputs"], clock=clock)
+    s.start()
+    eng = s.studio.engine
+    assert eng.running
+    s.on_quit(s.shutdown)
+    assert s.handle("quit", {})["ok"]
+    assert not eng.running and ("restore",) in eng.log and s.restored

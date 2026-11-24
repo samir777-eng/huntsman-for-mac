@@ -1142,8 +1142,11 @@ class Api:
         return self._studio("update_layers", layers=layers)
 
     def studio_preview(self, seconds):
-        """Studio off: the window's board previews the working preset for `seconds` (nothing reaches the keys)."""
-        return self._studio("studio_preview", seconds=seconds)
+        """Studio off: the window's board previews the working preset for `seconds` (nothing reaches the keys).
+        The Studio tab polls this every few seconds, so it never starts the service: after "Quit lighting service"
+        (or the Windows installer's --quit-service) an open window must not bring it back."""
+        r = self._svc.call("studio_preview", {"seconds": seconds}, start=False)
+        return {k: v for k, v in r.items() if k != "unavailable"}
 
     def set_studio_brightness(self, level):
         return self._studio("set_studio_brightness", level=level)

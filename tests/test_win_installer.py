@@ -24,6 +24,7 @@ from platforms import win_autostart  # noqa: E402
 from test_win_autostart import RUN, FakeWinreg  # noqa: E402
 
 ISS = ROOT / "packaging" / "windows" / "huntsman.iss"
+HELPER = ROOT / "packaging" / "windows" / "setup-helper.ps1"
 WORKFLOW = ROOT / ".github" / "workflows" / "windows-build.yml"
 WEBVIEW2_CLIENT = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
 EXE = r"C:\Users\bob\AppData\Local\Programs\Huntsman for Mac\Huntsman.exe"
@@ -137,7 +138,27 @@ def test_iss_bundles_the_webview2_bootstrapper_only_as_a_temporary_file():
     assert "dontcopy" in bootstrap                             # extracted to {tmp} only when it is needed
     code = _code()
     assert "ExtractTemporaryFile('MicrosoftEdgeWebview2Setup.exe')" in code
-    assert "'/silent /install'" in code
+    install = re.search(r"procedure InstallWebView2;.*?\nend;", code, re.S).group(0)
+    assert "RunHelper('webview2'" in install                  # through the helper: it has a time limit
+    wv2 = _ps_function(_helper(), "webview2")
+    assert "'/silent', '/install'" in wv2
+    assert re.search(r"WaitForExit\((\d+)\)", wv2) and int(re.search(r"WaitForExit\((\d+)\)", wv2).group(1)) >= 300000
+    assert "Stop-Process" in wv2 and "exit 1460" in wv2      # timed out: ended, ERROR_TIMEOUT
+    assert "$null = $p.Handle" in wv2                        # PowerShell only keeps ExitCode with the handle open
+
+
+def test_iss_records_what_microsoft_says_about_a_non_elevated_bootstrapper():
+    """learn.microsoft.com/microsoft-edge/webview2/concepts/distribution: not elevated -> a per-user install."""
+    text = _iss()
+    assert "per-user" in text and "learn.microsoft.com/microsoft-edge/webview2/concepts/distribution" in text
+
+
+def test_iss_webview2_log_lines_tell_a_failed_start_from_an_exit_code():
+    install = re.search(r"procedure InstallWebView2;.*?\nend;", _code(), re.S).group(0)
+    assert "SysErrorMessage(ResultCode)" in install           # Exec failed: a Win32 error, not an exit code
+    assert "bootstrapper exit code %d" in install
+    assert "'WebView2 Runtime installed'" in install
+    assert "'WebView2 Runtime found: '" in _code()
 
 
 def test_iss_checks_webview2_in_both_registry_places_before_running_the_bootstrapper():
@@ -160,16 +181,72 @@ def test_iss_a_failed_webview2_install_does_not_fail_the_install():
 
 def test_iss_stops_the_running_copy_before_install_and_before_uninstall():
     code = _code()
-    assert "'--quit-service'" in code
     prepare = re.search(r"function PrepareToInstall\(.*?\nend;", code, re.S).group(0)
     assert "StopHuntsman(" in prepare
     uninstall = re.search(r"procedure CurUninstallStepChanged\(.*?\nend;", code, re.S).group(0)
     assert "usUninstall" in uninstall and "StopHuntsman(" in uninstall
-    stop = re.search(r"procedure StopHuntsman\(.*?\nend;", code, re.S).group(0)
-    assert "CloseMainWindow" in stop and "Stop-Process" in stop   # then the window, then what is left
-    assert "OrdinalIgnoreCase" in stop                             # only processes in this install's folder
+    stop = re.search(r"function StopHuntsman\(.*?\nend;", code, re.S).group(0)
+    assert "RunHelper('stop'" in stop
     s = _setup()
     assert s["closeapplications"] == "yes" and s["restartapplications"] == "no"
+
+
+def test_helper_closes_the_window_before_quitting_the_service_then_ends_the_rest():
+    """An open window (the Studio tab polls) could start the service again after --quit-service: windows go
+    first, then the service is asked to quit (it restores the lighting), then whatever is left is ended."""
+    stop = _ps_function(_helper(), "stop")
+    close, quit_, kill = stop.index("CloseMainWindow"), stop.index("'--quit-service'"), stop.rindex("Stop-Process")
+    assert close < quit_ < kill
+
+
+def test_helper_matches_only_this_exact_exe():
+    helper = _helper()
+    assert "$_.ExecutablePath -eq $exe" in helper            # -eq on strings ignores case in PowerShell
+    assert "StartsWith" not in helper and "-like" not in helper
+
+
+def test_helper_takes_paths_from_the_environment_not_the_command_line():
+    helper, code = _helper(), _code()
+    assert "$env:HUNTSMAN_EXE" in helper and "$env:HUNTSMAN_WEBVIEW2" in helper
+    assert "SetEnvironmentVariableW@kernel32.dll stdcall" in code
+    assert "PowerShellQuote" not in code and "-Command" not in code
+    assert "-File" in code
+
+
+def test_helper_gives_an_old_exe_no_unknown_flag_and_never_waits_forever():
+    """An exe older than 0.6.0 would open its window on --quit-service: only 0.6.0+ is asked, with a limit."""
+    stop = _ps_function(_helper(), "stop")
+    assert "[version]'0.6.0'" in stop
+    quit_ = stop[stop.index("'--quit-service'"):]
+    assert re.search(r"WaitForExit\(\d+\)", quit_) and "Stop-Process" in quit_
+
+
+def test_helper_reports_whether_the_service_was_running():
+    stop = _ps_function(_helper(), "stop")
+    assert "--service" in stop and "exit 10" in stop
+    code = _code()
+    assert "ServiceWasRunning := " in code
+
+
+def test_iss_restarts_the_service_after_an_upgrade_only_if_it_was_running():
+    code = _code()
+    post = re.search(r"procedure CurStepChanged\(.*?\nend;", code, re.S).group(0)
+    assert "ssPostInstall" in post and re.search(r"if ServiceWasRunning then", post)
+    assert "'--service'" in post and "ewNoWait" in post
+
+
+def test_helper_is_ascii_and_licensed():
+    text = _helper()
+    text.encode("ascii")
+    assert "SPDX-License-Identifier: GPL-3.0-or-later" in text[:400]
+    assert re.search(r"ValidateSet\('stop', 'webview2'\)", text)
+
+
+def test_iss_installs_the_helper_and_extracts_it_for_an_upgrade():
+    sec = _sections(_iss())
+    (line,) = [ln for ln in sec["files"] if "setup-helper.ps1" in ln]
+    assert 'DestDir: "{app}"' in line and "dontcopy" not in line   # the uninstaller uses the installed copy
+    assert "ExtractTemporaryFile('setup-helper.ps1')" in _code()
 
 
 def test_iss_uninstall_removes_the_run_value_and_keeps_the_settings():
@@ -179,11 +256,25 @@ def test_iss_uninstall_removes_the_run_value_and_keeps_the_settings():
     uninstall = re.search(r"procedure CurUninstallStepChanged\(.*?\nend;", code, re.S).group(0)
     assert "'--remove-autostart'" in uninstall
     assert re.search(r"RegDeleteValue\(HKCU,\s*RunKey,\s*RunValue\)", uninstall)
+    # only a value that starts this exact exe: '"<app>\Huntsman.exe"' at the very start
+    assert "'\"' + ExpandConstant('{app}\\Huntsman.exe') + '\"'" in uninstall
+    assert re.search(r"Pos\(Lowercase\(Ours\), Lowercase\(Value\)\) = 1", uninstall)
     text = _iss().lower()
     assert "{userappdata}" not in text and "{appdata}" not in text and "delaftreeroot" not in text
     sec = _sections(_iss())
     assert "uninstalldelete" not in sec
     assert any("ConfirmUninstall" in ln and "kept" in ln for ln in sec["messages"])
+
+
+def _helper():
+    return HELPER.read_text(encoding="utf-8")
+
+
+def _ps_function(text, name):
+    """The body of a PowerShell `if ($Action -eq 'name')` block or function, up to the next top-level block."""
+    m = re.search(rf"^if \(\$Action -eq '{name}'\) \{{\n(.*?)^\}}", text, re.S | re.M)
+    assert m, name
+    return m.group(1)
 
 
 def test_iss_is_plain_ascii():
@@ -227,6 +318,8 @@ def test_workflow_runs_when_the_installer_changes():
     wf, _ = _wf()
     paths = wf["on"]["push"]["paths"]
     assert "packaging/windows/**" in paths
+    for p in ("app.py", "service.py", "ipc.py", "platforms/**"):   # what the installer runs and stops
+        assert p in paths, p
 
 
 def test_workflow_downloads_the_webview2_bootstrapper_and_never_commits_it():
@@ -260,6 +353,12 @@ def test_workflow_smoke_tests_a_silent_install_and_uninstall():
     assert "unins000.exe" in run
     assert "--service" in run and "(Ours).Count" in run          # a running service is stopped, not left behind
     assert win_autostart.VALUE_NAME in run                      # written as the app would, then gone after
+    assert '"WebView2 Runtime (found|installed)' in run          # the exact log line, not just the words
+    assert service.QUIT_LOG in run                              # the service logged the quit (restore)
+    assert "autostart_added" in run                             # reset by --remove-autostart
+    assert "function StartWindow" in run                        # an open window is stopped too
+    assert "service didn't come up" in run and "::warning::the lighting service" not in run
+    assert "restarted after the upgrade" in run and "not started by the install" in run
     assert "APPDATA" in run                                     # the settings folder survives the uninstall
     assert "throw" in run
 

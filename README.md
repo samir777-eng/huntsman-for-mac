@@ -840,7 +840,7 @@ No. It talks to the keyboard directly over USB from macOS.
 <summary><b>Does it work on Windows?</b></summary>
 
 There's an experimental Windows build (`Huntsman-for-Windows-<version>-Setup.exe`, or the portable zip, on the
-releases page), but it has never been run on a Windows PC with a keyboard, so nobody knows yet. On Windows every model
+[releases page](https://github.com/samir777-eng/huntsman-for-mac/releases/latest)), but it has never been run on a Windows PC with a keyboard, so nobody knows yet. On Windows every model
 needs Experimental support switched on, there's no key tester, and the app leaves the keyboard alone while Razer
 Synapse is running. See [Windows (experimental)](#windows-experimental).
 

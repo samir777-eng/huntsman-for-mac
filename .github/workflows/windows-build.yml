@@ -273,6 +273,44 @@ jobs:
           if ((Get-Content (Join-Path $data "installer-smoke.txt")) -ne "kept") { throw "the settings in %APPDATA% were not kept" }
           if ((Get-Content $state -Raw | ConvertFrom-Json).autostart_added) { throw "autostart_added was not reset in state.json" }
           "install (no service started), upgrade over a running service (stopped, restarted), uninstall: all good"
+
+          # 6. The zip move as users really take it: 0.6.0 is the first installer, so it's a FRESH install while
+          #    the zip copy's service runs and the Run value starts it. Nothing is installed, so only the zip move
+          #    can stop that service; then the installed service takes over start at login.
+          if (Test-Path $dir) { throw "not a clean machine: $dir is still there" }
+          if ((Ours).Count) { throw "not a clean machine: Huntsman.exe still running from $dir" }
+          Start-Process -FilePath $zipExe -ArgumentList "--service" | Out-Null
+          for ($i = 0; $i -lt 20 -and -not (ZipServices).Count; $i++) { Start-Sleep -Seconds 1 }
+          Start-Sleep -Seconds 5
+          if (-not (ZipServices).Count) { throw "the zip copy's service didn't come up (fresh install test)" }
+          Set-ItemProperty -Path $runKey -Name $runName -Value "`"$zipExe`" --service"
+          $log = Install "fresh-from-zip"
+          $lines = @(Get-Content $log)
+          function At($text, $from) {
+            for ($i = $from; $i -lt $lines.Count; $i++) { if ($lines[$i].Contains($text)) { return $i } }
+            throw "install log: no '$text' after line $from"
+          }
+          $a = At "setup-helper stop: stop $zipExe" 0
+          $b = At "--quit-service exited with 4" $a
+          $c = At "lighting service was running: yes" $b
+          "zip copy stopped by the zip move, in that order: lines $a, $b, $c"
+          $want = "`"$exe`" --service"
+          for ($i = 0; $i -lt 30 -and (Get-ItemProperty -Path $runKey -Name $runName).$runName -ne $want; $i++) { Start-Sleep -Seconds 1 }
+          $now = (Get-ItemProperty -Path $runKey -Name $runName).$runName
+          "Run value after the fresh install: $now"
+          if ($now -ne $want) { throw "the Run value doesn't start the installed copy after a fresh install: $now" }
+          if ((ZipServices).Count) { throw "the zip copy's service is still running after a fresh install" }
+          if (-not (Services).Count) { throw "the installed service isn't running after a fresh install over the zip copy" }
+
+          # Clean up: uninstall again, then the zip copy.
+          $u = Start-Process -FilePath (Join-Path $dir "unins000.exe") -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait -PassThru
+          for ($i = 0; $i -lt 90 -and (Test-Path $dir); $i++) { Start-Sleep -Seconds 1 }
+          if ($u.ExitCode -ne 0) { throw "the second uninstaller exited with $($u.ExitCode)" }
+          if ((Ours).Count -or (Test-Path $dir)) { throw "the second uninstall left Huntsman behind" }
+          if ($null -ne (Get-ItemProperty -Path $runKey -Name $runName -ErrorAction SilentlyContinue)) { throw "the Run value is still there after the second uninstall" }
+          Get-CimInstance Win32_Process -Filter "Name = 'Huntsman.exe'" | Where-Object { $_.ExecutablePath -eq $zipExe } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+          Remove-Item -Recurse -Force $zipDir
+          "fresh install over a running zip copy: zip service stopped, start at login moved, installed service running"
       - uses: actions/upload-artifact@v5
         with:
           name: Huntsman-for-Windows-${{ steps.version.outputs.version }}-Setup

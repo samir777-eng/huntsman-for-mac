@@ -20,7 +20,8 @@ Current state of Huntsman for Mac, updated 2026-11-24.
   install to the per-user folder without admin, Start menu and Settings → Apps entries; installed app's self-test
   passes; upgrade over a running lighting service stops it first and restarts it after; uninstall closes an open
   window, stops the service, removes files, Start menu entry and Run value, keeps %APPDATA%; WebView2 check ran and
-  found the runtime; zip move with a 0.6 copy (its service stopped, the installed one running, Run value repointed).
+  found the runtime; zip move with a 0.6 copy, on a fresh install and over an installed copy (its service stopped, the installed one
+  running, Run value repointed).
   **Not verified (no real PC):** the wizard pages as a person sees them, SmartScreen (More info →
   Run anyway), the WebView2 bootstrapper actually installing on a PC without the runtime, the whole app with a
   keyboard.
@@ -59,7 +60,7 @@ Current state of Huntsman for Mac, updated 2026-11-24.
   Studio preview while off, the 6 new presets (2026-11-22). The Windows build has still never run on a Windows PC
   with a keyboard.
 - **Repo:** public, GitHub `samir777-eng/huntsman-for-mac`, default branch `master`, SEO description + 18 topics.
-- **Tests:** 1592 passing (5 skipped) on the Mac: `python -m pytest -q tests` (simulated keyboard, fake transports,
+- **Tests:** 1606 passing (5 skipped) on the Mac: `python -m pytest -q tests` (simulated keyboard, fake transports,
   headless Chromium UI tests in demo mode). Dev env: `requirements.txt` + `requirements-dev.txt`, then
   `playwright install chromium`. GitHub Actions `CI` (.github/workflows/ci.yml) runs it on macos-latest and
   windows-latest (Windows: `requirements-win.txt`; 37 `mac_only` tests skipped, see tests/conftest.py).
@@ -219,8 +220,8 @@ Studio layers/params/presets/Sound/Typing/Smart panels, effects continuing after
 ## Not yet verified
 - Windows installer (0.6.0) on a real PC: wizard pages, SmartScreen, WebView2 bootstrapper on a PC without the
   runtime (CI only had it already), upgrade/uninstall outside CI. Also unverified: Setup run as administrator,
-  PowerShell blocked (the fallback path), moving from a real 0.5 zip copy, a fresh install while a zip copy's
-  service runs. Note: when PowerShell is blocked, the uninstall fallback only asks the service to quit; it doesn't
+  PowerShell blocked (the fallback path), moving from a real 0.5 zip copy (CI covers a 0.6 zip copy, fresh install
+  included). Note: when PowerShell is blocked, the uninstall fallback only asks the service to quit; it doesn't
   close an open window (Windows' Restart Manager may still close it).
 - macOS permission name for the service ("Huntsman Lighting") for Microphone and Input Monitoring, in the pkg app and
   install.sh copies. In an install.sh copy the key tester's Input Monitoring is held by the Python binaries (bundle

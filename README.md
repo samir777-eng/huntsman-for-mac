@@ -128,10 +128,10 @@ with a keyboard yet.
 → *Extract All*) somewhere you'll keep it, for example `Documents`, keep the `Huntsman` folder together, and run
 `Huntsman.exe` (SmartScreen as above). It adds no Start menu entry and no uninstaller.
 
-**Moving from the zip.** Run Setup.exe. It stops the zip copy's lighting service and moves start at login to the
-installed copy; then delete the old `Huntsman` folder. Checked on GitHub's Windows runner with a 0.6 zip copy. A 0.5
-zip copy has no quit command, so Setup ends its service without putting the keyboard's own lighting back (not
-checked).
+**Moving from the zip.** Run Setup.exe. When start at login points at the zip copy, Setup stops that copy's lighting
+service and moves start at login to the installed copy; then delete the old `Huntsman` folder. Checked on GitHub's
+Windows runner with a 0.6 zip copy, on a fresh install and over an installed copy. A 0.5 zip copy has no quit
+command, so Setup ends its service without putting the keyboard's own lighting back (not checked).
 
 The window uses the **Microsoft Edge WebView2 Runtime**. It's built into Windows 11; on Windows 10 it may be missing,
 and then the window can't open. The installer checks for it and, if it's missing, runs Microsoft's WebView2

@@ -699,3 +699,40 @@ def test_ci_checks_that_quit_service_stopped_a_running_service():
     st = _step(lambda s: "/VERYSILENT" in s.get("run", ""))
     assert st["run"].count("--quit-service exited with 4") >= 2
     assert "--quit-service exited with 0" not in st["run"]
+
+
+def test_helper_logging_is_never_fatal():
+    """Under $ErrorActionPreference = 'Stop' a failed log write would end the helper (exit 1): never for a log line."""
+    say = re.search(r"function Say\(.*?\n\}", _helper(), re.S).group(0)
+    assert re.search(r"try \{\s*Add-Content .*\} catch \{ \}", say, re.S)
+
+
+def test_helper_says_failing_loudly_applies_to_both_actions():
+    header = _helper().split("param(")[0]
+    loud = header.index("fails loudly")
+    assert loud > header.index("webview2  Run Microsoft")      # after both actions, not between them
+    assert "both actions" in header[loud - 200:loud + 200]
+
+
+def test_ci_covers_the_real_zip_move_a_fresh_install_over_a_running_zip_copy():
+    """0.6.0 is the first installer: users coming from the zip run a fresh Setup while the zip copy's service runs.
+    StopHuntsman finds nothing installed, so the zip move alone must stop that service."""
+    run = _step(lambda s: "/VERYSILENT" in s.get("run", ""))["run"]
+    fresh = run[run.index('Install "fresh-from-zip"'):]
+    before = run[:run.index('Install "fresh-from-zip"')]
+    assert "Test-Path $dir" in before[before.rindex("# 6."):]                 # really a clean machine first
+    for needle in ("setup-helper stop: stop $zipExe", "--quit-service exited with 4",
+                   "lighting service was running: yes"):
+        assert needle in fresh, needle
+    assert "in that order" in fresh                                           # the lines are checked in order
+    assert "the Run value doesn't start the installed copy" in fresh
+    assert "the zip copy's service is still running" in fresh
+    assert "unins000.exe" in fresh and "Remove-Item" in fresh                 # uninstalled and cleaned up after
+
+
+def test_helper_first_log_line_takes_the_byte_order_mark():
+    """PowerShell 5 writes a BOM before the first line: that line is a header, so the lines CI and Setup match on
+    ("stop <exe>", the marker) come after it."""
+    helper = _helper()
+    header = helper.index("Say ('setup-helper ' + $Action)")
+    assert header < helper.index("if ($Action -eq 'stop')")

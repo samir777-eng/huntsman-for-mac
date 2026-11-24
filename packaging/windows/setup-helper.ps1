@@ -16,11 +16,12 @@
 #             Writes "lighting service was running: yes", "no" or "unknown" (the process list failed); yes also
 #             when --quit-service stopped one (exit 4: it stops whichever service this user runs). Exits 10
 #             unless it was "no" (the installer starts the service again after an upgrade), else 0.
-#
-# It fails loudly, so the installer's own fallback (Huntsman.exe --quit-service run directly) takes over: exit 3
-# when PowerShell isn't in FullLanguage mode (Constrained Language Mode), exit 1 on any error.
 #   webview2  Run Microsoft's WebView2 bootstrapper <target> /silent /install, at most 10 minutes.
 #             Exit with its exit code, 1460 (ERROR_TIMEOUT) when it was ended.
+#
+# For both actions it fails loudly: exit 3 when PowerShell isn't in FullLanguage mode (Constrained Language Mode),
+# exit 1 on any error. For stop the installer then runs its own fallback (Huntsman.exe --quit-service directly);
+# for webview2 it counts the runtime as not installed. Writing a log line never fails it.
 param(
   [Parameter(Mandatory = $true)][ValidateSet('stop', 'webview2')][string]$Action,
   [Parameter(Mandatory = $true)][ValidatePattern('^([0-9A-Fa-f]{4})*$')][string]$Target,
@@ -37,8 +38,10 @@ function FromHex([string]$Hex) {
 
 $log = FromHex $LogHex
 function Say([string]$Line) {
-  if ($log) { Add-Content -LiteralPath $log -Value $Line -Encoding UTF8 }
+  if ($log) { try { Add-Content -LiteralPath $log -Value $Line -Encoding UTF8 } catch { } }
 }
+
+Say ('setup-helper ' + $Action)   # first line: PowerShell 5's UTF8 puts a byte order mark in front of it
 
 trap {
   try { Say ('error: ' + $_) } catch { }
@@ -60,7 +63,7 @@ function Ours([string]$exe) {
 
 if ($Action -eq 'stop') {
   $exe = FromHex $Target
-  Say ('stop ' + $exe)   # first line: PowerShell 5's UTF8 adds a byte order mark in front of it
+  Say ('stop ' + $exe)
   if (-not $exe -or -not (Test-Path -LiteralPath $exe)) { Say 'nothing installed there'; exit 0 }
   $running = @(Ours $exe)
   $service = @($running | Where-Object { $_.CommandLine -match '(^|\s)--service(\s|$)' })

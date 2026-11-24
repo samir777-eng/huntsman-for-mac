@@ -39,8 +39,8 @@ All notable changes to this project are listed here. Versions follow [Semantic V
 - Uninstall closed an open window, stopped the service, removed the files, the Start menu entry and the
   start-at-login value, and kept the settings in `%APPDATA%\Huntsman for Mac`.
 - The WebView2 check ran and found the runtime already installed.
-- Moving from the zip, with a 0.6 zip copy: its service was stopped, the installed one started, and start at login
-  pointed at the installed copy.
+- Moving from the zip, with a 0.6 zip copy, on a fresh install and over an installed copy: its service was stopped,
+  the installed one started, and start at login pointed at the installed copy.
 
 ### Not checked
 - Anything on a real Windows PC: the wizard's pages as a person sees them, the SmartScreen prompt (*Windows protected

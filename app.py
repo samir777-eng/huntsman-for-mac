@@ -373,6 +373,9 @@ def ensure_autostart(force=False):
 
 
 QUIT_WAIT = 15.0   # --quit-service: how long the service may take to restore the lighting and exit
+# --quit-service exit codes. 0 stays "fine, nothing to do" (as before); 4 is also a success, and tells the Windows
+# installer a service was running (it stops whichever service this user runs, maybe another copy's).
+QUIT_NONE, QUIT_STOPPED, QUIT_STILL_RUNNING = 0, 4, 1
 
 
 def service_stopped():
@@ -397,26 +400,33 @@ def stop_running_service(request=None, stopped=None, wait=QUIT_WAIT, clock=time.
                          out=None):
     """`Huntsman.exe --quit-service` (the Windows installer runs it before an upgrade and an uninstall): ask the
     running lighting service to quit over its IPC, as the tray's "Quit lighting service" does, so it restores the
-    keyboard's own lighting first; then wait until it is gone (its instance lock is free). 0 when no service is
-    running any more (also when none was), 1 when one is still running after `wait` seconds."""
+    keyboard's own lighting first; then wait until it is gone (its instance lock is free). Returns QUIT_NONE (0)
+    when none was running, QUIT_STOPPED (4) when one was running and is gone now (also one still starting, that
+    held its lock without answering yet), QUIT_STILL_RUNNING (1) when one is still running after `wait` seconds
+    (e.g. a 0.5 service, which doesn't know "quit")."""
     out = out or (lambda line: print(line, flush=True))
     request = request or (lambda: ipc.Client(service_endpoint()).request("quit"))
     stopped = stopped or service_stopped
+    answered = True
     try:
         reply = request()
         out("lighting service: " + ("quitting" if reply.get("ok") else f"refused: {reply.get('error')}"))
     except ipc.ServiceUnavailable:
-        out("lighting service: not running")
+        answered = False
+        out("lighting service: not answering")
     except (ipc.ProtocolError, EOFError, OSError) as e:   # it may close the connection before the reply goes out
         out(f"lighting service: no reply ({type(e).__name__}); waiting for it to stop")
     deadline = clock() + wait
+    if stopped() and not answered:
+        out("lighting service: not running")
+        return QUIT_NONE
     while not stopped():
         if clock() >= deadline:
             out(f"lighting service: still running after {wait:g} s")
-            return 1
+            return QUIT_STILL_RUNNING
         sleep(0.1)
     out("lighting service: stopped")
-    return 0
+    return QUIT_STOPPED
 
 
 def remove_autostart(winreg=None):

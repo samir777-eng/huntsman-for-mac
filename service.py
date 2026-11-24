@@ -186,9 +186,10 @@ class LightingService:
                     s.set_enabled(True)
 
     def gui_ready(self):
-        if self._shut:   # quit (maybe during start): smart lighting must not start after the restore
-            return
-        self.studio.gui_ready()
+        with self._life:   # same lock as start()'s Studio switch-on and set_studio_enabled
+            if self._shut:   # quit (maybe during start): smart lighting must not start after the restore
+                return
+            self.studio.gui_ready()
 
     def on_quit(self, fn):
         """fn: what the menu's "Quit lighting service" does (stop, restore the lighting, exit 0). A "quit" request

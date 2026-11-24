@@ -487,7 +487,31 @@ def test_quit_service_asks_and_waits_until_the_service_is_gone():
     rc = app.stop_running_service(request=lambda: asked.append("quit") or {"ok": True, "data": True},
                                   stopped=lambda: next(gone_after), clock=clock, sleep=clock.sleep,
                                   out=lambda line: None)
-    assert rc == 0 and asked == ["quit"]
+    assert rc == app.QUIT_STOPPED == 4 and asked == ["quit"]
+
+
+def test_quit_service_exit_codes_keep_zero_for_nothing_to_do():
+    """0 = none was running (success, as before), 4 = stopped a running one (also success: the installer counts
+    it as "was running"), 1 = one is still running."""
+    assert (app.QUIT_NONE, app.QUIT_STOPPED, app.QUIT_STILL_RUNNING) == (0, 4, 1)
+
+
+def test_quit_service_counts_a_service_that_was_starting_as_running():
+    """No answer on the pipe yet, but the instance lock is held: a service was there; once it's gone, 4."""
+    def unavailable():
+        raise ipc.ServiceUnavailable("no pipe yet")
+    clock, free = Clock(), iter([False, True])
+    assert app.stop_running_service(request=unavailable, stopped=lambda: next(free), clock=clock,
+                                    sleep=clock.sleep, out=lambda line: None) == app.QUIT_STOPPED
+
+
+def test_quit_service_refused_by_an_older_service_reports_still_running():
+    """A 0.5 service answers "unknown command 'quit'": it keeps running, so 1 after the wait."""
+    clock = Clock()
+    rc = app.stop_running_service(request=lambda: {"ok": False, "error": "unknown command 'quit'"},
+                                  stopped=lambda: False, wait=2.0, clock=clock, sleep=clock.sleep,
+                                  out=lambda line: None)
+    assert rc == app.QUIT_STILL_RUNNING
 
 
 def test_quit_service_when_nothing_is_running_is_a_success():
@@ -495,7 +519,7 @@ def test_quit_service_when_nothing_is_running_is_a_success():
         raise ipc.ServiceUnavailable("no pipe")
     clock = Clock()
     assert app.stop_running_service(request=unavailable, stopped=lambda: True, clock=clock,
-                                    sleep=clock.sleep, out=lambda line: None) == 0
+                                    sleep=clock.sleep, out=lambda line: None) == app.QUIT_NONE == 0
 
 
 @pytest.mark.parametrize("error", [ipc.ProtocolError("bad"), EOFError(), OSError("pipe closed")])
@@ -509,14 +533,14 @@ def test_quit_service_still_waits_when_the_reply_is_lost(error):
         checks.append(1)
         return len(checks) > 2
     assert app.stop_running_service(request=lost, stopped=stopped, clock=clock, sleep=clock.sleep,
-                                    out=lambda line: None) == 0
+                                    out=lambda line: None) == app.QUIT_STOPPED
 
 
 def test_quit_service_gives_up_after_the_wait_and_says_so():
     clock, lines = Clock(), []
     rc = app.stop_running_service(request=lambda: {"ok": True, "data": True}, stopped=lambda: False,
                                   wait=3.0, clock=clock, sleep=clock.sleep, out=lines.append)
-    assert rc == 1 and 3.0 <= clock.t < 3.5
+    assert rc == app.QUIT_STILL_RUNNING and 3.0 <= clock.t < 3.5
     assert any("still running" in ln for ln in lines)
 
 
@@ -632,3 +656,46 @@ def test_entry_remove_autostart_flag(monkeypatch):
     monkeypatch.setattr(app, "main", lambda: pytest.fail("the window must not open"))
     assert app.entry(["Huntsman.exe", "--remove-autostart"]) == 0
     assert calls == ["remove"]
+
+
+# ---------- the helper fails loudly, so Setup's own fallback runs ----------
+
+def test_helper_refuses_constrained_language_mode():
+    head = _helper().split("function FromHex")[0]
+    assert "$ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage'" in head and "exit 3" in head
+
+
+def test_helper_turns_any_error_into_a_failing_exit():
+    head = _helper().split("function FromHex")[0]
+    assert "$ErrorActionPreference = 'Stop'" in head
+    assert re.search(r"trap \{.*'error: '.*exit 1", _helper(), re.S)
+
+
+def test_helper_reports_unknown_when_wmi_fails():
+    helper = _helper()
+    ours = re.search(r"function Ours\(.*?\n\}", helper, re.S).group(0)
+    assert "-ErrorAction Stop" in ours and "try" in ours and "catch" in ours and "SilentlyContinue" not in ours
+    assert "'lighting service was running: unknown'" in helper
+
+
+def test_iss_any_helper_failure_reaches_the_direct_quit():
+    """Exit 3 (language mode), exit 1 (trap), PowerShell missing: anything but 0 or 10 runs --quit-service
+    directly; an "unknown" marker (or none) counts as running."""
+    stop_fn = re.search(r"function StopHuntsman\(.*?\nend;", _code(), re.S).group(0)
+    ok = re.search(r"if RunHelper\('stop'.*?\(ResultCode = ServiceWasRunningCode\)\) then", stop_fn, re.S).group(0)
+    assert "and" in ok and "(ResultCode = 0) or" in ok
+    assert "'lighting service was running: unknown'" not in stop_fn   # only "no" means not running
+
+
+def test_helper_counts_a_stopped_service_as_was_running():
+    """--quit-service stops whichever service this user runs (maybe another copy's): exit 4 = it stopped one."""
+    stop = _ps_function(_helper(), "stop")
+    assert "$q.ExitCode -eq 4" in stop
+    marker = stop.index("'lighting service was running: '")
+    assert marker > stop.index("'--quit-service'")                  # decided after the quit
+
+
+def test_ci_checks_that_quit_service_stopped_a_running_service():
+    st = _step(lambda s: "/VERYSILENT" in s.get("run", ""))
+    assert st["run"].count("--quit-service exited with 4") >= 2
+    assert "--quit-service exited with 0" not in st["run"]

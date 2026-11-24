@@ -12,7 +12,10 @@ All notable changes to this project are listed here. Versions follow [Semantic V
 - If the Microsoft Edge WebView2 Runtime is missing, the installer runs Microsoft's WebView2 installer silently. If
   that fails, the install still finishes and the Finish page says where to get the runtime.
 - Upgrading over an installed copy closes its window and its lighting service first, and starts the service again
-  afterwards if it was running.
+  afterwards if it was (or may have been) running.
+- Moving from the zip: if start at login points at an unzipped copy, Setup stops that copy's lighting service and
+  starts the installed one, which takes over start at login. Delete the old folder afterwards. A 0.5 zip copy has no
+  quit command, so its service is ended without putting the keyboard's own lighting back.
 - Uninstall (Settings → Apps) closes an open window, stops the lighting service, and removes the files, the Start
   menu entry and the start-at-login value (only when that value starts this copy). Settings in
   `%APPDATA%\Huntsman for Mac` are kept.
@@ -24,6 +27,9 @@ All notable changes to this project are listed here. Versions follow [Semantic V
   Windows).
 - The Studio preview no longer starts the lighting service by itself, so an open window can't bring it back after a
   quit.
+- After a quit, smart lighting can't start and Studio can't be switched on any more (a request already on its way,
+  or the Windows Synapse re-check).
+- Windows: the tray loop no longer hangs when the service is quit while it is still starting.
 
 ### Checked (CI only: GitHub's Windows runner, Windows Server build 10.0.26100, 2026-11-24)
 - A silent install went to `%LOCALAPPDATA%\Programs\Huntsman for Mac` without admin, with the Start menu entry and
@@ -33,11 +39,15 @@ All notable changes to this project are listed here. Versions follow [Semantic V
 - Uninstall closed an open window, stopped the service, removed the files, the Start menu entry and the
   start-at-login value, and kept the settings in `%APPDATA%\Huntsman for Mac`.
 - The WebView2 check ran and found the runtime already installed.
+- Moving from the zip, with a 0.6 zip copy: its service was stopped, the installed one started, and start at login
+  pointed at the installed copy.
 
 ### Not checked
 - Anything on a real Windows PC: the wizard's pages as a person sees them, the SmartScreen prompt (*Windows protected
   your PC* → More info → Run anyway), and the app with a keyboard.
 - The WebView2 installer actually installing the runtime on a PC that doesn't have it.
+- Setup run as administrator, and Setup on a PC where PowerShell scripts are blocked (the installer's fallback).
+- Moving from a real 0.5 zip copy.
 
 ## 0.5.0 – 2026-11-24
 

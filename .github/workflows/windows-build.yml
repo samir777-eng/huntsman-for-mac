@@ -220,7 +220,7 @@ jobs:
           StartService
           $before = (Services).ProcessId
           $log = Install "reinstall"
-          if (-not (Select-String -Path $log -SimpleMatch "--quit-service exited with 0" -Quiet)) { throw "--quit-service failed before the reinstall" }
+          if (-not (Select-String -Path $log -SimpleMatch "--quit-service exited with 4" -Quiet)) { throw "--quit-service failed before the reinstall" }
           if (-not (Select-String -Path $env:LOG -SimpleMatch "asked to quit; stopping Studio and restoring the keyboard's own lighting" -Quiet)) { throw "the service didn't log the quit" }
           if (-not (Test-Path $exe)) { throw "Huntsman.exe missing after the reinstall" }
           for ($i = 0; $i -lt 20 -and -not (Services).Count; $i++) { Start-Sleep -Seconds 1 }
@@ -263,7 +263,7 @@ jobs:
           for ($i = 0; $i -lt 90 -and (Test-Path $dir); $i++) { Start-Sleep -Seconds 1 }
           Get-Content -ErrorAction SilentlyContinue $ulog
           if ($u.ExitCode -ne 0) { throw "the uninstaller exited with $($u.ExitCode)" }
-          if (-not (Select-String -Path $ulog -SimpleMatch "--quit-service exited with 0" -Quiet)) { throw "--quit-service failed before the uninstall" }
+          if (-not (Select-String -Path $ulog -SimpleMatch "--quit-service exited with 4" -Quiet)) { throw "--quit-service failed before the uninstall" }
           if ($window -and -not (Select-String -Path $ulog -Pattern "windows closed: [1-9]" -Quiet)) { throw "the open window was not closed first" }
           if ((Ours).Count) { throw "Huntsman.exe still running from $dir" }
           if (Test-Path $dir) { Get-ChildItem -Recurse $dir | Select-Object -First 20 FullName; throw "$dir is still there" }

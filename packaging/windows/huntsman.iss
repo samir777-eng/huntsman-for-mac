@@ -17,8 +17,10 @@
 ;   lighting, like the tray's "Quit lighting service"), then anything of that exact exe still running is ended.
 ;   When PowerShell can't run the helper (policy, Constrained Language Mode), --quit-service is run directly.
 ;   After an upgrade the lighting service is started again when it was (or may have been) running before. The
-;   helper and the service run as the original user, also when Setup itself was run as administrator: an elevated
-;   service would lock the normal window out of its pipe.
+;   helper and the service run as the original user (ExecAsOriginalUser), also when Setup itself was run as
+;   administrator: an elevated service would lock the normal window out of its pipe. That covers elevating the same
+;   account (the usual UAC prompt) only: when another admin account's password is typed in, the registry (HKCU),
+;   the temp folder and %LOCALAPPDATA% Setup sees are that admin's, not the user's.
 ; - Moving from an unzipped copy: when the start-at-login Run value starts another Huntsman.exe, that copy is
 ;   stopped and the installed service started; the service then points the Run value at itself (ensure_autostart).
 ; - Uninstall: also removes the start-at-login Run value "Huntsman for Mac lighting" when it starts this copy
@@ -112,7 +114,8 @@ begin
     Result := Result + Format('%.4x', [Ord(S[I])]);
 end;
 
-{ As the original (non-elevated) user when Setup runs as administrator; the uninstaller runs as it was started. }
+{ As the original (non-elevated) user when Setup runs as administrator on the same account (not another admin
+  account's); the uninstaller runs as it was started. }
 function RunAsUser(const Filename, Params, WorkingDir: String; Wait: TExecWait; var ResultCode: Integer): Boolean;
 begin
   if IsUninstaller then

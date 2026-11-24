@@ -9,12 +9,19 @@ Current state of Huntsman for Mac, updated 2026-11-24.
   `%LOCALAPPDATA%\Programs\Huntsman for Mac`, Start menu entry, Settings → Apps entry, optional desktop icon (off).
   Installs the WebView2 Runtime silently if missing. The zip stays as the portable option. Review fixes in the same
   branch: a quit while the service starts restores the lighting (Mac and Windows); `Api.studio_preview` never starts
-  the service.
-- **0.6.0 CI evidence (GitHub's Windows runner, Windows Server 10.0.26100, run 45468153906, 2026-11-24):** silent
+  the service; after a quit `gui_ready` and `set_studio_enabled` do nothing / refuse (under `_life`, the same lock
+  as start()); the tray's `run()` returns at once after `remove()`. Setup runs the helper, `--quit-service` and the
+  restarted service as the original user (`ExecAsOriginalUser`: same account only, not another admin's); if the
+  helper fails (PowerShell blocked, Constrained Language Mode exit 3, any error exit 1) it runs `--quit-service`
+  directly (0.6+ only) and counts the service as running; the helper's marker line "lighting service was running:
+  yes/no/unknown" decides the restart (unknown = running). Zip move: if the Run value starts another Huntsman.exe,
+  Setup stops that copy and starts the installed service, whose `ensure_autostart` repoints the Run value.
+- **0.6.0 CI evidence (GitHub's Windows runner, Windows Server 10.0.26100, run 45470785367, 2026-11-24):** silent
   install to the per-user folder without admin, Start menu and Settings → Apps entries; installed app's self-test
   passes; upgrade over a running lighting service stops it first and restarts it after; uninstall closes an open
   window, stops the service, removes files, Start menu entry and Run value, keeps %APPDATA%; WebView2 check ran and
-  found the runtime. **Not verified (no real PC):** the wizard pages as a person sees them, SmartScreen (More info →
+  found the runtime; zip move with a 0.6 copy (its service stopped, the installed one running, Run value repointed).
+  **Not verified (no real PC):** the wizard pages as a person sees them, SmartScreen (More info →
   Run anyway), the WebView2 bootstrapper actually installing on a PC without the runtime, the whole app with a
   keyboard.
 - **Released v0.5.0 (2026-11-24, https://github.com/samir777-eng/huntsman-for-mac/releases/tag/v0.5.0; v0.5.0 = merge of
@@ -52,7 +59,7 @@ Current state of Huntsman for Mac, updated 2026-11-24.
   Studio preview while off, the 6 new presets (2026-11-22). The Windows build has still never run on a Windows PC
   with a keyboard.
 - **Repo:** public, GitHub `samir777-eng/huntsman-for-mac`, default branch `master`, SEO description + 18 topics.
-- **Tests:** 1573 passing (5 skipped) on the Mac: `python -m pytest -q tests` (simulated keyboard, fake transports,
+- **Tests:** 1592 passing (5 skipped) on the Mac: `python -m pytest -q tests` (simulated keyboard, fake transports,
   headless Chromium UI tests in demo mode). Dev env: `requirements.txt` + `requirements-dev.txt`, then
   `playwright install chromium`. GitHub Actions `CI` (.github/workflows/ci.yml) runs it on macos-latest and
   windows-latest (Windows: `requirements-win.txt`; 37 `mac_only` tests skipped, see tests/conftest.py).
@@ -159,9 +166,13 @@ and signs it ad hoc; unsigned apps can't read ~/Downloads; developers and Intel 
 - Windows installer (0.6.0): `packaging/windows/huntsman.iss` (Inno Setup; fixed AppId GUID, never change it;
   `PrivilegesRequired=lowest`; x64, Windows 10+; WebView2 registry check + bundled Evergreen bootstrapper, downloaded by
   CI, never committed; keep the file ASCII). `packaging/windows/setup-helper.ps1` (run hidden by the installer; paths
-  in env vars): `stop` closes the exe's windows, runs `Huntsman.exe --quit-service` (30 s limit), ends what's left of
-  that exact exe, exit 10 = service was running; `webview2` runs the bootstrapper `/silent /install` (10 min limit).
-  `app.py`: `--quit-service` (`stop_running_service`: IPC "quit", waits for the instance lock), `--remove-autostart`
+  as hex-encoded arguments, 4 hex digits per UTF-16 unit, not env vars: those don't reach `ExecAsOriginalUser`):
+  `stop` closes the exe's windows, runs `Huntsman.exe --quit-service` (30 s limit), ends what's left of that exact
+  exe, writes "lighting service was running: yes/no/unknown", exit 10 = was running (or unknown); exit 3 outside
+  FullLanguage mode, exit 1 on any error (trap), so the installer's fallback runs. `webview2` runs the bootstrapper
+  `/silent /install` (10 min limit).
+  `app.py`: `--quit-service` (`stop_running_service`: IPC "quit", waits for the instance lock; exit 0 = none was
+  running, 4 = stopped one, 1 = still running), `--remove-autostart`
   (`win_autostart.remove_if_ours`, resets `autostart_added`). `service.py`: "quit" request calls the tray's quit.
   `.github/workflows/windows-build.yml`: Inno Setup **6.7.1** via choco (pinned; version checked through
   `choco list`, ISCC.exe has no file version), then a smoke test: install, `--version`/`--self-test` from the install
@@ -207,7 +218,10 @@ Studio layers/params/presets/Sound/Typing/Smart panels, effects continuing after
 
 ## Not yet verified
 - Windows installer (0.6.0) on a real PC: wizard pages, SmartScreen, WebView2 bootstrapper on a PC without the
-  runtime (CI only had it already), upgrade/uninstall outside CI.
+  runtime (CI only had it already), upgrade/uninstall outside CI. Also unverified: Setup run as administrator,
+  PowerShell blocked (the fallback path), moving from a real 0.5 zip copy, a fresh install while a zip copy's
+  service runs. Note: when PowerShell is blocked, the uninstall fallback only asks the service to quit; it doesn't
+  close an open window (Windows' Restart Manager may still close it).
 - macOS permission name for the service ("Huntsman Lighting") for Microphone and Input Monitoring, in the pkg app and
   install.sh copies. In an install.sh copy the key tester's Input Monitoring is held by the Python binaries (bundle
   venv `python`, Homebrew `python3.13`), not the bundle id (TCC.db, 2026-11-24), so `tccutil reset ListenEvent

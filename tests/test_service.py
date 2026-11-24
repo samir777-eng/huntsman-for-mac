@@ -399,3 +399,25 @@ def test_studio_cannot_be_switched_on_after_the_quit(svc):
         svc.set_studio_enabled(True)
     assert not svc.studio.engine.running
     assert "quitting" in err(svc.handle("studio_enable", {"on": True}))
+
+
+def test_gui_ready_waits_for_start_and_sees_a_quit_that_came_meanwhile(app, hooks, clock):
+    """gui_ready() takes the same lock as start()'s Studio switch-on: a quit decided while start() held it is
+    seen, so smart lighting never starts after the restore."""
+    import threading
+
+    import service
+    s = service.LightingService(engine_cls=FakeEngine, inputs=hooks["inputs"], clock=clock)
+    s.start()
+    calls = []
+    s.studio.gui_ready = lambda: calls.append(1)
+    s._life.acquire()                     # as start() holds it while switching Studio on
+    t = threading.Thread(target=s.gui_ready)
+    t.start()
+    t.join(0.2)
+    assert t.is_alive() and calls == []   # waits for the lock instead of racing past it
+    s._shut = True                        # the quit landed meanwhile
+    s._life.release()
+    t.join(5)
+    assert calls == []
+    s.shutdown()

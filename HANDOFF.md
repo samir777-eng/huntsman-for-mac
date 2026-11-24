@@ -148,7 +148,7 @@ and signs it ad hoc; unsigned apps can't read ~/Downloads; developers and Intel 
 ## Packaging facts (0.5.0)
 - macOS Installer skips a bundle whose installed `CFBundleVersion` is the same as the pkg's, so bump
   `CFBundleVersion` in both `packaging/Info.plist` and `packaging/Lighting-Info.plist` for every release and every
-  test build you install over another. Currently **7**. `CFBundleShortVersionString` must equal `__version__`
+  test build you install over another. Currently **8** (the maintainer's Mac has test build 7). `CFBundleShortVersionString` must equal `__version__`
   (`plists.mac_info` checks).
 - Both bundles are `BundleIsRelocatable = false` (else Installer "upgrades" the ~/Applications copy in place).
 - arm64 only (cffi/numpy/libusb wheels); min macOS 14.0 (numpy wheel). install.sh keeps 12.0.

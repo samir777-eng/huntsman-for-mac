@@ -188,7 +188,8 @@ def test_welcome_and_conclusion_say_what_happens_in_plain_words():
     welcome = (PKG / "resources" / "welcome.html").read_text(encoding="utf-8")
     done = (PKG / "resources" / "conclusion.html").read_text(encoding="utf-8")
     assert "Applications" in welcome and "Not affiliated with" in welcome
-    assert "Open Anyway" in done and "Input Monitoring" in done and "Microphone" in done
+    # the installed app isn't quarantined (it opened without a prompt on hardware, 2026-11-24): no Open Anyway here
+    assert "Open Anyway" not in done and "Input Monitoring" in done and "Microphone" in done
     assert "Trash" in done                  # an install.sh copy is moved there
     assert "settings" in done.lower()
 

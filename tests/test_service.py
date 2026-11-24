@@ -271,3 +271,26 @@ def test_a_request_gets_a_plain_error_if_start_never_finishes(app, hooks, clock,
     s = service.LightingService(engine_cls=FakeEngine, inputs=hooks["inputs"], clock=clock)
     r = s.handle("summary", {})
     assert not r["ok"] and r["error"] == "The lighting service is still starting. Try again in a moment."
+
+
+def test_the_service_answers_before_the_app_gives_up():
+    # A held request must be answered (or refused) before ipc's client times out and sends it again, or it runs twice.
+    import ipc
+    import service
+    assert service.START_WAIT < ipc.TIMEOUT
+
+
+def test_a_failed_start_gives_a_plain_error_not_a_traceback(app, hooks, clock, monkeypatch):
+    import service
+    s = service.LightingService(engine_cls=FakeEngine, inputs=hooks["inputs"], clock=clock)
+    monkeypatch.setattr(s, "_start", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+    with pytest.raises(RuntimeError):
+        s.start()
+    assert s.handle("summary", {}) == {"ok": False, "error": service.STARTING}
+
+
+def test_shutdown_before_start_releases_waiting_requests(app, hooks, clock):
+    import service
+    s = service.LightingService(engine_cls=FakeEngine, inputs=hooks["inputs"], clock=clock)
+    s.shutdown()
+    assert s._started.is_set()

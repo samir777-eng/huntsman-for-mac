@@ -54,8 +54,9 @@ QUIT_TITLE = "Quit lighting service"
 # next login or when the app needs it.
 QUIT_STEPS = ("stop the server", "stop Studio and restore the keyboard's lighting", "exit")
 GUARD_EVERY = 5.0
-# The socket is up before start() has built Studio: requests that come in meanwhile wait this long for it.
-START_WAIT = 15.0
+# The socket is up before start() has built Studio: requests that come in meanwhile wait this long for it, less than
+# the client's timeout (ipc.TIMEOUT) so a held request is answered before the client gives up and sends it again.
+START_WAIT = ipc.TIMEOUT - 1.0
 STARTING = "The lighting service is still starting. Try again in a moment."
 
 SPECS = {
@@ -183,6 +184,7 @@ class LightingService:
     def shutdown(self):
         """Stop the engine and listeners and restore the keyboard's lighting (even under a lease: the service is
         going away). Studio's on/off setting is kept for the next start. Safe to call twice."""
+        self._started.set()   # requests held for start() are answered now (STARTING if it never finished)
         if self._shut or self.studio is None:
             return
         self._shut = self._quitting = True
@@ -434,7 +436,7 @@ class LightingService:
             return {"ok": False, "error": f"unknown command {cmd!r}"}
         if cmd == "ping":
             return {"ok": True, "data": True}
-        if not self._started.wait(START_WAIT):
+        if not self._started.wait(START_WAIT) or self.studio is None:   # still starting, or start() failed
             return {"ok": False, "error": STARTING}
         try:
             a = ipc.check_args(spec, args)

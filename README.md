@@ -53,7 +53,9 @@ For a Mac with Apple silicon (M1 or later) and macOS 14 or later. No Homebrew, P
    [latest release](https://github.com/samir777-eng/huntsman-for-mac/releases/latest).
 2. **Open it.** The first time, macOS blocks it and says Apple could not verify it is free of malware, because it
    isn't signed with an Apple Developer ID. Click **Done**, then go to **System Settings → Privacy & Security**, click
-   **Open Anyway** and enter your password. Stuck there? See [macOS says it can't verify the installer](#troubleshooting).
+   **Open Anyway** and enter your password. We haven't got this route to work in our own test yet: if it doesn't work
+   for you either, run `xattr -d com.apple.quarantine ~/Downloads/Huntsman-for-Mac-<version>.pkg` in Terminal and
+   open the pkg again (see [macOS says it can't verify the installer](#troubleshooting)).
 3. **Install.** Introduction, License (GPL), then Install, which asks for your Mac password.
 4. **Open Huntsman for Mac** from Applications or Spotlight. The first time, it sets up the lighting service, and the
    keyboard icon appears in the menu bar.
@@ -549,7 +551,7 @@ macOS asks the first time a feature needs one of these.
 | Microphone | Studio's sound effects | Huntsman Lighting |
 
 The lighting service has its own small app bundle so that macOS should list it as **Huntsman Lighting**. That name
-hasn't been confirmed on hardware yet; it may show up as **Python** instead.
+hasn't been confirmed on hardware yet (a copy installed with `install.sh` may show up as **Python** instead).
 
 ### Input Monitoring for the key tester
 

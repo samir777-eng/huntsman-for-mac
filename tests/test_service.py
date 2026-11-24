@@ -240,7 +240,7 @@ def test_only_one_service_runs(tmp_path):
 
 # ---------- requests that arrive while the service is still starting ----------
 
-def test_a_request_during_start_waits_for_studio_instead_of_failing(app, hooks, clock):
+def test_a_request_during_start_waits_for_studio_instead_of_failing(app, hooks, clock, fake):
     # The socket is up before start() has built Studio (seen on the frozen 0.5.0 build: a "summary" from the window
     # failed once with "'NoneType' object has no attribute 'summary'"). It now waits for start() to finish.
     import threading
@@ -305,7 +305,7 @@ def test_shutdown_before_start_marks_the_service_as_quitting(app, hooks, clock):
     assert s._shut and s._quitting            # the guard and reaper loops end, start() finishes the job
 
 
-def test_a_quit_during_start_still_restores_the_lighting(app, hooks, clock):
+def test_a_quit_during_start_still_restores_the_lighting(app, hooks, clock, fake):
     """quit arrives while start() is building Studio (Studio on from last time): Studio isn't switched on after
     the quit and is shut down once start() is done, instead of a frame being left on the keys (or a hang)."""
     import threading
@@ -336,7 +336,7 @@ def test_a_quit_during_start_still_restores_the_lighting(app, hooks, clock):
     assert s._studio_down                                   # and Studio was shut down (listeners stopped)
 
 
-def test_a_quit_during_start_shuts_studio_down_once(app, hooks, clock):
+def test_a_quit_during_start_shuts_studio_down_once(app, hooks, clock, fake):
     import service
     s = service.LightingService(engine_cls=FakeEngine, inputs=hooks["inputs"], clock=clock)
     calls = []
@@ -356,7 +356,7 @@ def test_quit_is_logged(capsys):
     assert service.QUIT_LOG in capsys.readouterr().err
 
 
-def test_a_quit_just_before_studio_comes_on_leaves_it_off(app, hooks, clock, monkeypatch):
+def test_a_quit_just_before_studio_comes_on_leaves_it_off(app, hooks, clock, monkeypatch, fake):
     """The other order: Studio is built, then the quit lands before start() turns it on. It must not come on
     after the quit (nothing would restore the lighting then)."""
     import service
@@ -369,7 +369,7 @@ def test_a_quit_just_before_studio_comes_on_leaves_it_off(app, hooks, clock, mon
     assert not eng.running and (("start",) not in eng.log or ("restore",) in eng.log)
 
 
-def test_a_quit_right_after_studio_came_on_restores_the_lighting(app, hooks, clock):
+def test_a_quit_right_after_studio_came_on_restores_the_lighting(app, hooks, clock, fake):
     import service
     with app.update_state() as st:
         st["studio"]["enabled"] = True
@@ -401,7 +401,7 @@ def test_studio_cannot_be_switched_on_after_the_quit(svc):
     assert "quitting" in err(svc.handle("studio_enable", {"on": True}))
 
 
-def test_gui_ready_waits_for_start_and_sees_a_quit_that_came_meanwhile(app, hooks, clock):
+def test_gui_ready_waits_for_start_and_sees_a_quit_that_came_meanwhile(app, hooks, clock, fake):
     """gui_ready() takes the same lock as start()'s Studio switch-on: a quit decided while start() held it is
     seen, so smart lighting never starts after the restore."""
     import threading

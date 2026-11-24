@@ -10,7 +10,10 @@
   UNIX socket don't exist there.
 - `@pytest.mark.mac_only` (or `pytestmark = pytest.mark.mac_only`) marks tests that need macOS-only pieces
   (fcntl, UNIX sockets, pyusb, IOKit); they are skipped on Windows.
-- `@pytest.mark.windows_host` marks tests that check the real Windows host (no pinning); skipped elsewhere."""
+- `@pytest.mark.windows_host` marks tests that check the real Windows host (no pinning); skipped elsewhere.
+- No test opens the real keyboard: hc.open_transport (the only way to a real device) raises unless a test replaces it
+  (the `fake` fixture replaces hc.Keyboard) or is marked `@pytest.mark.transport_internals` (it checks
+  open_transport itself, with fake transports underneath). The suite runs with a Huntsman plugged in."""
 import os
 import sys
 
@@ -26,6 +29,7 @@ ON_WINDOWS = sys.platform == "win32"
 def pytest_configure(config):
     config.addinivalue_line("markers", "mac_only: needs macOS-only pieces; skipped on Windows")
     config.addinivalue_line("markers", "windows_host: checks the real Windows host; skipped elsewhere")
+    config.addinivalue_line("markers", "transport_internals: calls the real hc.open_transport (fakes underneath)")
 
 
 def pytest_collection_modifyitems(config, items):
@@ -68,3 +72,22 @@ def _mac_semantics_on_a_windows_host(request, monkeypatch):
     monkeypatch.setattr(platforms, "unlock_fd", on_host(platforms.unlock_fd))
     monkeypatch.setattr(ipc, "service_endpoint", on_host(ipc.service_endpoint))
     yield
+
+
+@pytest.fixture(autouse=True)
+def _never_the_real_keyboard(request, monkeypatch):
+    """A test that reaches hc.open_transport without a fake would talk to the plugged-in Huntsman: refuse it."""
+    if "transport_internals" in request.keywords:
+        yield
+        return
+    import huntsman_core as hc
+
+    tried = []
+
+    def refuse():
+        tried.append(1)
+        raise AssertionError("a test tried to open the real keyboard: use the `fake` fixture")
+    monkeypatch.setattr(hc, "open_transport", refuse)
+    yield
+    if tried:   # code under test may catch the error above (the service's start does): fail the test anyway
+        pytest.fail("this test tried to open the real keyboard; use the `fake` fixture", pytrace=False)

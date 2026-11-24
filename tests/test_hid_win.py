@@ -289,6 +289,7 @@ def test_close_closes_the_device_once_and_waits_for_the_lock(lockdir):
 
 # ---------- choosing the transport ----------
 
+@pytest.mark.transport_internals   # checks open_transport itself; fake transports underneath
 def test_keyboard_opens_the_hid_transport_on_windows(monkeypatch, lockdir):
     made = []
 
@@ -304,6 +305,7 @@ def test_keyboard_opens_the_hid_transport_on_windows(monkeypatch, lockdir):
     assert isinstance(hc.Keyboard().t, Fake)
 
 
+@pytest.mark.transport_internals   # checks open_transport itself; fake transports underneath
 def test_keyboard_opens_the_usb_transport_on_the_mac(monkeypatch):
     sentinel = object()
     monkeypatch.setattr(hc, "UsbTransport", lambda: sentinel)

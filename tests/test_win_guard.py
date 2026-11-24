@@ -232,6 +232,7 @@ def _sent(hid):
     return [r for d in hid.opened for r in d.sent]
 
 
+@pytest.mark.transport_internals   # checks open_transport itself; fake transports underneath
 def test_the_hid_transport_does_not_open_the_keyboard_while_synapse_runs(windows, monkeypatch):
     from platforms import win_hid
     procs, _ = windows

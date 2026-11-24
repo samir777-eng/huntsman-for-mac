@@ -2,9 +2,12 @@
 # Copyright (C) 2026 Huntsman for Mac contributors
 # The Windows build (experimental, unsigned): PyInstaller one-folder build of packaging/windows/huntsman.spec,
 # a headless smoke test of the frozen Huntsman.exe (--version, --self-test: imports and data, no keyboard, no
-# window), zipped as Huntsman-for-Windows-<version>.zip. Runs by hand (workflow_dispatch) and on pushes that touch
-# the packaging, for an artifact; publishing a release also attaches the zip to that release, from a separate job
-# that alone may write to the repository and that fails unless the tag (minus a leading v) is the built version.
+# window), zipped as Huntsman-for-Windows-<version>.zip. Then the installer wizard: Microsoft's WebView2 bootstrapper
+# is downloaded (never committed), a pinned Inno Setup compiles packaging/windows/huntsman.iss into
+# Huntsman-for-Windows-<version>-Setup.exe, and a silent install / reinstall / uninstall is smoke-tested here.
+# Runs by hand (workflow_dispatch) and on pushes that touch the packaging, for artifacts; publishing a release also
+# attaches the zip and the Setup.exe to that release, from a separate job that alone may write to the repository
+# and that fails unless the tag (minus a leading v) is the built version. GitHub-hosted runners only.
 # Event values reach scripts only through env, never as ${{ }} inside a script.
 name: Windows build
 
@@ -29,6 +32,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       zip: ${{ steps.zip.outputs.zip }}
+      setup: ${{ steps.setup.outputs.setup }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -79,6 +83,130 @@ jobs:
           name: Huntsman-for-Windows-${{ steps.version.outputs.version }}
           path: ${{ steps.zip.outputs.zip }}
           if-no-files-found: error
+      - name: WebView2 bootstrapper
+        shell: pwsh
+        run: |
+          # Microsoft's Evergreen bootstrapper, from its official link; it goes into the installer, never into git.
+          $out = "dist\MicrosoftEdgeWebview2Setup.exe"
+          Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile $out -UseBasicParsing
+          $sig = Get-AuthenticodeSignature $out
+          "{0} / {1}" -f $sig.Status, $sig.SignerCertificate.Subject
+          if ($sig.Status -ne "Valid") { throw "the bootstrapper's signature is $($sig.Status)" }
+          if ($sig.SignerCertificate.Subject -notmatch "O=Microsoft Corporation") { throw "not signed by Microsoft" }
+      - name: Inno Setup
+        id: inno
+        shell: pwsh
+        run: |
+          # Pinned: whatever the image has preinstalled is replaced by this version.
+          $pin = "6.7.1"
+          choco install innosetup --version $pin -y --no-progress --allow-downgrade --force
+          if ($LASTEXITCODE -ne 0) { throw "choco install innosetup $pin failed" }
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found at $iscc" }
+          $v = (Get-Item $iscc).VersionInfo
+          "ISCC {0} (file {1})" -f $v.ProductVersion, $v.FileVersion
+          if (-not ($v.ProductVersion -like "$pin*" -or $v.FileVersion -like "$pin*")) { throw "ISCC is not $pin" }
+          "iscc=$iscc" >> $env:GITHUB_OUTPUT
+      - name: Build the installer
+        id: setup
+        shell: pwsh
+        env:
+          ISCC: ${{ steps.inno.outputs.iscc }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          & $env:ISCC "/DAppVersion=$env:VERSION" packaging\windows\huntsman.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed ($LASTEXITCODE)" }
+          $setup = "Huntsman-for-Windows-$env:VERSION-Setup.exe"
+          if (-not (Test-Path "dist\$setup")) { throw "dist\$setup is missing" }
+          "setup=$setup" >> $env:GITHUB_OUTPUT
+          "{0:N1} MB" -f ((Get-Item "dist\$setup").Length / 1MB)
+      - name: Smoke test the installer
+        shell: pwsh
+        timeout-minutes: 10
+        env:
+          LOG: ${{ steps.version.outputs.log }}
+          SETUP: ${{ steps.setup.outputs.setup }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $setup = (Resolve-Path "dist\$env:SETUP").Path
+          $dir = Join-Path $env:LOCALAPPDATA "Programs\Huntsman for Mac"
+          $exe = Join-Path $dir "Huntsman.exe"
+          $data = Join-Path $env:APPDATA "Huntsman for Mac"
+          $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+          $runName = "Huntsman for Mac lighting"
+          $uninstKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{3B18B4A2-4894-4CDB-9662-6307C10A5D1F}_is1"
+          $menu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Huntsman for Mac.lnk"
+          function Ours { @(Get-Process -Name Huntsman -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$dir\*" }) }
+          function Install($name) {
+            $log = Join-Path $env:RUNNER_TEMP "$name.log"
+            $p = Start-Process -FilePath $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=`"$log`"" -Wait -PassThru
+            Get-Content $log | Out-Host
+            if ($p.ExitCode -ne 0) { throw "$name exited with $($p.ExitCode)" }
+            return $log
+          }
+          function StartService {
+            Start-Process -FilePath $exe -ArgumentList "--service" | Out-Null
+            Start-Sleep -Seconds 10
+            $n = (Ours).Count
+            "service processes running: $n"
+            if (-not $n) { "::warning::the lighting service didn't stay up on the runner: the stop before (un)install ran against no service" }
+          }
+
+          # Settings that must survive the uninstall.
+          New-Item -ItemType Directory -Force $data | Out-Null
+          Set-Content (Join-Path $data "installer-smoke.txt") "kept"
+
+          # 1. Silent install, per user, no admin.
+          $log = Install "install"
+          # Where Setup really installed (long path names, as the processes report them).
+          $dir = (Get-ItemProperty $uninstKey).InstallLocation.TrimEnd("\")
+          $exe = Join-Path $dir "Huntsman.exe"
+          "installed in $dir"
+          if ($dir -notlike "*\AppData\Local\Programs\Huntsman for Mac") { throw "not the per-user folder: $dir" }
+          if (-not (Test-Path $exe)) { throw "Huntsman.exe is not in $dir" }
+          if (-not (Test-Path $menu)) { throw "no Start menu shortcut" }
+          if ((Get-ItemProperty $uninstKey).DisplayVersion -ne $env:VERSION) { throw "Settings > Apps entry missing or wrong version" }
+          if (-not (Select-String -Path $log -Pattern "WebView2 Runtime" -Quiet)) { throw "the WebView2 check didn't run" }
+
+          # 2. The installed exe: --version and --self-test (to the log file, as in the zip's smoke test).
+          Remove-Item -ErrorAction SilentlyContinue $env:LOG
+          $v = Start-Process -FilePath $exe -ArgumentList "--version" -Wait -PassThru
+          $t = Start-Process -FilePath $exe -ArgumentList "--self-test" -Wait -PassThru
+          Get-Content $env:LOG
+          if ($v.ExitCode -ne 0) { throw "--version exited with $($v.ExitCode)" }
+          if ($t.ExitCode -ne 0) { throw "--self-test exited with $($t.ExitCode)" }
+          if (-not (Select-String -Path $env:LOG -SimpleMatch "Huntsman for Mac $env:VERSION" -Quiet)) { throw "no version line" }
+          if (-not (Select-String -Path $env:LOG -SimpleMatch "self-test passed" -Quiet)) { throw "self-test did not pass" }
+
+          # 3. Reinstall over a running lighting service (an upgrade): it is stopped first, files replaced.
+          Set-ItemProperty -Path $runKey -Name $runName -Value "`"$exe`" --service"
+          StartService
+          $log = Install "reinstall"
+          if (-not (Select-String -Path $log -SimpleMatch "--quit-service exited with 0" -Quiet)) { throw "--quit-service failed before the reinstall" }
+          if (-not (Test-Path $exe)) { throw "Huntsman.exe missing after the reinstall" }
+          if ((Ours).Count) { throw "Huntsman.exe still running from $dir after the reinstall" }
+
+          # 4. Silent uninstall, again with the service running.
+          StartService
+          $ulog = Join-Path $env:RUNNER_TEMP "uninstall.log"
+          $u = Start-Process -FilePath (Join-Path $dir "unins000.exe") -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=`"$ulog`"" -Wait -PassThru
+          # the uninstaller finishes from a copy in %TEMP%: wait until the folder is gone
+          for ($i = 0; $i -lt 60 -and (Test-Path $dir); $i++) { Start-Sleep -Seconds 1 }
+          Get-Content -ErrorAction SilentlyContinue $ulog
+          if ($u.ExitCode -ne 0) { throw "the uninstaller exited with $($u.ExitCode)" }
+          if (-not (Select-String -Path $ulog -SimpleMatch "--quit-service exited with 0" -Quiet)) { throw "--quit-service failed before the uninstall" }
+          if ((Ours).Count) { throw "Huntsman.exe still running from $dir" }
+          if (Test-Path $dir) { Get-ChildItem -Recurse $dir | Select-Object -First 20 FullName; throw "$dir is still there" }
+          if (Test-Path $menu) { throw "the Start menu shortcut is still there" }
+          if (Test-Path $uninstKey) { throw "the Settings > Apps entry is still there" }
+          if ($null -ne (Get-ItemProperty -Path $runKey -Name $runName -ErrorAction SilentlyContinue)) { throw "the Run value $runName is still there" }
+          if ((Get-Content (Join-Path $data "installer-smoke.txt")) -ne "kept") { throw "the settings in %APPDATA% were not kept" }
+          "install, reinstall over a running service, uninstall: all good"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: Huntsman-for-Windows-${{ steps.version.outputs.version }}-Setup
+          path: dist/${{ steps.setup.outputs.setup }}
+          if-no-files-found: error
 
   release:
     needs: build
@@ -91,6 +219,9 @@ jobs:
       - uses: actions/download-artifact@v5
         with:
           name: Huntsman-for-Windows-${{ needs.build.outputs.version }}
+      - uses: actions/download-artifact@v5
+        with:
+          name: Huntsman-for-Windows-${{ needs.build.outputs.version }}-Setup
       - name: Attach to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -98,9 +229,10 @@ jobs:
           TAG: ${{ github.event.release.tag_name }}
           VERSION: ${{ needs.build.outputs.version }}
           ZIP: ${{ needs.build.outputs.zip }}
+          SETUP: ${{ needs.build.outputs.setup }}
         run: |
           if [ "${TAG#v}" != "$VERSION" ]; then
             echo "::error::release tag $TAG doesn't match the built version $VERSION"
             exit 1
           fi
-          gh release upload "$TAG" "$ZIP" --clobber
+          gh release upload "$TAG" "$ZIP" "$SETUP" --clobber

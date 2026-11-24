@@ -60,7 +60,7 @@ START_WAIT = ipc.TIMEOUT - 1.0
 STARTING = "The lighting service is still starting. Try again in a moment."
 
 SPECS = {
-    "ping": {}, "summary": {}, "studio_state": {}, "reset_heat": {}, "running_apps": {},
+    "ping": {}, "quit": {}, "summary": {}, "studio_state": {}, "reset_heat": {}, "running_apps": {},
     "studio_enable": {"on": ("bool",), "restore": ("bool", None)},
     "set_active_preset": {"name": ("str",)},
     "save_preset": {"preset": ("dict",)},
@@ -140,6 +140,7 @@ class LightingService:
         self._guard_wants_on = False             # Studio was on (or meant to be) when Synapse took the keyboard
         self._guard_listeners = []
         self._started = threading.Event()   # set once start() is done (even if it failed)
+        self._quit = None                        # the tray's "Quit lighting service" (on_quit), for "quit" requests
 
     # ---------- start and stop ----------
 
@@ -180,6 +181,11 @@ class LightingService:
 
     def gui_ready(self):
         self.studio.gui_ready()
+
+    def on_quit(self, fn):
+        """fn: what the menu's "Quit lighting service" does (stop, restore the lighting, exit 0). A "quit" request
+        (Huntsman.exe --quit-service, which the Windows installer runs before an upgrade or uninstall) calls it."""
+        self._quit = fn
 
     def shutdown(self):
         """Stop the engine and listeners and restore the keyboard's lighting (even under a lease: the service is
@@ -436,6 +442,11 @@ class LightingService:
             return {"ok": False, "error": f"unknown command {cmd!r}"}
         if cmd == "ping":
             return {"ok": True, "data": True}
+        if cmd == "quit":   # answered at once, also while starting: the quit itself runs in the background
+            if self._quit is None:
+                return {"ok": False, "error": "this lighting service can't be asked to quit"}
+            self._quit()
+            return {"ok": True, "data": True}
         if not self._started.wait(START_WAIT) or self.studio is None:   # still starting, or start() failed
             return {"ok": False, "error": STARTING}
         try:
@@ -625,6 +636,7 @@ def main(argv=None):
             AppHelper.callAfter(lambda: nsapp.terminate_(None))   # exits 0: launchd leaves it quit
         _in_background(work)
 
+    svc.on_quit(quit_service)
     server.start()   # answer the app's requests while starting, so it never thinks the service is down
     svc.start()
     svc.run_reaper()
@@ -687,6 +699,7 @@ def _main_windows():
                 menu.remove()   # ends the tray loop: main() returns 0; start at login stays on
         _in_background(work)
 
+    svc.on_quit(quit_service)
     server.start()
     ensure_autostart()
     svc.start()
@@ -703,7 +716,8 @@ def _main_windows():
 
     def ready():
         svc.gui_ready()
-    menu.run(on_ready=ready)   # blocks until the tray is removed
+    if not finished.is_set():   # a "quit" request during start stopped it before the menu existed
+        menu.run(on_ready=ready)   # blocks until the tray is removed
     stop()
     session.stop()
     return 0

@@ -372,6 +372,69 @@ def ensure_autostart(force=False):
     return wrote
 
 
+QUIT_WAIT = 15.0   # --quit-service: how long the service may take to restore the lighting and exit
+
+
+def service_stopped():
+    """True when no lighting service is running: its instance lock (service.lock_path()) is free. Taken and given
+    back at once; nothing is created when the data folder doesn't exist yet (no service ever ran)."""
+    import service
+    path = service.lock_path()
+    if not os.path.isdir(os.path.dirname(path)):
+        return True
+    fd = service.acquire_instance_lock(path)
+    if fd is None:
+        return False
+    try:
+        platforms.unlock_fd(fd)
+    except OSError:
+        pass   # closing releases it anyway
+    os.close(fd)
+    return True
+
+
+def stop_running_service(request=None, stopped=None, wait=QUIT_WAIT, clock=time.monotonic, sleep=time.sleep,
+                         out=None):
+    """`Huntsman.exe --quit-service` (the Windows installer runs it before an upgrade and an uninstall): ask the
+    running lighting service to quit over its IPC, as the tray's "Quit lighting service" does, so it restores the
+    keyboard's own lighting first; then wait until it is gone (its instance lock is free). 0 when no service is
+    running any more (also when none was), 1 when one is still running after `wait` seconds."""
+    out = out or (lambda line: print(line, flush=True))
+    request = request or (lambda: ipc.Client(service_endpoint()).request("quit"))
+    stopped = stopped or service_stopped
+    try:
+        reply = request()
+        out("lighting service: " + ("quitting" if reply.get("ok") else f"refused: {reply.get('error')}"))
+    except ipc.ServiceUnavailable:
+        out("lighting service: not running")
+    except (ipc.ProtocolError, EOFError, OSError) as e:   # it may close the connection before the reply goes out
+        out(f"lighting service: no reply ({type(e).__name__}); waiting for it to stop")
+    deadline = clock() + wait
+    while not stopped():
+        if clock() >= deadline:
+            out(f"lighting service: still running after {wait:g} s")
+            return 1
+        sleep(0.1)
+    out("lighting service: stopped")
+    return 0
+
+
+def remove_autostart(winreg=None):
+    """`Huntsman.exe --remove-autostart` (the Windows uninstaller runs it): remove the start-at-login Run value when
+    it starts this copy (win_autostart.remove_if_ours) and forget that it was added (state.json, only when it
+    exists), so a later reinstall turns start at login on again like a first run. A value that starts another
+    copy is left alone, with its flag. Nothing on the Mac. Returns 0."""
+    if not platforms.is_windows():
+        return 0
+    from platforms import win_autostart
+    result = win_autostart.remove_if_ours(winreg=winreg)
+    print(f"start at login: {result}", flush=True)
+    if result != "other" and os.path.exists(STATE_FILE):
+        with update_state() as st:
+            st["autostart_added"] = False
+    return 0
+
+
 # ---------- the installed app (packaging/mac: frozen, in /Applications from the .pkg) ----------
 
 APP_BUNDLE_ID = "io.github.huntsman-for-mac"
@@ -1262,7 +1325,8 @@ def self_test(out=None):
 def entry(argv=None):
     """The program's entry point. The packaged Windows build is one Huntsman.exe: with --service it runs the
     lighting service (its start-at-login command), without it the window. --version and --self-test (the build's
-    smoke test, app.self_test) print to stdout, or to the log file in the windowed build."""
+    smoke test, app.self_test) print to stdout, or to the log file in the windowed build. --quit-service and
+    --remove-autostart are for the Windows installer (packaging/windows/huntsman.iss)."""
     argv = sys.argv if argv is None else argv
     platforms.redirect_output()
     if "--version" in argv[1:]:
@@ -1270,6 +1334,10 @@ def entry(argv=None):
         return 0
     if "--self-test" in argv[1:]:
         return self_test()
+    if "--quit-service" in argv[1:]:
+        return stop_running_service()
+    if "--remove-autostart" in argv[1:]:
+        return remove_autostart()
     if "--service" in argv[1:]:
         import service
         return service.main()

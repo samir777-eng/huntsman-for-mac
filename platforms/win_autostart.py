@@ -117,6 +117,21 @@ def disable(winreg=None):
     return True
 
 
+def remove_if_ours(command=None, winreg=None):
+    """For an uninstall (Huntsman.exe --remove-autostart): remove the Run value only when it starts this copy
+    (compared without case: Windows paths aren't case sensitive). Returns "removed", "absent" (there was none) or
+    "other" (it starts another copy, e.g. an unzipped one, which is left alone)."""
+    w = _reg(winreg)
+    command = command or command_line()
+    value = current(w)
+    if value is None:
+        return "absent"
+    if ntpath.normcase(value.strip()) != ntpath.normcase(command):
+        return "other"
+    disable(w)
+    return "removed"
+
+
 def spawn(argv, popen=None):
     """Start argv detached from this process, without a console window, output discarded."""
     (popen or subprocess.Popen)(argv, creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW,

@@ -6,12 +6,13 @@ Current state of Huntsman for Mac, updated 2026-11-24.
 - **Released v0.6.0 (2026-11-24, https://github.com/samir777-eng/huntsman-for-mac/releases/tag/v0.6.0; v0.6.0 = merge of
   PR #13 (749280e)). Assets attached by CI: `Huntsman-for-Windows-0.6.0-Setup.exe`, `Huntsman-for-Windows-0.6.0.zip`,
   `Huntsman-for-Mac-0.6.0.pkg` (build 9; apps signed with the project cert, checked). Windows installer: CI-proven
-  only (run 45479009211 incl. a fresh install over a running zip copy).**
+  only (branch run 45479009211 and the release build 45479684836 on the merge commit, both incl. a fresh install
+  over a running zip copy).**
   Plan docs/plans/2026-11-24-windows-installer.md. `Huntsman-for-Windows-<version>-Setup.exe` (Inno Setup, unsigned):
   Welcome → License (GPL) → folder → Install → Finish ("Open Huntsman for Mac"); per user, no admin, to
   `%LOCALAPPDATA%\Programs\Huntsman for Mac`, Start menu entry, Settings → Apps entry, optional desktop icon (off).
-  Installs the WebView2 Runtime silently if missing. The zip stays as the portable option. Review fixes in the same
-  branch: a quit while the service starts restores the lighting (Mac and Windows); `Api.studio_preview` never starts
+  Installs the WebView2 Runtime silently if missing. The zip stays as the portable option. Review fixes shipped in
+  0.6.0: a quit while the service starts restores the lighting (Mac and Windows); `Api.studio_preview` never starts
   the service; after a quit `gui_ready` and `set_studio_enabled` do nothing / refuse (under `_life`, the same lock
   as start()); the tray's `run()` returns at once after `remove()`. Setup runs the helper, `--quit-service` and the
   restarted service as the original user (`ExecAsOriginalUser`: same account only, not another admin's); if the
@@ -247,8 +248,7 @@ Studio layers/params/presets/Sound/Typing/Smart panels, effects continuing after
   with the owner, then merge to master and release.
 
 ## Next (pick with the owner)
-(Done 2026-11-24) v0.5.0 released with the pkg attached. The maintainer's Mac runs test build 7; installing the
-   release pkg (build 8) over it is optional.
+(Done 2026-11-24) v0.5.0 released with the pkg attached.
 0. (Done 2026-11-24) v0.6.0 released with Setup.exe, zip and pkg. The maintainer's Mac runs pkg test build 7
    (0.5.0); installing the 0.6.0 pkg (build 9) over it is optional.
 0a. Apple Developer ID + notarization (owner decision, $99/yr) to remove the Gatekeeper block on the pkg; pending the

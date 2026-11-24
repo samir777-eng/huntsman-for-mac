@@ -62,7 +62,7 @@ def test_the_first_live_view_explains_itself_once(opened):
     wait_for_call(pg, "start_test")
     intro = pg.locator("#liveIntro")
     expect(intro).to_be_visible()
-    expect(intro).to_contain_text("Click another window to type again")
+    expect(intro).to_contain_text("Press ⌘ (the Windows key) or click another window to type again")
     pg.wait_for_function("() => window.__calls.some(c => c[0] === 'set_prefs' && c[1][0].liveSeen === true)")
     intro.locator("button").click()
     expect(intro).to_be_hidden()
@@ -104,9 +104,9 @@ def test_a_short_window_keeps_the_trace_small_and_the_presets_in_view(opened):
 
 def test_the_message_is_said_once(page):
     wait_for_call(page, "start_test")
-    expect(page.locator("#testBanner")).to_contain_text("Click another window to type again")
+    expect(page.locator("#testBanner")).to_contain_text("Press ⌘ (the Windows key) or click another window to type again")
     assert page.locator("#actReadings .warn").count() == 0
-    expect(page.locator("#liveText")).to_have_text("Live view on. Click another window to type again.")   # spoken once per start
+    expect(page.locator("#liveText")).to_have_text("Live view on. Press ⌘ or click another window to type again.")   # once per start
 
 
 def test_only_the_status_line_is_a_live_region(page):
@@ -230,3 +230,106 @@ def test_got_it_by_keyboard_keeps_focus_in_the_panel(opened):
     pg.keyboard.press("Enter")
     expect(pg.locator("#liveIntro")).to_be_hidden()
     assert focused_id(pg) == "depth"
+
+
+# ---------- 0.4.2: ⌘ on the Huntsman ends live view; real buttons; no gap ----------
+
+DEMO_STREAM = "delete window.__override.start_test"   # the demo's own simulated stream, as the app would run it
+
+
+def starts(pg):
+    return len(calls(pg, "start_test"))
+
+
+def test_cmd_on_the_huntsman_holds_live_view_off_until_resume(opened):
+    pg = opened(init=DEMO_STREAM)
+    wait_for_call(pg, "start_test")
+    expect(pg.locator("#liveText")).to_contain_text("Live view on")
+    pg.evaluate("window.demoPressCmd()")              # the stream reports LEFT_GUI past the press depth
+    expect(pg.locator("#liveText")).to_have_text(re.compile(r"^Typing again: you pressed ⌘\."))
+    expect(pg.locator("#traceChip")).to_contain_text("Paused")
+    expect(pg.locator("#traceResume")).to_be_visible()
+    expect(pg.locator("#liveNote")).not_to_have_class(re.compile(r"\bnotice\b"))   # not a failure
+    pg.wait_for_timeout(700)
+    assert starts(pg) == 1                            # still in front: no restart
+    pg.evaluate("window.demoPressCmd()")              # pressed again (or held): nothing loops
+    pg.evaluate("window.dispatchEvent(new Event('focus'))")   # a focus without leaving first changes nothing
+    pg.wait_for_timeout(700)
+    assert starts(pg) == 1 and pg.errors == []
+    pg.click("#traceResume")
+    pg.wait_for_function("() => window.__calls.filter(c => c[0] === 'start_test').length === 2")
+    expect(pg.locator("#liveText")).to_contain_text("Live view on")
+
+
+def test_cmd_then_leaving_and_coming_back_restarts_live_view(opened):
+    pg = opened(init=DEMO_STREAM)
+    wait_for_call(pg, "start_test")
+    pg.evaluate("window.demoPressCmd()")
+    expect(pg.locator("#traceChip")).to_contain_text("Paused")
+    front(pg, focus=False)                            # the next shortcut (Cmd-Tab) took the user away
+    pg.wait_for_timeout(500)
+    assert starts(pg) == 1
+    front(pg, focus=True)
+    pg.wait_for_function("() => window.__calls.filter(c => c[0] === 'start_test').length === 2")
+
+
+def test_cmd_pushed_after_the_window_already_left_still_restarts_on_return(opened):
+    """⌘ then Tab: the window blurs before onTestEnded(…, "cmd") arrives (it comes after the switch back and the
+    settings are re-sent). Coming back must still restart live view."""
+    pg = opened(init=DEMO_STREAM)
+    wait_for_call(pg, "start_test")
+    front(pg, focus=False)
+    pg.evaluate("window.demoPressCmd()")              # before the blur's 300 ms stop: the push lands while away
+    expect(pg.locator("#traceChip")).to_contain_text("Paused")
+    pg.wait_for_timeout(500)
+    assert starts(pg) == 1
+    front(pg, focus=True)
+    pg.wait_for_function("() => window.__calls.filter(c => c[0] === 'start_test').length === 2")
+
+
+def test_the_demo_stops_like_the_app_without_sending_cmd(opened):
+    pg = opened(init=DEMO_STREAM)
+    wait_for_call(pg, "start_test")
+    pg.evaluate("window.__depths = []; const d = window.onDepth; window.onDepth = b => { window.__depths.push(b); d(b); }; 0")
+    pg.evaluate("window.demoPressCmd()")
+    expect(pg.locator("#traceChip")).to_contain_text("Paused")
+    # the app's stream stops before passing on the batch with ⌘ past the press depth (0.5 mm); the demo does too
+    assert not [b for b in pg.evaluate("window.__depths") if any(k == IDS["LEFT_GUI"] and mm >= 0.5 for k, mm in b)]
+    n = len(pg.evaluate("window.__depths"))
+    pg.wait_for_timeout(300)
+    assert len(pg.evaluate("window.__depths")) == n   # the demo's stream stopped, as the app's session did
+
+
+def test_try_again_and_privacy_settings_are_real_buttons(opened):
+    pg = opened(init="window.__override.start_test = () => Promise.resolve({ok: false, reason: 'permission', "
+                     "error: 'Allow Input Monitoring for this app in System Settings.'})")
+    wait_for_call(pg, "start_test")
+    for sel in ("#liveGo", "#livePrivacy"):
+        b = pg.locator(sel)
+        expect(b).to_be_visible()
+        assert b.evaluate("e => e.tagName") == "BUTTON"
+        assert "link" not in (b.get_attribute("class") or "").split()
+        style = b.evaluate("""e => { const s = getComputedStyle(e);
+          return [s.borderTopWidth, s.paddingTop, s.textDecorationLine, s.borderTopLeftRadius]; }""")
+        assert style[0] != "0px" and style[1] != "0px" and style[2] == "none" and style[3] != "0px", (sel, style)
+        assert style == pg.locator("#reload").evaluate(                  # the Keyboard pane's Reconnect
+            "e => { const s = getComputedStyle(e); return [s.borderTopWidth, s.paddingTop, s.textDecorationLine, s.borderTopLeftRadius]; }")
+    pg.click("#livePrivacy")
+    wait_for_call(pg, "open_privacy")
+
+
+def test_no_empty_gap_between_the_live_status_and_last_key(page):
+    wait_for_call(page, "start_test")
+    expect(page.locator("#liveText")).to_contain_text("Live view on")
+    note, text, title = (box(page.locator(s)) for s in ("#liveNote", "#liveText", "#tKey"))
+    # under half a line: font metrics differ per OS (Windows CI leaves ~2.4 px), an empty line is a whole one
+    half = page.locator("#liveText").evaluate("e => parseFloat(getComputedStyle(e).fontSize)") / 2
+    assert note[3] - text[3] < half, (note, text)      # the status line holds no empty lines under its text
+    # what is left is the panel's own spacing (its 14 px gap and the title's 10 px margin), as above the status line
+    above = text[1] - box(page.locator("#presets"))[3]
+    assert abs((title[1] - text[3]) - above) < half, (title, text, above)
+    live_top = box(page.locator("#tKey"))[1]
+    front(page, focus=False)                           # paused: other text, same place
+    expect(page.locator("#liveText")).to_contain_text("isn't in front")
+    page.wait_for_timeout(200)
+    assert abs(box(page.locator("#tKey"))[1] - live_top) <= 1

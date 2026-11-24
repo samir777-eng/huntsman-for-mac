@@ -336,11 +336,11 @@ input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 4px; }
 .live-hit { font-size: 11.5px; color: var(--ink-2); }
 .live-hit.on { color: var(--ink); font-weight: 600; }
 .live-hit.on::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-inline-end: 6px; vertical-align: 1px; box-shadow: 0 0 6px var(--accent); }
-.live-note { margin: 10px 0 0; color: var(--ink-2); font-size: 12px; line-height: 1.45; min-height: 4.35em; }   /* 3 lines: no jump */
-.live-note.notice { min-height: 0; margin-top: 10px; }
+.live-note { margin: 10px 0 0; color: var(--ink-2); font-size: 12px; line-height: 1.45; min-height: 2.9em; }   /* 2 lines, as every status: no jump, no gap */
+.live-note.notice { min-height: 0; margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }   /* buttons in a row under the text */
+.live-note.notice #liveText { flex-basis: 100%; }
 .notice.live-intro { margin-top: 10px; }
 .live-intro p { margin: 0 0 4px; }
-.live-note button.link { font-size: inherit; margin-inline-start: 4px; }
 .accent-row { padding-top: 0; }
 .accent-row .wells { margin: 0; }
 

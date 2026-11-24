@@ -612,6 +612,115 @@ def test_idle_limit_counts_from_the_last_key_travel(monkeypatch):
     assert ended == [("Live view paused after 5 minutes without a key press.", True)] and s.t.mode == 0
 
 
+def _wait(cond, secs=2):
+    import time
+    deadline = time.monotonic() + secs
+    while not cond() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    return cond()
+
+
+@pytest.mark.parametrize("mm", [0.5, 1.2, 4.0])
+def test_pressing_cmd_ends_live_view(monkeypatch, mm):
+    """⌘ (the Windows key, LEFT_GUI) pressed on the Huntsman gives typing back at once, so the next shortcut works."""
+    import depth_stream as ds
+    monkeypatch.setattr(ds, "_IOKit", _FakeIOKit)
+    s, sent, ended = _Session.make()
+    assert s.start() is True
+    s._latest = [(31, 1.0), (127, mm)]
+    assert _wait(lambda: ended)
+    assert ended == [(ds.LEAVE, True)] and s.running is False and s.t.mode == 0
+    assert sent.index((0, 4, 3)) < sent.index((0, 4, 0))
+
+
+@pytest.mark.parametrize("latest", [[(127, 0.49)], [(127, 0.1)], [(31, 4.0)], [(58, 4.0), (60, 4.0)]])
+def test_cmd_below_the_press_depth_or_other_keys_dont_end_it(monkeypatch, latest):
+    import depth_stream as ds
+    import time
+    monkeypatch.setattr(ds, "_IOKit", _FakeIOKit)
+    s, sent, ended = _Session.make()
+    assert s.start() is True
+    s._latest = latest
+    time.sleep(0.2)
+    assert not ended and s.running and s.t.mode == 3
+    s.stop()
+
+
+def test_cmd_press_depth_is_half_a_millimetre():
+    import depth_stream as ds
+    assert ds.LEAVE_MM == 0.5 and ds.LEAVE_KEY == "LEFT_GUI"
+
+
+def test_cmd_stop_that_cant_switch_back_still_reports_unplug(monkeypatch):
+    import depth_stream as ds
+    monkeypatch.setattr(ds, "_IOKit", _FakeIOKit)
+    s, sent, ended = _Session.make()
+    assert s.start() is True
+    s.t.stuck = True        # the keyboard stops answering the switch back
+    s._latest = [(127, 2.0)]
+    assert _wait(lambda: ended)
+    assert ended == [(ds.UNPLUG, False)]
+
+
+def test_the_cmd_key_comes_from_the_layout_by_name(monkeypatch):
+    import depth_stream as ds
+    import models
+    assert ds.leave_key_id(hc.active_model()) == 127                      # the V3 Pro
+    assert all(ds.leave_key_id(m) == next((k["id"] for k in hc.load_layout(m) if k["name"] == "LEFT_GUI"), None)
+               for m in models.MODELS.values())
+    real = hc.load_layout
+    monkeypatch.setattr(hc, "load_layout", lambda model=None: [k for k in real(model) if k["name"] != "LEFT_GUI"])
+    assert ds.leave_key_id(hc.active_model()) is None
+
+
+def test_the_cmd_key_is_looked_up_in_start_not_the_constructor(monkeypatch):
+    """app.start_test builds the session after taking the lighting lease, outside its try: building must not read
+    the layout (a missing or damaged one would keep the lease). start() reads it, inside that try."""
+    import depth_stream as ds
+
+    def broken(model=None):
+        raise OSError("layout missing")
+    monkeypatch.setattr(hc, "load_layout", broken)
+    monkeypatch.setattr(ds, "_IOKit", _FakeIOKit)
+    s, sent, ended = _Session.make()                  # no error here
+    with pytest.raises(OSError):
+        s.start()
+    assert (0, 4, 3) not in sent and s.running is False
+
+
+def test_switch_back_failure_during_start_raises_a_distinct_error(monkeypatch):
+    import depth_stream as ds
+    s, sent, ended = _Session.make()
+    orig = s.t.exchange
+
+    def exchange(report):
+        r = orig(report)
+        if (report[6], report[7], report[8]) == (0, 4, 3):
+            s.t.stuck = True                          # the keyboard stops answering the switch back
+            s.stop()                                  # stop lands while the switch is in flight
+        return r
+    s.t.exchange = exchange
+    monkeypatch.setattr(ds, "_IOKit", _FakeIOKit)
+    monkeypatch.setattr(ds.DepthSession, "_run", lambda self, io, ready, failure: ready.set())
+    with pytest.raises(ds.StillInDriverMode, match="Unplug"):
+        s.start()
+    assert issubclass(ds.StillInDriverMode, hc.DeviceError)
+
+
+def test_a_layout_without_cmd_never_ends_live_view_by_a_key(monkeypatch):
+    import depth_stream as ds
+    import time
+    real = hc.load_layout
+    monkeypatch.setattr(hc, "load_layout", lambda model=None: [k for k in real(model) if k["name"] != "LEFT_GUI"])
+    monkeypatch.setattr(ds, "_IOKit", _FakeIOKit)
+    s, sent, ended = _Session.make()
+    assert s.start() is True
+    s._latest = [(127, 4.0)]
+    time.sleep(0.2)
+    assert not ended and s.running
+    s.stop()
+
+
 def test_stop_before_running_cancels_start(monkeypatch):
     import depth_stream as ds
     s, sent, ended = _Session.make()

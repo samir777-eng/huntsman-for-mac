@@ -35,6 +35,12 @@ NOT_PERMITTED = 0xE00002E2
 _ACTIVE = set()  # running sessions, stopped by the signal handler
 _SHUTDOWN = []   # app shutdown work (stop Studio, restore lighting, save heat counts) run before a signal exit
 SHUTDOWN_LIMIT = 2.0
+# ⌘ (the Windows key, by its layout name) pressed this far on the Huntsman ends live view at once: in driver mode the
+# keyboard sends no key reports, so its own shortcuts (Cmd-Tab, Cmd-Q) only work once it types again. 0.5 mm: past a
+# resting finger's brush, and before the factory 1.2 mm actuation point, so the stop doesn't wait for a full press.
+LEAVE_KEY = "LEFT_GUI"
+LEAVE_MM = 0.5
+LEAVE = "Typing again: you pressed ⌘."
 
 
 def recover_typing(kb):
@@ -51,6 +57,11 @@ def recover_typing(kb):
     except Exception:
         traceback.print_exc()
     return False
+
+
+def leave_key_id(model):
+    """Key id of ⌘ (LEAVE_KEY) on model's layout, or None: then no key ends live view."""
+    return next((k["id"] for k in hc.load_layout(model) if k["name"] == LEAVE_KEY), None)
 
 
 def product_id():
@@ -201,13 +212,18 @@ class PermissionNeeded(hc.DeviceError):
     """macOS refused Input Monitoring: the keyboard itself is fine."""
 
 
+class StillInDriverMode(hc.DeviceError):
+    """start() couldn't switch the keyboard back to typing (UNPLUG): its lighting lease must be left to expire."""
+
+
 def _duration(sec):
     return f"{sec / 60:g} minutes" if sec >= 120 else f"{sec:g} seconds"
 
 
 class DepthSession:
     """One key-tester session. on_batch receives [(key_id, mm), ...] about 30 times a second.
-    It stops by itself after idle_limit seconds without key travel (the window also stops it when it goes away)."""
+    It stops by itself after idle_limit seconds without key travel, and at once (reason LEAVE) when ⌘ is pressed
+    past LEAVE_MM (the window also stops it when it goes away)."""
 
     def __init__(self, keyboard, on_batch, on_end, idle_limit=300.0):
         # Device access is serialized by the transport itself, so stop() never waits on app-level locks
@@ -220,10 +236,12 @@ class DepthSession:
         self._state_lock = threading.Lock()
         self._cancelled = False  # set by stop(), even before start() got as far as running
         self.running = False
+        self.leave = None   # ⌘'s key id, read in start(): the caller's lease is held by then, and released if it fails
 
     def start(self):
         """Returns True once streaming, False if stop() cancelled it first. Raises on failure."""
         self.kb.check_write("key_tester")  # never on an experimental model; checked before anything else
+        self.leave = leave_key_id(self.kb.model)
         if platforms.is_windows():   # the gate refuses it above; this stays a stub (see the module docstring)
             raise hc.FeatureUnavailable("The key tester isn't offered on Windows: Windows support is experimental.")
         io = _IOKit()
@@ -256,7 +274,7 @@ class DepthSession:
             cancelled = self._cancelled
         if cancelled:  # stop() ran while the switch was in flight and may have finished first: switch back again
             if not self._to_hardware():
-                raise hc.DeviceError(UNPLUG)
+                raise StillInDriverMode(UNPLUG)
             return False
         return True
 
@@ -298,6 +316,9 @@ class DepthSession:
                 io.cf.CFRunLoopRunInMode(io.mode, 0.033, False)
                 with self._lock:
                     batch = list(self._latest)
+                if any(k == self.leave and mm >= LEAVE_MM for k, mm in batch):   # here, not in the window: no round-trip
+                    reason = LEAVE
+                    break
                 if batch:
                     last_travel = time.monotonic()
                 if batch != last_sent:

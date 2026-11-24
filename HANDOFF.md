@@ -8,22 +8,25 @@ Current state of Huntsman for Mac, updated 2026-11-24.
   attached by `.github/workflows/windows-build.yml`. `master` = v0.4.1 (merge of branch `auto-key-tester`).
   v0.1.0–v0.4.0 are also tagged. Media: `tools/make_media.py` remakes `docs/screenshot-actuation.png` and
   `docs/demo-key-tester.gif` from demo mode.
-- **Released at the owner's go-ahead before the live view was checked on the keyboard.** Still to check on the V3 Pro:
-  start/stop as the real window comes to the front or goes behind (Cmd-Tab must bring typing back at once), screen
-  lock, the Input Monitoring prompt, the 5-minute pause + Resume, opening on the last tab. Record verified results in
-  README/CHANGELOG/HANDOFF; fix anything found in a 0.4.2.
+- **0.4.2 (branch `live-view-fixes`, plan docs/plans/2026-11-24-live-view-fixes.md):** ⌘ (Windows key, LEFT_GUI) on
+  the Huntsman ends live view from the stream thread (`depth_stream.LEAVE`, 0.5 mm); notice buttons are real buttons;
+  the Actuation gap is gone. Release (PR → master, tag v0.4.2) follows green CI.
+- **Live view checked on the V3 Pro, 2026-11-24 (all pass):** click another window → types at once; back → live
+  again; tab switch; lock screen; Input Monitoring off → notice + Open Privacy settings + Try again; 5-min pause +
+  Resume; opens on the last tab; 0.4.2: ⌘ stops it, Cmd-Tab in one motion works, ⌘ held stops once, gap gone.
+  Finding behind 0.4.2: in driver mode the Huntsman's own shortcuts (Cmd-Tab, Cmd-Q) never reach macOS.
 - 0.4.0 checks done on the V3 Pro: window, menu bar, actuation, lighting, Studio after quit, key tester (2026-11-18);
   no-keyboard screen + Reconnect (2026-11-20); Mixed readout + Apply confirmation, Snap Tap switch/board picking,
   Studio preview while off, the 6 new presets (2026-11-22). The Windows build has still never run on a Windows PC
   with a keyboard.
 - **Repo:** public, GitHub `samir777-eng/huntsman-for-mac`, default branch `master`, SEO description + 18 topics.
-- **Tests:** 1372 passing (2 skipped) on the Mac: `python -m pytest -q tests` (simulated keyboard, fake transports,
+- **Tests:** 1394 passing (2 skipped) on the Mac: `python -m pytest -q tests` (simulated keyboard, fake transports,
   headless Chromium UI tests in demo mode). Dev env: `requirements.txt` + `requirements-dev.txt`, then
   `playwright install chromium`. GitHub Actions `CI` (.github/workflows/ci.yml) runs it on macos-latest and
   windows-latest (Windows: `requirements-win.txt`; 37 `mac_only` tests skipped, see tests/conftest.py).
-- **Installed on the maintainer's Mac:** branch `auto-key-tester` at 7dc0f58, before the version bump aa00a64
-  and the wording fix 88ab285 (About still says 0.4.0). Reinstall from `master` (quit the app, `./install.sh`) before the live-view
-  hardware check.
+- **Installed on the maintainer's Mac:** branch `live-view-fixes` at c752d58 (0.4.2 code; About says 0.4.1 until the
+  next reinstall). Note: AppleScript `quit app "Huntsman for Mac"` is ignored by the app; quit with Cmd-Q/menu or
+  SIGTERM (restores typing).
 - **CI stays on GitHub-hosted runners** (owner decision 2026-11-22): the repo is public, and fork PRs could run code on
   the self-hosted fleet; rule recorded in ~/Downloads/Projects/ci-monitor/fleet/README.md. Don't onboard it.
 
@@ -92,8 +95,9 @@ venv into the bundle and signs it ad hoc; unsigned apps can't read ~/Downloads):
   docs/plans/2026-11-22-live-key-tester.md): no button; starts while Actuation is in front, stops on tab/app change,
   hidden, close, disconnect, 5 min idle. UX-audit fixes: opens on the last tab (state.ui.tab; first launch Lighting),
   one-time intro (state.ui.liveSeen), stable layout with a Resume chip, `Api.open_privacy`. Media:
-  `tools/make_media.py` regenerates the Actuation screenshot and key-tester gif (fake clock, WASD at 1.2 mm). Not yet
-  checked on the keyboard (pywebview focus/blur untested).
+  `tools/make_media.py` regenerates the Actuation screenshot and key-tester gif (fake clock, WASD at 1.2 mm). Checked
+  on the keyboard 2026-11-24. 0.4.2: ⌘ (LEFT_GUI ≥ 0.5 mm) ends it; window holds it off ({cmd, left}) until Resume or
+  refocus after leaving; `StillInDriverMode` abandons the lease when start()'s switch-back fails.
 
 ## Code map
 - `huntsman_core.py`: protocol + USB transport (pyusb/libusb control transfers to interface 3, 90-byte reports, CRC,
@@ -130,7 +134,9 @@ brightness, key tester, Studio presets (rainbow, aurora, matrix, fire, typing gl
 Studio layers/params/presets/Sound/Typing/Smart panels, effects continuing after the app quits.
 
 ## Not yet verified
-- macOS permission prompt names for the service ("Huntsman Lighting" vs "Python").
+- macOS permission name for the service ("Huntsman Lighting" vs "Python"). The key tester's Input Monitoring is held
+  by the Python binaries (bundle venv `python`, Homebrew `python3.13`), not the bundle id (TCC.db, 2026-11-24), so
+  `tccutil reset ListenEvent io.github.huntsman-for-mac` does nothing.
 - Lighting restore at logout/shutdown; KeepAlive restart after a crash; install.sh rollback after a failed build.
 - Smart lighting over a long session (real sleep/lock); BlackHole/system-audio input.
 - All six experimental models (no tester reports yet), incl. LED positions and the 8KHz profile read (05:84).
@@ -146,14 +152,9 @@ Studio layers/params/presets/Sound/Typing/Smart panels, effects continuing after
   with the owner, then merge to master and release.
 
 ## Next (pick with the owner)
-0. **Live-view hardware check on the V3 Pro** (released unchecked in 0.4.1), one item at a time, after reinstalling
-   from master: Cmd-Tab away → typing back at once (most important); back → live again; switching tab → typing;
-   screen lock; Input Monitoring prompt (Deny → notice + Open Privacy settings + Try again); 5-minute pause + Resume
-   chip; opens on the last tab. Record verified results in README ("Version 0.4.1" paragraph), CHANGELOG 0.4.1 "Not
-   checked on hardware", HANDOFF. Anything failing → fix in 0.4.2 (same workflow).
+0. (Done 2026-11-24) Live-view hardware check; fixes shipped as 0.4.2.
 0b. Windows build on a real Windows PC with a Huntsman (never run yet).
-0c. Cosmetic: empty gap in the Actuation panel between the live status line and "Last key" (see
-    docs/screenshot-actuation.png).
+0c. (Done in 0.4.2) Actuation gap; media regenerated. Minor, open: AppleScript quit is ignored by the app.
 1. (Done 2026-11-18) GitHub social preview set to `docs/social-preview.png` (1280×640, from the README banner).
 2. (Done 2026-11-18) Landing page live at https://samir777-eng.github.io/huntsman-for-mac/ (GitHub Pages, master
    /docs, `docs/index.html`; tests in tests/test_site.py). Keep its facts in step with the README.
@@ -168,3 +169,4 @@ Studio layers/params/presets/Sound/Typing/Smart panels, effects continuing after
 - docs/plans/2026-11-18-landing-page.md (GitHub Pages)
 - docs/plans/2026-11-18-windows.md, 2026-11-18-v2-analog-actuation.md, 2026-11-18-ux-audit-fixes.md (v0.4.0)
 - docs/plans/2026-11-22-live-key-tester.md (v0.4.1)
+- docs/plans/2026-11-24-live-view-fixes.md (v0.4.2)

@@ -72,7 +72,7 @@
         [n, { speed: speed(n), colors: (t.match(/\{rgb/g) || []).length, dir: t.includes("{dir}") }]))),
       startup: plugged(() => ok([])),
       reconnect: () => { if (!connected) { connected = true; use(find((q.get("plug") || "").toUpperCase())); } return ok([]); },
-      info: plugged(() => ok({ version: "0.4.1", model: info(), firmware: "1.03", profile: 1, brightness: 100, effect: "010501000001ffffff000000", state })),
+      info: plugged(() => ok({ version: "0.4.2", model: info(), firmware: "1.03", profile: 1, brightness: 100, effect: "010501000001ffffff000000", state })),
       read_depths: plugged(() => ok(pts)),
       set_depth: gated("actuation", (keys, mm, rel) => {
         const done = {};
@@ -99,10 +99,19 @@
         }, 33);
         return ok(true);
       }),
-      stop_test: () => { clearInterval(timer); return ok([]); },
+      stop_test: () => { clearInterval(timer); timer = null; return ok([]); },
       ...studio,
       studio_enable: on => (on && refuse("studio")) || studio.studio_enable(on),
     } };
+    // ⌘ on the Huntsman during live view, as the app does it: the stream shows LEFT_GUI past depth_stream.LEAVE_MM, the
+    // session stops by itself before passing that reading on, and the window hears why (onTestEnded, kind "cmd").
+    // Nothing while live view is off.
+    window.demoPressCmd = () => {
+      const cmd = layout.find(k => k.name === "LEFT_GUI");
+      if (!cmd || timer === null) return;
+      clearInterval(timer); timer = null;
+      window.onTestEnded("Typing again: you pressed ⌘.", true, "cmd");
+    };
     document.title += " (demo)";
     // model picker, demo only
     const pick = document.createElement("select");

@@ -178,7 +178,7 @@ def test_key_tester_starts_by_itself_on_actuation(page):
     sync_api.expect(page.locator("#testBanner")).to_be_visible()
     sync_api.expect(page.locator("#traceWrap")).to_be_visible()
     sync_api.expect(page.locator("#liveNote")).to_contain_text("Live view on")
-    sync_api.expect(page.locator("#testBanner")).to_contain_text("Click another window to type again")
+    sync_api.expect(page.locator("#testBanner")).to_contain_text("Press ⌘ (the Windows key) or click another window to type again")
     page.wait_for_timeout(600)
     assert count(page, "start_test") == 1 and count(page, "stop_test") == 0   # no repeats
     assert page.errors == []
